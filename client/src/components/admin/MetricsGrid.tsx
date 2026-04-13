@@ -1,29 +1,38 @@
 "use client"
 
-export default function MetricsGrid({ user }: any) {
-  const isEnterprise = user.plan === "ENTERPRISE"
+import { displayPlanForUser, planDisplayName } from "@/lib/plans"
+
+type MetricsUser = {
+  plan?: string | null
+  role?: string | null
+  credits?: number
+  subscriptionStatus?: string | null
+}
+
+export default function MetricsGrid({ user }: { user: MetricsUser }) {
+  const tier = displayPlanForUser(user.plan, user.role)
 
   return (
     <div className="grid gap-6 md:grid-cols-4">
 
       <MetricCard
-        title="Credits Remaining"
-        value={isEnterprise ? "∞ Unlimited" : user.credits}
+        title="Credits remaining"
+        value={user.credits ?? 0}
       />
 
       <MetricCard
-        title="Subscription Health"
-        value={user.subscriptionStatus}
+        title="Subscription health"
+        value={user.subscriptionStatus ?? "—"}
       />
 
       <MetricCard
-        title="Growth Score"
+        title="Growth score"
         value="87%"
       />
 
       <MetricCard
-        title="Account Tier"
-        value={user.plan}
+        title="Account tier"
+        value={planDisplayName(tier)}
       />
 
     </div>

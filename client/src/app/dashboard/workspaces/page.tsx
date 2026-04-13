@@ -12,7 +12,7 @@ import {
 } from "lucide-react"
 import DashboardShell from "@/components/dashboard/DashboardShell"
 import { useAuth } from "@/context/AuthContext"
-import { getWorkflowLimitsForPlan } from "@/lib/plans"
+import { displayPlanForUser, getWorkflowLimitsForPlan } from "@/lib/plans"
 import {
   createWorkspace,
   deleteWorkspace,
@@ -86,7 +86,9 @@ export default function WorkspacesPage() {
   const [nextStepBanner, setNextStepBanner] = useState<"created" | "updated" | null>(null)
   const [lastCreatedWorkspaceId, setLastCreatedWorkspaceId] = useState<string | null>(null)
 
-  const limits = getWorkflowLimitsForPlan(user?.plan)
+  const limits = getWorkflowLimitsForPlan(
+    displayPlanForUser(user?.plan, user?.role)
+  )
   const atCap = items.length >= limits.workspaces
 
   const load = useCallback(async () => {

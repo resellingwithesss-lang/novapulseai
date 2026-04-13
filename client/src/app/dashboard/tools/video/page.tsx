@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation"
 import { api, ApiError } from "@/lib/api"
 import { normalizeToolOperation } from "@/lib/tool-operation"
 import { useAuth } from "@/context/AuthContext"
-import { normalizePlan } from "@/lib/plans"
+import { displayPlanForUser } from "@/lib/plans"
 import ToolPageShell from "@/components/tools/ToolPageShell"
 import CreatorWorkflowSelectors from "@/components/workflow/CreatorWorkflowSelectors"
 import UpgradeModal from "@/components/growth/UpgradeModal"
@@ -149,13 +149,13 @@ export default function VideoScriptPage() {
     }
     if (
       user?.subscriptionStatus === "TRIALING" &&
-      normalizePlan(user?.plan) === "PRO" &&
+      displayPlanForUser(user?.plan, user?.role) === "PRO" &&
       result
     ) {
       return "You’re using PRO trial. Keep your outputs and avoid interruptions by upgrading before trial ends."
     }
     return null
-  }, [repeatUsageCount, user?.subscriptionStatus, user?.plan, result])
+  }, [repeatUsageCount, user?.subscriptionStatus, user?.plan, user?.role, result])
 
   /* =====================================================
   GENERATE
@@ -429,7 +429,7 @@ ${r.hashtags.join(" ")}
         open={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
         message="You’ve reached your current limit during generation."
-        currentPlan={user?.plan}
+        currentPlan={displayPlanForUser(user?.plan, user?.role)}
         requiredPlan="PRO"
         benefits={[
           "Higher monthly credits",

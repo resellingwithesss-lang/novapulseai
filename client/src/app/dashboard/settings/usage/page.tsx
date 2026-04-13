@@ -83,7 +83,7 @@ export default function UsageSettingsPage() {
     <div className="space-y-8">
       <SettingsPageHeader
         title="Usage & credits"
-        description="Wallet balance, subscription context, studio limits for your plan, and a running ledger. Billing history and upgrades live under Billing."
+        description="Wallet balance, plan tier, studio limits, and your latest credit movements — aligned with Billing and what the tools enforce. Invoices and payment methods stay in Stripe."
         actions={
           !loading && !error ? (
             <button
@@ -200,7 +200,10 @@ export default function UsageSettingsPage() {
             description="Most recent movements (newest first). Detailed billing history is in Stripe from Billing."
           >
             {rows.length === 0 ? (
-              <p className="text-sm text-white/50">No credit transactions yet.</p>
+              <p className="text-sm leading-relaxed text-white/50">
+                No credit movements in this window yet. Generate in any tool to see debits and
+                refills appear here.
+              </p>
             ) : (
               <div className="overflow-x-auto rounded-xl border border-white/[0.06]">
                 <table className="min-w-full text-left text-sm">

@@ -18,7 +18,8 @@
     "test:ads": "node -r ts-node/register --test src/tests/ads/ad-job-create-fallback.test.ts",
     "test:monetization": "node -r ts-node/register --test src/tests/monetization/plan-core.test.ts src/tests/monetization/access-safety.test.ts src/tests/monetization/frontend-backend-parity.test.ts",
     "test:workflow": "node -r ts-node/register --test src/tests/workflow/workflow-limits.test.ts src/tests/workflow/activity-serialization.test.ts src/tests/workflow/source-metadata.test.ts src/tests/workflow/creator-context-brand-voice.test.ts src/tests/workflow/content-pack-schema.test.ts",
-    "test:auth": "node -r dotenv/config -r ts-node/register --test src/tests/auth/google-auth-hardening.test.ts"
+    "test:auth": "node -r dotenv/config -r ts-node/register --test src/tests/auth/google-auth-hardening.test.ts",
+    "script:promote-user": "node -r dotenv/config -r ts-node/register scripts/promote-user-dev.ts"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",

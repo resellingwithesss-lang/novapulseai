@@ -2,10 +2,8 @@
 
 import { useAuth } from "@/context/AuthContext"
 import UsageBar from "@/components/growth/UsageBar"
-import {
-  getPlanCredits,
-  normalizePlan,
-} from "@/lib/plans"
+import { displayPlanForUser, getPlanCredits } from "@/lib/plans"
+import { useEffectivePlan } from "@/hooks/useEffectivePlan"
 import TrialBanner from "@/components/growth/TrialBanner"
 import { recordEmailReadyEvent } from "@/lib/growth"
 import { useEffect } from "react"
@@ -24,13 +22,13 @@ export default function DashboardShell({
   contentWidth = "wide",
 }: DashboardShellProps) {
   const { user } = useAuth()
+  const plan = useEffectivePlan()
 
   const credits = user?.credits ?? 0
-  const plan = normalizePlan(user?.plan)
   const isProTrial =
     user?.subscriptionStatus === "TRIALING" &&
     !!user?.trialExpiresAt &&
-    normalizePlan(user?.plan) === "PRO"
+    plan === "PRO"
   const monthlyIncludedCredits = getPlanCredits(plan)
 
   useEffect(() => {
@@ -38,7 +36,7 @@ export default function DashboardShell({
     if (
       user.subscriptionStatus === "TRIALING" &&
       user.trialExpiresAt &&
-      normalizePlan(user.plan) === "PRO"
+      displayPlanForUser(user.plan, user.role) === "PRO"
     ) {
       const msLeft = new Date(user.trialExpiresAt).getTime() - Date.now()
       if (msLeft > 0 && msLeft <= 1000 * 60 * 60 * 48) {

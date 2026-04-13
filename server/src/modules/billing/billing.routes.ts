@@ -1,5 +1,6 @@
 import { Router, Response } from "express"
 import { stripe } from "../../lib/stripe"
+import { staffFloorPlan } from "../../lib/staff-plan"
 import { resolveFrontendBaseUrl } from "../../lib/frontend-url"
 import { requireAuth, AuthRequest } from "../auth/auth.middleware"
 import { prisma } from "../../lib/prisma"
@@ -110,7 +111,7 @@ async function checkoutOrChangePlan(req: AuthRequest, res: Response) {
     }
 
     const targetPlan = plan
-    const currentPlan = user.plan as Plan
+    const currentPlan = staffFloorPlan(user.plan, user.role) as Plan
 
     /* =====================================================
        IF ACTIVE SUBSCRIPTION → UPDATE

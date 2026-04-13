@@ -2,11 +2,12 @@
 
 import Link from "next/link"
 import type { ActivityAdJobRow } from "@/lib/activityApi"
-import { normalizePlan, isFreePlan } from "@/lib/plans"
+import { displayPlanForUser, isFreePlan } from "@/lib/plans"
 
 type AuthUser = {
   credits?: number
   plan?: string | null
+  role?: string | null
 }
 
 export type DashboardWorkflowSummary = {
@@ -40,7 +41,7 @@ export default function DashboardNextAction({
   workflow?: DashboardWorkflowSummary | null
 }) {
   const credits = user.credits ?? 0
-  const plan = normalizePlan(user.plan)
+  const plan = displayPlanForUser(user.plan, user.role)
   const inflight = adJobs.filter((j) => isJobInflight(j.status))
 
   let title = "Repurpose a win into clips"

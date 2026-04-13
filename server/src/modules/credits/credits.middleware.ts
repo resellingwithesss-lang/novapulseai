@@ -1,5 +1,6 @@
 import { Response, NextFunction } from "express"
 import { prisma } from "../../lib/prisma"
+import { isStaffBillingExemptRole, staffEffectivePlanString } from "../../lib/staff-plan"
 import { AuthRequest } from "../auth/auth.middleware"
 import { CreditType } from "@prisma/client"
 import { getPlanCredits, isFreePlanTier, normalizePlanTier } from "../plans/plan.constants"
@@ -78,6 +79,7 @@ export const requireCredits = (
             subscriptionStatus: true,
             stripeSubscriptionId: true,
             plan: true,
+            role: true,
           },
         })
 
@@ -85,10 +87,10 @@ export const requireCredits = (
           throw new Error("USER_NOT_FOUND")
         }
 
-        const tier = normalizePlanTier(user.plan)
+        const tier = normalizePlanTier(staffEffectivePlanString(user.plan, user.role))
 
         /* 3.2 FREE: credits only — no paid subscription check */
-        if (!isFreePlanTier(tier)) {
+        if (!isFreePlanTier(tier) && !isStaffBillingExemptRole(user.role)) {
           if (
             user.subscriptionStatus !== "ACTIVE" &&
             user.subscriptionStatus !== "TRIALING"
@@ -97,7 +99,7 @@ export const requireCredits = (
           }
         }
 
-        const planCreditCap = getPlanCredits(user.plan)
+        const planCreditCap = getPlanCredits(staffEffectivePlanString(user.plan, user.role))
         if (user.credits > planCreditCap) {
           await tx.user.update({
             where: { id: userId },

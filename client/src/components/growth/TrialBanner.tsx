@@ -2,7 +2,7 @@
 
 import { useMemo } from "react"
 import { useAuth } from "@/context/AuthContext"
-import { normalizePlan } from "@/lib/plans"
+import { displayPlanForUser } from "@/lib/plans"
 import { getTrialCountdown, getTrialUrgency } from "@/lib/growth"
 
 type TrialBannerProps = {
@@ -14,7 +14,7 @@ export default function TrialBanner({ compact = false }: TrialBannerProps) {
   const showTrial =
     user?.subscriptionStatus === "TRIALING" &&
     !!user?.trialExpiresAt &&
-    normalizePlan(user?.plan) === "PRO"
+    displayPlanForUser(user?.plan, user?.role) === "PRO"
   const countdown = useMemo(() => getTrialCountdown(user?.trialExpiresAt), [user?.trialExpiresAt])
   const urgency = useMemo(() => getTrialUrgency(user?.trialExpiresAt), [user?.trialExpiresAt])
 

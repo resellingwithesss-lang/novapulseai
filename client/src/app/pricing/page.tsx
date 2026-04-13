@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { api, ApiError } from "@/lib/api"
 import PricingPlanCard, {
@@ -9,6 +9,7 @@ import PricingPlanCard, {
 import {
   PLAN_CONFIG as SHARED_PLAN_CONFIG,
   WORKFLOW_LIMITS,
+  displayPlanForUser,
   normalizePlan,
   planDisplayName,
 } from "@/lib/plans"
@@ -329,9 +330,19 @@ export default function PricingPage() {
     })()
   }, [user, status, startCheckout])
 
+  const pricingTierLabel = useMemo(() => {
+    if (status === "authenticated" && user) {
+      return displayPlanForUser(subscription?.plan ?? user.plan, user.role)
+    }
+    if (subscription?.plan) return normalizePlan(subscription.plan)
+    return null
+  }, [status, user, subscription?.plan])
+
   function isCurrentPlan(plan: UiPlan): boolean {
-    if (!subscription?.plan) return false
-    return normalizePlan(subscription.plan) === normalizePlan(PLAN_DISPLAY_CONFIG[plan].stripePlan)
+    if (!pricingTierLabel) return false
+    return (
+      pricingTierLabel === normalizePlan(PLAN_DISPLAY_CONFIG[plan].stripePlan)
+    )
   }
 
   return (
@@ -385,10 +396,10 @@ export default function PricingPage() {
             </div>
           </div>
 
-          {!loadingSub && subscription?.plan && (
+          {!loadingSub && pricingTierLabel && (
             <p className="mt-5 text-sm text-white/38">
-              Current subscription ·{" "}
-              <span className="text-white/55">{planDisplayName(subscription.plan)}</span>
+              Current plan ·{" "}
+              <span className="text-white/55">{planDisplayName(pricingTierLabel)}</span>
             </p>
           )}
           {pageNotice && (

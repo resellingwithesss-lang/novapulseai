@@ -18,10 +18,10 @@ import { useAuth } from "@/context/AuthContext"
 import { formatBlockedReason, useEntitlementSnapshot } from "@/hooks/useEntitlementSnapshot"
 import { api, ApiError } from "@/lib/api"
 import {
+  displayPlanForUser,
   getPlanCredits,
   isPaidPlan,
   isUpgradeToPlan,
-  normalizePlan,
   planDisplayName,
   type UiPlan,
 } from "@/lib/plans"
@@ -151,7 +151,10 @@ export default function BillingPage() {
     }
   }
 
-  const normalizedPlan: UiPlan = normalizePlan(user?.plan ?? subscription?.plan ?? undefined)
+  const normalizedPlan: UiPlan = displayPlanForUser(
+    user?.plan ?? subscription?.plan ?? undefined,
+    user?.role
+  )
   const planLimit = getPlanCredits(normalizedPlan)
 
   const daysUntilPeriodEnd = useMemo(() => {
@@ -282,7 +285,8 @@ export default function BillingPage() {
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/48 md:text-[0.9375rem]">
             One place for your subscription, credits, invoices, and Stripe billing details. Charges
-            are processed securely by Stripe — NovaPulseAI never stores your card number.
+            are processed securely by Stripe — NovaPulseAI never stores your card number. The plan
+            shown here matches what the app uses for access and credits.
           </p>
         </header>
 

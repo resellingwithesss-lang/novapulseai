@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import GlobalPlanBadge from "@/components/growth/PlanBadge"
-import { normalizePlan } from "@/lib/plans"
+import { displayPlanForUser } from "@/lib/plans"
 
 export function MetricCard({
   title,
@@ -46,12 +46,15 @@ export function ToolCard({
 export function PlanBadge({
   plan,
   status,
+  role,
 }: {
   plan: string
   status: string
+  role?: string | null
 }) {
+  const uiPlan = displayPlanForUser(plan, role)
   const trialLabel =
-    status === "TRIALING" && normalizePlan(plan) === "PRO" ? "Pro trial" : null
+    status === "TRIALING" && uiPlan === "PRO" ? "Pro trial" : null
 
   return (
     <div className="text-right min-w-[140px]">
@@ -60,7 +63,7 @@ export function PlanBadge({
       </div>
 
       <div className="mt-2 flex justify-end">
-        <GlobalPlanBadge plan={plan} status={status} trialLabel={trialLabel} />
+        <GlobalPlanBadge plan={uiPlan} status={status} trialLabel={trialLabel} />
       </div>
     </div>
   )

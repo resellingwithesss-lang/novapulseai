@@ -4,12 +4,8 @@ import Link from "next/link"
 import { useState, type ComponentType } from "react"
 import { useAuth } from "@/context/AuthContext"
 import { tools } from "@/config/tools"
-import {
-  isFreePlan,
-  normalizePlan,
-  planAllowsTool,
-  type PlanToolId,
-} from "@/lib/plans"
+import { isFreePlan, planAllowsTool, type PlanToolId } from "@/lib/plans"
+import { useEffectivePlan } from "@/hooks/useEffectivePlan"
 import {
   formatBlockedReason,
   useEntitlementSnapshot,
@@ -38,6 +34,7 @@ const iconMap: Record<string, IconComponent> = {
 
 export default function ToolGrid() {
   const { user } = useAuth()
+  const uiPlan = useEffectivePlan()
   const { entitlement, loading: entitlementLoading } = useEntitlementSnapshot()
   const [upgradeModal, setUpgradeModal] = useState<{
     open: boolean
@@ -62,26 +59,26 @@ export default function ToolGrid() {
     }
 
     if (entitlementLoading) {
-      return isFreePlan(user.plan) ? planAllowsTool(user.plan, toolId) : false
+      return isFreePlan(uiPlan) ? planAllowsTool(uiPlan, toolId) : false
     }
 
-    if (isFreePlan(user.plan)) {
-      return planAllowsTool(user.plan, toolId)
+    if (isFreePlan(uiPlan)) {
+      return planAllowsTool(uiPlan, toolId)
     }
     const subscriptionActive =
       user.subscriptionStatus === "ACTIVE" || user.subscriptionStatus === "TRIALING"
     if (!subscriptionActive) return false
-    return planAllowsTool(user.plan, toolId)
+    return planAllowsTool(uiPlan, toolId)
   }
 
   const getBlockedMessage = (path: string): string => {
     if (!entitlement) {
       const def = tools.find((item) => item.path === path)
       const tid = def?.id as PlanToolId | undefined
-      if (isFreePlan(user.plan) && tid && planAllowsTool(user.plan, tid)) {
+      if (isFreePlan(uiPlan) && tid && planAllowsTool(uiPlan, tid)) {
         return "Loading access…"
       }
-      if (isFreePlan(user.plan)) {
+      if (isFreePlan(uiPlan)) {
         return "Upgrade to Starter to unlock this tool"
       }
       if (user.subscriptionStatus !== "ACTIVE" && user.subscriptionStatus !== "TRIALING") {
@@ -261,7 +258,7 @@ export default function ToolGrid() {
                 </p>
                 {unlockPlan && (
                   <p data-testid={`tool-required-plan-${tool.id}`} className="text-xs text-white/55">
-                    Current: {normalizePlan(user.plan)} • Required: {unlockPlan}
+                    Current: {uiPlan} • Required: {unlockPlan}
                   </p>
                 )}
                 <button
@@ -292,7 +289,7 @@ export default function ToolGrid() {
       onClose={() => setUpgradeModal({ open: false })}
       title={upgradeModal.toolTitle ? `${upgradeModal.toolTitle} requires upgrade` : "Plan upgrade required"}
       message="This tool is locked on your current plan."
-      currentPlan={normalizePlan(user.plan)}
+      currentPlan={uiPlan}
       requiredPlan={upgradeModal.requiredPlan}
       benefits={upgradeModal.benefits}
     />

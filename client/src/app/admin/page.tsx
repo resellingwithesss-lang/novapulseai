@@ -86,7 +86,28 @@ export default function AdminHomePage() {
   }
 
   if (!data) {
-    return null
+    return (
+      <main className="max-w-7xl space-y-6 pb-12">
+        <AdminOverviewHeader refreshedAt={null} loading={false} onRefresh={() => void load()} />
+        <div
+          className="rounded-2xl border border-white/[0.08] bg-white/[0.03] px-5 py-8 text-center"
+          role="status"
+        >
+          <p className="text-sm font-medium text-white/75">No overview data yet</p>
+          <p className="mx-auto mt-2 max-w-md text-xs leading-relaxed text-white/45">
+            The overview API returned an empty payload. Try refreshing — if it keeps happening,
+            check server logs for the admin overview route.
+          </p>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="mt-5 inline-flex min-h-10 items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.06] px-5 text-sm font-medium text-white hover:bg-white/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/45"
+          >
+            Refresh
+          </button>
+        </div>
+      </main>
+    )
   }
 
   return (

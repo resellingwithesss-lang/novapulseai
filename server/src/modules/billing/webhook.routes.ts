@@ -4,7 +4,13 @@ import { stripe } from "../../lib/stripe"
 import { prisma } from "../../lib/prisma"
 import { queueSubscriptionChangeEmail } from "../../lib/email-outbound"
 import { SubscriptionStatus, Plan, CreditType } from "@prisma/client"
-import { getPlanCredits, normalizePlanTier, resolvePlanFromStripePriceId } from "../plans/plan.constants"
+import { isStaffBillingExemptRole } from "../../lib/staff-plan"
+import {
+  getPlanCredits,
+  normalizePlanTier,
+  planRank,
+  resolvePlanFromStripePriceId,
+} from "../plans/plan.constants"
 
 const router = Router()
 
@@ -178,10 +184,14 @@ router.post("/", async (req: Request, res: Response) => {
             select: {
               id: true,
               stripeCustomerId: true,
+              role: true,
             },
           })
 
           if (!user) return
+          if (isStaffBillingExemptRole(user.role)) {
+            return
+          }
 
           const stripeCustomerId = getCustomerId(subscription.customer)
 
@@ -259,6 +269,7 @@ router.post("/", async (req: Request, res: Response) => {
             plan: true,
             trialExpiresAt: true,
             credits: true,
+            role: true,
           },
         })
         if (!existingUser) break
@@ -274,7 +285,15 @@ router.post("/", async (req: Request, res: Response) => {
           })
         }
 
-        const resolvedPlan = plan ?? existingUser.plan
+        let resolvedPlan = (plan ?? existingUser.plan) as Plan
+        if (
+          isStaffBillingExemptRole(existingUser.role) &&
+          plan &&
+          planRank(normalizePlanTier(plan)) < planRank(normalizePlanTier(existingUser.plan))
+        ) {
+          resolvedPlan = existingUser.plan as Plan
+        }
+
         const shouldResetCreditsForPlanChange = existingUser.plan !== resolvedPlan
         const resetCredits = creditsForPlan(resolvedPlan)
 
@@ -325,20 +344,39 @@ router.post("/", async (req: Request, res: Response) => {
         const userId = subscription.metadata?.userId
         if (!userId) break
 
-        await prisma.user.update({
+        const subUser = await prisma.user.findUnique({
           where: { id: userId },
-          data: {
-            plan: Plan.FREE,
-            subscriptionStatus: SubscriptionStatus.CANCELED,
-            stripeSubscriptionId: null,
-            subscriptionStartedAt: null,
-            subscriptionEndsAt: null,
-            cancelAtPeriodEnd: false,
-            credits: creditsForPlan(Plan.FREE),
-            monthlyCredits: creditsForPlan(Plan.FREE),
-            monthlyResetAt: new Date(),
-          },
+          select: { role: true },
         })
+        if (!subUser) break
+
+        if (isStaffBillingExemptRole(subUser.role)) {
+          await prisma.user.update({
+            where: { id: userId },
+            data: {
+              stripeSubscriptionId: null,
+              subscriptionStatus: SubscriptionStatus.CANCELED,
+              subscriptionStartedAt: null,
+              subscriptionEndsAt: null,
+              cancelAtPeriodEnd: false,
+            },
+          })
+        } else {
+          await prisma.user.update({
+            where: { id: userId },
+            data: {
+              plan: Plan.FREE,
+              subscriptionStatus: SubscriptionStatus.CANCELED,
+              stripeSubscriptionId: null,
+              subscriptionStartedAt: null,
+              subscriptionEndsAt: null,
+              cancelAtPeriodEnd: false,
+              credits: creditsForPlan(Plan.FREE),
+              monthlyCredits: creditsForPlan(Plan.FREE),
+              monthlyResetAt: new Date(),
+            },
+          })
+        }
 
         void queueSubscriptionChangeEmail(userId).catch((err) => {
           console.warn("[stripe] subscription email queue", err)

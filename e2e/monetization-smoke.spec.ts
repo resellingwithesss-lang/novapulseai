@@ -371,7 +371,9 @@ for (const persona of personas) {
     }
 
     await page.goto("/dashboard/billing")
-    await expect(page.getByTestId("billing-current-plan")).toContainText(persona.plan)
+    await expect(page.getByTestId("billing-current-plan")).toContainText(
+      new RegExp(`^${persona.plan}$`, "i")
+    )
     await expect(page.getByTestId("billing-status")).toContainText(persona.expectedBillingStatusLabel)
     await expect(page.getByTestId("billing-monthly-limit")).toContainText(String(persona.creditCap))
 

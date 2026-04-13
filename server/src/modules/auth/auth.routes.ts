@@ -10,6 +10,7 @@ import { describePrismaSchemaDrift } from "../../lib/prisma-schema-health"
 import { queueWelcomeEmailForNewUser } from "../../lib/email-outbound"
 import { log, serializeErr } from "../../lib/logger"
 import { fail, ok } from "../../lib/http"
+import { staffFloorPlan } from "../../lib/staff-plan"
 import { requireAuth, AuthRequest } from "./auth.middleware"
 import {
   AuthProvider,
@@ -184,7 +185,7 @@ function safeUser(user: any) {
     provider: user.provider,
     emailVerified: user.emailVerified,
     role: user.role,
-    plan: user.plan,
+    plan: staffFloorPlan(user.plan, user.role),
     subscriptionStatus: user.subscriptionStatus,
     credits: user.credits,
     trialExpiresAt: user.trialExpiresAt,

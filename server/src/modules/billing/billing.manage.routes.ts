@@ -4,6 +4,7 @@ import { prisma } from "../../lib/prisma"
 import { resolveFrontendBaseUrl } from "../../lib/frontend-url"
 import { requireAuth, AuthRequest } from "../auth/auth.middleware"
 import { buildEntitlementSnapshot } from "./billing.access"
+import { staffFloorPlan } from "../../lib/staff-plan"
 
 const router = Router()
 
@@ -78,6 +79,7 @@ router.get(
           cancelAtPeriodEnd: true,
           stripeSubscriptionId: true,
           stripeCustomerId: true,
+          role: true,
         },
       })
 
@@ -88,12 +90,13 @@ router.get(
         })
       }
 
-      const { stripeCustomerId, ...rest } = user
+      const { stripeCustomerId, role, plan, ...rest } = user
 
       return res.json({
         success: true,
         subscription: {
           ...rest,
+          plan: staffFloorPlan(plan, role),
           hasStripeCustomer: Boolean(stripeCustomerId),
         },
       })

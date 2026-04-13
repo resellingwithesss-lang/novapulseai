@@ -3,6 +3,7 @@ import { z } from "zod"
 import { ContentPackStatus } from "@prisma/client"
 import { prisma } from "../../lib/prisma"
 import { requireAuth, AuthRequest } from "../auth/auth.middleware"
+import { staffFloorPlan } from "../../lib/staff-plan"
 import { evaluateBillingAccess } from "../billing/billing.access"
 import {
   getWorkflowLimits,
@@ -124,6 +125,7 @@ router.post("/generate", requireAuth, async (req: AuthRequest, res: Response) =>
       id: true,
       credits: true,
       plan: true,
+      role: true,
       banned: true,
       subscriptionStatus: true,
       trialExpiresAt: true,
@@ -154,8 +156,9 @@ router.post("/generate", requireAuth, async (req: AuthRequest, res: Response) =>
   }
 
   const packCount = await prisma.contentPack.count({ where: { userId } })
-  if (isAtWorkflowLimit(user.plan, "contentPacks", packCount)) {
-    const cap = getWorkflowLimits(user.plan).contentPacks
+  const planTier = staffFloorPlan(user.plan, user.role)
+  if (isAtWorkflowLimit(planTier, "contentPacks", packCount)) {
+    const cap = getWorkflowLimits(planTier).contentPacks
     return toolFail(res, 403, `Content pack limit reached (${cap} saved on your plan).`, {
       requestId,
       code: "FORBIDDEN",
