@@ -47,12 +47,14 @@ Do steps **in order**. Replace placeholders:
 
 ### B3. Build & start (exact)
 
-These match **`server/railway.toml`** (overrides UI if the file is loaded).
+These match **`server/railway.toml`** (overrides UI if the file is loaded). The API is built with **`server/Dockerfile`** so **`npm ci`** runs **inside Debian** with **python3 / g++** available for native modules (for example **sharp**) and with **Chromium, ffmpeg, yt-dlp** baked in.
 
 | Setting | Value |
 |---------|--------|
 | **Root Directory** | `server` |
-| **Build command** | `npm ci && npx prisma generate && npm run build` |
+| **Builder** | **Dockerfile** (`builder = "DOCKERFILE"`, `dockerfilePath = "Dockerfile"` in `railway.toml`) |
+| **Dockerfile path** | `Dockerfile` *(relative to `server/`)* |
+| **Build command** | *(leave empty — image build is defined in the Dockerfile)* |
 | **Pre-deploy command** | `npm run migrate:deploy` |
 | **Start command** | `node dist/index.js` |
 
@@ -127,13 +129,13 @@ Create **each** row (name = left, value = right). Use your real secrets where no
 |------|--------|
 | `TRUST_PROXY_HOPS` | `1` |
 
-**Puppeteer / ads (if you use Docker on Railway later)**
+**Puppeteer / ads (Docker image on Railway)**
 
 | Name | Value |
 |------|--------|
-| `PUPPETEER_EXECUTABLE_PATH` | `/usr/bin/chromium` *(only if Chromium exists in the image)* |
+| `PUPPETEER_EXECUTABLE_PATH` | `/usr/bin/chromium` |
 
-Nixpacks/Railpack Node images **may not** include Chromium; ad capture can fail until you use **`server/Dockerfile`** on Railway or install Chromium in a custom build. Plan: **ship auth + billing + core tools first**; validate ads on a follow-up deploy with Docker.
+The **`server/Dockerfile`** image sets **`PUPPETEER_SKIP_CHROMIUM_DOWNLOAD`** and **`PUPPETEER_EXECUTABLE_PATH`** for system Chromium. Set the variable above if you override image defaults or run a custom start command without those env vars.
 
 ### B6. Deploy
 

@@ -2,6 +2,8 @@
 
 Repo is already configured via **`railway.toml`** in this directory. Complete these steps in Railway.
 
+**Build:** Railway uses **`server/Dockerfile`** (not Railpack `npm ci` on the builder VM). That avoids missing **`python`** during native dependency installs (for example **sharp** / node-gyp) and ships **Chromium, ffmpeg, yt-dlp** with the API.
+
 ## 1. Create / link the service
 
 1. [railway.app](https://railway.app) → your **project** (same project as Postgres).
@@ -9,6 +11,8 @@ Repo is already configured via **`railway.toml`** in this directory. Complete th
 3. Open the new **service** → **Settings**:
    - **Root Directory:** `server`
    - **Config-as-code:** if deploy ignores `railway.toml`, set path to **`server/railway.toml`**.
+4. **Build → Builder:** should show **Dockerfile** (from `builder = "DOCKERFILE"` in `railway.toml`). If the UI still shows Railpack/Nixpacks, set **Builder** to **Dockerfile** and **Dockerfile path** to **`Dockerfile`** (relative to root directory `server`).
+5. Clear any **custom Build command** in the UI so it does not run a second `npm ci` on the host; the Dockerfile owns install and compile.
 
 ## 2. Networking
 
@@ -47,9 +51,9 @@ Optional: `ALLOWED_ORIGINS`, `RESEND_*`, `TRUST_PROXY_HOPS`, `PRISMA_SKIP_*` (on
 ## 5. Deploy
 
 1. **Deployments** → trigger deploy (or push to connected branch).
-2. Watch **Build logs** — should run `npm ci && npx prisma generate && npm run build`.
+2. Watch **Build logs** — should show **Using Dockerfile** / Docker build steps (`RUN npm ci`, `prisma generate`, `npm run build` inside the image).
 3. Watch **Pre-deploy** — should run `npm run migrate:deploy`.
-4. Watch **Deploy** — should run `node dist/index.js`.
+4. Watch **Deploy** — should run `node dist/index.js` (Railway **Start command** from `railway.toml`; image `CMD` is a fallback if unset).
 
 ## 6. Success
 
@@ -63,7 +67,8 @@ Optional: `ALLOWED_ORIGINS`, `RESEND_*`, `TRUST_PROXY_HOPS`, `PRISMA_SKIP_*` (on
 
 | Symptom | Likely cause |
 |---------|----------------|
-| Build: `tsc` not found | Dev deps not installed — do **not** set `NPM_CONFIG_PRODUCTION=true` for build; use default `npm ci` from `railway.toml`. |
+| Build: `Couldn't find the 'python' binary` during `npm ci` | Host Railpack build — use **Dockerfile** builder with **Root Directory** `server` and `railway.toml` loaded (`builder = "DOCKERFILE"`). |
+| Build: `tsc` not found | Dev deps missing in image — Dockerfile runs full `npm ci` before `npm prune --omit=dev`. Do **not** set `NPM_CONFIG_PRODUCTION=true` before the build stage completes. |
 | Pre-deploy: `prisma` not found | Rare — `prisma` is in **`dependencies`** in `package.json`. Run `npm ci` locally and commit lockfile. |
 | Pre-deploy: DB connection error | Wrong **`DATABASE_URL`** or Postgres not reachable from Railway network — use **Reference** to Railway Postgres. |
 | Crash on start: missing env | `validateServerEnvironment` — add every variable in section 4. |
@@ -72,9 +77,11 @@ Optional: `ALLOWED_ORIGINS`, `RESEND_*`, `TRUST_PROXY_HOPS`, `PRISMA_SKIP_*` (on
 
 ## 8. What you should NOT override in UI (unless debugging)
 
-If **`railway.toml`** is loaded, these are defined in file — leave Railway **Build / Deploy** commands empty or match file:
+If **`railway.toml`** is loaded, these are defined in file:
 
-- Build: `npm ci && npx prisma generate && npm run build`
-- Pre-deploy: `npm run migrate:deploy`
-- Start: `node dist/index.js`
-- Health check path: `/readyz`
+- **Build:** none on the host — **Dockerfile** performs `npm ci`, `prisma generate`, `npm run build`, `npm prune --omit=dev`.
+- **Pre-deploy:** `npm run migrate:deploy`
+- **Start:** `node dist/index.js`
+- **Health check path:** `/readyz`
+
+Do **not** set a Railpack **Build command** that duplicates `npm ci` unless you intentionally use a non-Docker builder.

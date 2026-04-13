@@ -10,12 +10,18 @@
 FROM node:20-bookworm-slim AS build
 WORKDIR /app
 
+# python-is-python3: yt-dlp-exec preinstall runs `bin-version-check-cli python ...` (needs `python` on PATH).
+# python3 + build tools: node-gyp / sharp if a prebuild is missing.
 RUN apt-get update && apt-get install -y --no-install-recommends \
   openssl \
   ca-certificates \
   chromium \
   ffmpeg \
   yt-dlp \
+  python3 \
+  python-is-python3 \
+  make \
+  g++ \
   && rm -rf /var/lib/apt/lists/*
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
@@ -37,6 +43,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   chromium \
   ffmpeg \
   yt-dlp \
+  python3 \
+  python-is-python3 \
   && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production

@@ -4,10 +4,14 @@
 #   Root Directory: server
 # If this file is not auto-detected: Settings → set config path to `server/railway.toml`
 #
+# Builder: DOCKERFILE — avoids Railpack/Nixpacks `npm ci` without python/node-gyp (sharp, etc.).
+# Image build is defined in Dockerfile (npm ci, prisma generate, tsc, prune). Do not set a UI build command.
+#
 # Prisma CLI is in `dependencies` so `migrate:deploy` works even if install omits devDependencies.
 
 [build]
-buildCommand = "npm ci && npx prisma generate && npm run build"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 preDeployCommand = "npm run migrate:deploy"
