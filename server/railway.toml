@@ -1,0 +1,17 @@
+# Railway config-as-code (schema: https://railway.com/railway.schema.json)
+#
+# In the Railway service UI set:
+#   Root Directory: server
+# If this file is not auto-detected: Settings → set config path to `server/railway.toml`
+#
+# Prisma CLI is in `dependencies` so `migrate:deploy` works even if install omits devDependencies.
+
+[build]
+buildCommand = "npm ci && npx prisma generate && npm run build"
+
+[deploy]
+preDeployCommand = "npm run migrate:deploy"
+startCommand = "node dist/index.js"
+healthcheckPath = "/readyz"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"

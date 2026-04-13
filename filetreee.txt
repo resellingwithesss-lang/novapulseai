@@ -1,0 +1,218 @@
+viralforge/
+├── .github/
+│   └── workflows/
+│       └── ci.yml
+├── client/
+│   ├── .vscode/
+│   │   └── settings.json
+│   ├── public/
+│   │   ├── file.svg
+│   │   ├── globe.svg
+│   │   ├── next.svg
+│   │   ├── vercel.svg
+│   │   └── window.svg
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── admin/
+│   │   │   │   ├── _components/
+│   │   │   │   │   ├── AdminOverviewStats.tsx
+│   │   │   │   │   └── AdminUsersPanel.tsx
+│   │   │   │   ├── ads/
+│   │   │   │   │   ├── _components/
+│   │   │   │   │   │   └── AdsResultPanel.tsx
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── layout.tsx
+│   │   │   │   ├── page.tsx
+│   │   │   │   ├── revenue/
+│   │   │   │   │   └── page.tsx
+│   │   │   │   └── subscriptions/
+│   │   │   │       └── page.tsx
+│   │   │   ├── dashboard/
+│   │   │   │   ├── _components/
+│   │   │   │   │   └── DashboardCards.tsx
+│   │   │   │   ├── billing/
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── layout.tsx
+│   │   │   │   ├── page.tsx
+│   │   │   │   ├── settings/
+│   │   │   │   │   └── page.tsx
+│   │   │   │   └── tools/
+│   │   │   │       ├── clipper/
+│   │   │   │       │   ├── _components/
+│   │   │   │       │   │   └── ClipperResultsPanel.tsx
+│   │   │   │       │   └── page.tsx
+│   │   │   │       ├── prompt/
+│   │   │   │       │   └── page.tsx
+│   │   │   │       ├── story-maker/
+│   │   │   │       │   ├── _components/
+│   │   │   │       │   │   └── StoryMakerResultPanel.tsx
+│   │   │   │       │   └── page.tsx
+│   │   │   │       ├── story-video-maker/
+│   │   │   │       │   └── page.tsx
+│   │   │   │       └── video/
+│   │   │   │           ├── _components/
+│   │   │   │           │   └── VideoScriptResults.tsx
+│   │   │   │           └── page.tsx
+│   │   │   ├── globals.css
+│   │   │   ├── layout.tsx
+│   │   │   ├── login/
+│   │   │   │   └── page.tsx
+│   │   │   ├── page.tsx
+│   │   │   ├── pricing/
+│   │   │   │   ├── _components/
+│   │   │   │   │   └── PricingPlanCard.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── register/
+│   │   │   │   └── page.tsx
+│   │   │   └── tools/
+│   │   │       └── page.tsx
+│   │   ├── components/
+│   │   │   ├── GlobalGlow.tsx
+│   │   │   ├── admin/
+│   │   │   │   ├── AdminHotkeyPanel.tsx
+│   │   │   │   └── MetricsGrid.tsx
+│   │   │   ├── auth/
+│   │   │   │   ├── AdminGate.tsx
+│   │   │   │   ├── AuthGate.tsx
+│   │   │   │   └── GoogleLoginButton.tsx
+│   │   │   ├── dashboard/
+│   │   │   │   └── DashboardShell.tsx
+│   │   │   ├── navigation/
+│   │   │   │   └── Navbar.tsx
+│   │   │   └── tools/
+│   │   │       ├── ToolGrid.tsx
+│   │   │       ├── ToolPageShell.tsx
+│   │   │       └── contracts.ts
+│   │   ├── config/
+│   │   │   └── tools.ts
+│   │   ├── context/
+│   │   │   └── AuthContext.tsx
+│   │   ├── hooks/
+│   │   │   └── useEntitlementSnapshot.ts
+│   │   ├── lib/
+│   │   │   ├── api.ts
+│   │   │   ├── auth.ts
+│   │   │   ├── plans.ts
+│   │   │   └── tool-handoff.ts
+│   │   └── providers/
+│   │       └── AppProviders.tsx
+│   ├── .eslintrc.json
+│   ├── .gitignore
+│   ├── README.md
+│   ├── next.config.js
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── postcss.config.js
+│   ├── tailwind.config.js
+│   └── tsconfig.json
+├── docker-compose.yml
+├── package-lock.json
+├── package.json
+├── README.md
+├── server/
+│   ├── prisma/
+│   │   ├── migrations/
+│   │   │   ├── 20260223171507_saas_upgrade/
+│   │   │   │   └── migration.sql
+│   │   │   ├── 20260223180038_saas_upgrade_v2/
+│   │   │   │   └── migration.sql
+│   │   │   ├── 20260223231233_sync_billing_fields/
+│   │   │   │   └── migration.sql
+│   │   │   ├── 20260225203743_safe_upgrade/
+│   │   │   │   └── migration.sql
+│   │   │   ├── 20260226171951_sync_schema/
+│   │   │   │   └── migration.sql
+│   │   │   ├── 20260228020612_add_starter_plan/
+│   │   │   │   └── migration.sql
+│   │   │   ├── 20260301165307_enterprise_upgrade/
+│   │   │   │   └── migration.sql
+│   │   │   ├── 20260301184937_add_progress_and_outputpath/
+│   │   │   │   └── migration.sql
+│   │   │   ├── 20260309190822_essdb/
+│   │   │   │   └── migration.sql
+│   │   │   └── migration_lock.toml
+│   │   └── schema.prisma
+│   ├── src/
+│   │   ├── lib/
+│   │   │   ├── http.ts
+│   │   │   ├── openai.ts
+│   │   │   ├── prisma.ts
+│   │   │   ├── stripe.ts
+│   │   │   └── tool-response.ts
+│   │   ├── middlewares/
+│   │   │   └── error.middleware.ts
+│   │   ├── modules/
+│   │   │   ├── admin/
+│   │   │   │   └── admin.routes.ts
+│   │   │   ├── ads/
+│   │   │   │   ├── assets/
+│   │   │   │   │   ├── broll.generator.ts
+│   │   │   │   │   └── ui.animator.ts
+│   │   │   │   ├── engine/
+│   │   │   │   │   └── viral.engine.ts
+│   │   │   │   ├── pipeline/
+│   │   │   │   │   ├── ad.scene.builder.ts
+│   │   │   │   │   ├── ad.script.generator.ts
+│   │   │   │   │   └── ad.storyboard.ts
+│   │   │   │   ├── rendering/
+│   │   │   │   │   ├── cinematic.pipeline.ts
+│   │   │   │   │   ├── color.grader.ts
+│   │   │   │   │   └── intro.ts
+│   │   │   │   ├── voice/
+│   │   │   │   │   └── voiceover.generator.ts
+│   │   │   │   ├── ads.renderer.ts
+│   │   │   │   ├── ads.routes.ts
+│   │   │   │   ├── ads.scene.planner.ts
+│   │   │   │   ├── ads.service.ts
+│   │   │   │   ├── ads.types.ts
+│   │   │   │   ├── audio.mixer.ts
+│   │   │   │   ├── website.analyzer.ts
+│   │   │   │   └── website.capture.ts
+│   │   │   ├── auth/
+│   │   │   │   ├── admin.middleware.ts
+│   │   │   │   ├── auth.middleware.ts
+│   │   │   │   └── auth.routes.ts
+│   │   │   ├── billing/
+│   │   │   │   ├── billing.access.ts
+│   │   │   │   ├── billing.manage.routes.ts
+│   │   │   │   ├── billing.routes.ts
+│   │   │   │   ├── billing.service.ts
+│   │   │   │   └── webhook.routes.ts
+│   │   │   ├── clip/
+│   │   │   │   ├── engine/
+│   │   │   │   │   ├── clipper.engine.ts
+│   │   │   │   │   └── scene.detector.ts
+│   │   │   │   ├── types/
+│   │   │   │   │   └── clip.types.ts
+│   │   │   │   ├── clip.controller.ts
+│   │   │   │   ├── clip.guardrails.ts
+│   │   │   │   ├── clip.routes.ts
+│   │   │   │   └── clip.service.ts
+│   │   │   ├── credits/
+│   │   │   │   └── credits.middleware.ts
+│   │   │   ├── generation/
+│   │   │   │   ├── generation.accounting.ts
+│   │   │   │   ├── generation.contract.ts
+│   │   │   │   ├── generation.output.ts
+│   │   │   │   ├── generation.retry.ts
+│   │   │   │   └── generation.routes.ts
+│   │   │   ├── plans/
+│   │   │   │   └── plan.constants.ts
+│   │   │   ├── story-maker/
+│   │   │   │   └── story-maker.routes.ts
+│   │   │   └── tools/
+│   │   │       ├── tool.media.ts
+│   │   │       └── tool.stages.ts
+│   │   ├── services/
+│   │   │   └── ai.service.ts
+│   │   ├── utils/
+│   │   │   ├── auth.ts
+│   │   │   └── youtube.downloader.ts
+│   │   ├── app.ts
+│   │   └── index.ts
+│   ├── .env.example
+│   ├── .gitignore
+│   ├── package-lock.json
+│   ├── package.json
+│   └── tsconfig.json
+└── setup.bat

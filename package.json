@@ -1,0 +1,27 @@
+{
+  "name": "novapulseai",
+  "private": true,
+  "scripts": {
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "dev:client:fresh": "npm --prefix client run dev:fresh",
+    "dev:clean": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$ports = @(3000,5000); foreach ($port in $ports) { $matches = netstat -ano -p tcp | Select-String (\\\":$port\\\") | Select-String \\\"LISTENING\\\"; $pids = @(); foreach ($m in $matches) { $parts = (($m.Line -replace '^\\\\s+', '') -replace '\\\\s+', ' ').Split(' '); if ($parts.Length -ge 5) { $pidVal = [int]$parts[4]; if ($pidVal -gt 0 -and $pidVal -ne $PID) { $pids += $pidVal } } }; $pids = $pids | Sort-Object -Unique; foreach ($id in $pids) { try { Stop-Process -Id $id -Force -ErrorAction Stop; Write-Host \\\"Freed port $port by stopping PID $id\\\" } catch { Write-Host \\\"Could not stop PID $id on port $port\\\" } } }\"",
+    "dev": "concurrently -n server,client -c cyan,magenta \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "dev:fresh": "concurrently -n server,client -c cyan,magenta \"npm --prefix server run dev\" \"npm --prefix client run dev:fresh\"",
+    "build": "npm --prefix server run build && npm --prefix client run build",
+    "lint": "npm --prefix client run lint",
+    "typecheck": "npm --prefix server run typecheck && npm --prefix client run typecheck",
+    "ci:check": "npm run lint && npm run typecheck && npm --prefix server exec -- npx prisma validate",
+    "debug:probe-next": "node scripts/probe-next-static.mjs",
+    "test:monetization": "npm --prefix server run test:monetization",
+    "test:e2e:smoke": "playwright test e2e/monetization-smoke.spec.ts",
+    "test:e2e:navigation": "playwright test e2e/navigation-route-integrity.spec.ts",
+    "test:e2e:creator-funnel": "playwright test e2e/creator-workflow-funnel.spec.ts",
+    "test:e2e:lineage": "playwright test e2e/lineage-library-continuity.spec.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "concurrently": "^9.2.1"
+  }
+}

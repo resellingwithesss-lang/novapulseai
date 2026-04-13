@@ -1,0 +1,59 @@
+# --- Dependencies ---
+node_modules/
+**/node_modules/
+
+# --- Secrets & local env (never commit) ---
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# --- Build & framework output ---
+dist/
+**/dist/
+.next/
+**/.next/
+out/
+**/out/
+build/
+**/build/
+*.tsbuildinfo
+
+# --- Generated / runtime media (local + Railway ephemeral disk) ---
+server/clips/
+server/generated/
+server/tmp/
+tmp/
+clips/
+generated/
+
+# --- Test / tooling artifacts ---
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+.playwright/
+
+# --- OS & editors ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# --- Logs ---
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Deploy / local tooling ---
+.vercel/
+.railway/
+
+# --- Accidental junk at repo root (do not commit) ---
+/New Text Document.txt
+/Untitled
+/cd

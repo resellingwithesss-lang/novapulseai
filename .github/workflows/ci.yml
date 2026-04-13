@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install all dependencies
+        run: npm run install:all
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Prisma validate (server)
+        working-directory: server
+        run: npx prisma validate
+
+      - name: Prisma generate + build server
+        working-directory: server
+        run: npx prisma generate && npm run build
+
+      - name: Build client
+        working-directory: client
+        env:
+          NEXT_PUBLIC_API_URL: https://api.ci.invalid
+          NEXT_PUBLIC_APP_URL: https://app.ci.invalid
+        run: npm run build
+

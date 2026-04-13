@@ -1,0 +1,663 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+///////////////////////////////////////////////////////
+// ENUMS
+///////////////////////////////////////////////////////
+
+enum Role {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum Plan {
+  FREE
+  STARTER
+  PRO
+  ELITE
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+  PAUSED
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+  GITHUB
+}
+
+enum CreditType {
+  CREDIT_ADD
+  CREDIT_USE
+  REFUND
+  ADMIN_ADJUSTMENT
+  BONUS
+  PROMOTION
+  MONTHLY_RESET
+  PLAN_UPGRADE
+}
+
+enum GenerationType {
+  VIDEO
+  STORY
+  VIDEO_BLUEPRINT
+}
+
+enum UsageTool {
+  VIDEO
+  STORY
+  IMAGE
+  VIDEO_BLUEPRINT
+}
+
+enum AuditAction {
+  USER_CREATED
+  USER_DELETED
+  USER_BANNED
+  PLAN_CHANGED
+  SUBSCRIPTION_UPDATED
+  CREDITS_ADDED
+  CREDITS_USED
+  CREDITS_RESET
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  PASSWORD_RESET
+  STRIPE_EVENT_PROCESSED
+  GENERATION_CREATED
+}
+
+enum ContentPackStatus {
+  DRAFT
+  READY
+  FAILED
+}
+
+enum EmailLogType {
+  TRANSACTIONAL
+  MARKETING
+}
+
+enum EmailLogStatus {
+  SENT
+  FAILED
+}
+
+enum EmailDeliveryStatus {
+  QUEUED
+  SENDING
+  SENT
+  FAILED
+}
+
+enum EmailCampaignStatus {
+  DRAFT
+  QUEUED
+  SENDING
+  COMPLETED
+  FAILED
+}
+
+///////////////////////////////////////////////////////
+// USER
+///////////////////////////////////////////////////////
+
+model User {
+  id String @id @default(uuid())
+
+  email         String
+  password      String?
+  provider      AuthProvider @default(LOCAL)
+  displayName   String?
+
+  /// UI + workflow defaults (JSON). Keys: defaultBrandVoiceId, defaultWorkspaceId, uiDensity, emailProductUpdates, emailUsageAlerts
+  preferences Json @default("{}")
+
+  emailVerified Boolean @default(false)
+
+  /// Product / broadcast email opt-in (separate from preferences.emailProductUpdates UI toggles).
+  marketingEmails           Boolean   @default(true)
+  marketingUnsubscribeToken String    @unique @default(uuid())
+  lastEmailSentAt           DateTime?
+
+  role Role @default(USER)
+
+  plan               Plan               @default(FREE)
+  subscriptionStatus SubscriptionStatus @default(CANCELED)
+
+  credits        Int       @default(4)
+  monthlyCredits Int       @default(0)
+  monthlyResetAt DateTime?
+
+  lifetimeCreditsUsed Int @default(0)
+  bonusCredits        Int @default(0)
+
+  tokenVersion Int @default(0)
+
+  loginAttempts Int       @default(0)
+  lockUntil     DateTime?
+
+  banned        Boolean @default(false)
+  bannedReason String?
+
+  stripeCustomerId     String? @unique
+  stripeSubscriptionId String? @unique
+
+  trialExpiresAt        DateTime?
+  subscriptionStartedAt DateTime?
+  subscriptionEndsAt    DateTime?
+  cancelAtPeriodEnd     Boolean @default(false)
+
+  lastLoginAt   DateTime?
+  lastActiveAt  DateTime?
+  lastIpAddress String?
+  lastUserAgent String?
+
+  deletedAt DateTime?
+
+  totalTokensUsed  Int     @default(0)
+  totalAiCostUsd   Decimal @default(0.00) @db.Decimal(12,4)
+  lifetimeValueUsd Decimal @default(0.00) @db.Decimal(12,4)
+
+  totalGenerations Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  creditTransactions CreditTransaction[]
+  generations        Generation[]
+  usages             Usage[]
+  rateLimits         RateLimitLog[]
+  auditLogs          AuditLog[]
+  adJobs             AdJob[]
+  media              MediaAsset[]
+  workspaces         Workspace[]
+  brandVoices        BrandVoice[]
+  contentPacks       ContentPack[]
+
+  emailLogs       EmailLog[]
+  emailDeliveries EmailDelivery[]
+  emailCampaigns  EmailCampaign[] @relation("EmailCampaignCreator")
+
+  @@unique([email, provider])
+  @@index([email])
+}
+
+///////////////////////////////////////////////////////
+// EMAIL (transactional + marketing queue + audit)
+///////////////////////////////////////////////////////
+
+model EmailLog {
+  id String @id @default(cuid())
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  type    EmailLogType
+  subject String
+  status  EmailLogStatus
+
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
+}
+
+model EmailCampaign {
+  id String @id @default(cuid())
+
+  name    String
+  subject String
+  /// Full HTML body (admin-composed); links should use PUBLIC_APP_URL.
+  htmlContent String @db.Text
+
+  status EmailCampaignStatus @default(DRAFT)
+
+  /// Optional filter snapshot: { plan?: Plan, subscriptionStatus?: SubscriptionStatus }
+  filter Json?
+
+  queuedCount Int @default(0)
+  sentCount   Int @default(0)
+  failedCount Int @default(0)
+
+  createdByUserId String?
+  createdBy       User?   @relation("EmailCampaignCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  sentAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deliveries EmailDelivery[]
+
+  @@index([status, createdAt])
+}
+
+model EmailDelivery {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  campaignId String?
+  campaign   EmailCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  toEmail String
+  subject String
+  html    String @db.Text
+
+  kind   EmailLogType
+  status EmailDeliveryStatus @default(QUEUED)
+
+  attempts  Int     @default(0)
+  lastError String?
+
+  createdAt   DateTime  @default(now())
+  processedAt DateTime?
+
+  @@index([status, createdAt])
+  @@index([campaignId])
+}
+
+///////////////////////////////////////////////////////
+// CREATOR WORKFLOW (workspaces, brand, packs)
+///////////////////////////////////////////////////////
+
+model Workspace {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name             String
+  niche            String   @default("")
+  targetAudience   String   @default("")
+  primaryPlatforms String[] @default([])
+  contentGoals     String[] @default([])
+  defaultCtaStyle  String   @default("")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  brandVoices  BrandVoice[]
+  contentPacks ContentPack[]
+  generations  Generation[]
+  adJobs       AdJob[]
+
+  @@index([userId])
+}
+
+model BrandVoice {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  name                    String
+  tone                    String   @default("")
+  pacing                  String   @default("")
+  slangLevel              String   @default("")
+  ctaStyle                String   @default("")
+  bannedPhrases           Json     @default("[]")
+  audienceSophistication  String   @default("")
+  notes                   String   @default("")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contentPacks ContentPack[]
+  generations  Generation[]
+
+  @@index([userId])
+  @@index([workspaceId])
+}
+
+model ContentPack {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  brandVoiceId String?
+  brandVoice   BrandVoice? @relation(fields: [brandVoiceId], references: [id], onDelete: SetNull)
+
+  title       String
+  topic       String
+  platform    String
+  audience    String             @default("")
+  payloadJson Json
+  status      ContentPackStatus @default(READY)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sourcedGenerations Generation[]
+  sourcedAdJobs      AdJob[]
+
+  @@index([userId])
+  @@index([workspaceId])
+  @@index([createdAt])
+}
+
+///////////////////////////////////////////////////////
+// MEDIA STORAGE
+///////////////////////////////////////////////////////
+
+model MediaAsset {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type String
+
+  url      String
+  fileSize Int?
+
+  width  Int?
+  height Int?
+
+  durationMs Int?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+///////////////////////////////////////////////////////
+// CREDIT TRANSACTIONS
+///////////////////////////////////////////////////////
+
+model CreditTransaction {
+  id String @id @default(uuid())
+
+  userId String
+  amount Int
+  type   CreditType
+  reason String
+
+  requestId String?
+  metadata  Json?
+
+  balanceAfter Int?
+  ipAddress    String?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+///////////////////////////////////////////////////////
+// GENERATIONS
+///////////////////////////////////////////////////////
+
+model Generation {
+  id String @id @default(cuid())
+
+  userId String
+  type   GenerationType
+
+  input  String
+  output String
+
+  creditsUsed   Int
+  tokensUsed    Int?
+  estimatedCost Decimal? @db.Decimal(12,4)
+
+  requestId String?
+
+  modelUsed  String?
+  durationMs Int?
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  brandVoiceId String?
+  brandVoice   BrandVoice? @relation(fields: [brandVoiceId], references: [id], onDelete: SetNull)
+
+  sourceContentPackId String?
+  sourceContentPack   ContentPack? @relation(fields: [sourceContentPackId], references: [id], onDelete: SetNull)
+
+  sourceGenerationId String?
+  sourceGeneration   Generation?  @relation("GenerationLineage", fields: [sourceGenerationId], references: [id], onDelete: SetNull)
+  derivedGenerations Generation[] @relation("GenerationLineage")
+
+  sourceType String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([workspaceId])
+  @@index([brandVoiceId])
+  @@index([sourceContentPackId])
+  @@index([sourceGenerationId])
+}
+
+///////////////////////////////////////////////////////
+// AD JOB SYSTEM
+///////////////////////////////////////////////////////
+
+model AdJob {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  sourceContentPackId String?
+  sourceContentPack   ContentPack? @relation(fields: [sourceContentPackId], references: [id], onDelete: SetNull)
+
+  sourceGenerationId String?
+  sourceType           String?
+
+  jobId String @unique
+
+  status   String
+  platform String
+  duration Int
+  tone     String
+
+  progress Int @default(0)
+
+  outputUrl    String?
+  thumbnailUrl String?
+
+  script    Json?
+  scenePlan Json?
+  voicePath String?
+
+  renderStartedAt   DateTime?
+  renderCompletedAt DateTime?
+
+  workerId String?
+
+  approved Boolean @default(true)
+  archived Boolean @default(false)
+
+  autoPostEnabled Boolean @default(false)
+  published       Boolean @default(false)
+
+  manuallyReviewed Boolean @default(false)
+
+  refunded Boolean @default(false)
+
+  isPrimary Boolean @default(false)
+
+  views         Int @default(0)
+  likes         Int @default(0)
+  comments      Int @default(0)
+  shares        Int @default(0)
+  clickThroughs Int @default(0)
+
+  fileSizeBytes Int?
+
+  resolution  String?
+  aspectRatio String?
+
+  renderDurationMs Int?
+  audioDurationMs  Int?
+
+  sceneCount Int?
+
+  creditsUsed Int?
+
+  aiCostUsd     Decimal? @db.Decimal(12,4)
+  renderCostUsd Decimal? @db.Decimal(12,4)
+  totalCostUsd  Decimal? @db.Decimal(12,4)
+
+  retryCount Int @default(0)
+
+  failedReason String?
+
+  requestId String?
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  variants AdVariant[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([workspaceId])
+  @@index([sourceContentPackId])
+}
+
+///////////////////////////////////////////////////////
+// AD VARIANTS
+///////////////////////////////////////////////////////
+
+model AdVariant {
+  id String @id @default(cuid())
+
+  adJobId String
+  adJob   AdJob  @relation(fields: [adJobId], references: [id], onDelete: Cascade)
+
+  variantIndex Int
+  score        Int?
+
+  script Json?
+
+  voicePath String?
+  videoPath String?
+
+  thumbnailUrl String?
+
+  approved Boolean @default(false)
+
+  views       Int @default(0)
+  clicks      Int @default(0)
+  conversions Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([adJobId])
+}
+
+///////////////////////////////////////////////////////
+// USAGE
+///////////////////////////////////////////////////////
+
+model Usage {
+  id String @id @default(uuid())
+
+  userId String
+  tool   UsageTool
+
+  credits Int
+
+  tokensUsed    Int?
+  estimatedCost Decimal? @db.Decimal(12,4)
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+///////////////////////////////////////////////////////
+// RATE LIMIT LOG
+///////////////////////////////////////////////////////
+
+model RateLimitLog {
+  id String @id @default(uuid())
+
+  userId    String?
+  endpoint  String
+  ipAddress String?
+
+  blocked Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([endpoint])
+}
+
+///////////////////////////////////////////////////////
+// STRIPE EVENTS
+///////////////////////////////////////////////////////
+
+model StripeEvent {
+  id String @id @default(uuid())
+
+  stripeEventId String @unique
+  type          String
+
+  processed Boolean @default(false)
+
+  createdAt DateTime @default(now())
+}
+
+///////////////////////////////////////////////////////
+// AUDIT LOG
+///////////////////////////////////////////////////////
+
+model AuditLog {
+  id String @id @default(uuid())
+
+  userId String?
+
+  action   AuditAction
+  metadata Json?
+
+  requestId String?
+
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+}

@@ -1,0 +1,268 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =====================================================
+   VIRALFORGE GLOBAL THEME
+===================================================== */
+
+:root {
+  --np-bg: #0b0f19;
+  --np-surface: rgba(255, 255, 255, 0.04);
+  --np-border: rgba(255, 255, 255, 0.08);
+  --np-accent-primary: #7c3aed;
+  --np-accent-secondary: #ec4899;
+  --np-success: #22c55e;
+  --np-warning: #f59e0b;
+  --np-danger: #ef4444;
+}
+
+/* =====================================================
+   BASE RESET
+===================================================== */
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--np-bg);
+  color: white;
+  font-feature-settings: "rlig" 1, "calt" 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
+
+  /* 🔥 prevents scrollbar layout shift */
+  scrollbar-gutter: stable;
+}
+
+/* Improve typography consistency */
+body {
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+}
+
+/* =====================================================
+   PREMIUM SCROLLBAR
+===================================================== */
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    to bottom,
+    rgba(124, 58, 237, 0.4),
+    rgba(236, 72, 153, 0.4)
+  );
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    to bottom,
+    rgba(124, 58, 237, 0.7),
+    rgba(236, 72, 153, 0.7)
+  );
+}
+
+/* =====================================================
+   SELECTION
+===================================================== */
+
+::selection {
+  background: var(--np-accent-primary);
+  color: white;
+}
+
+/* =====================================================
+   REMOVE GLOBAL TRANSITIONS (THIS FIXES FLICKER)
+===================================================== */
+
+/* DO NOT animate everything globally.
+   It causes hydration + layout shift animation. */
+
+button,
+a,
+input,
+textarea,
+select {
+  transition: background-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+              color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 180ms cubic-bezier(0.4, 0, 0.2, 1),
+              transform 180ms cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* =====================================================
+   GLASS SURFACE UTILITY
+===================================================== */
+
+.np-glass {
+  background: var(--np-surface);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--np-border);
+}
+
+/* =====================================================
+   SOFT CARD DEPTH
+===================================================== */
+
+/* Landing workflow tiles — layered depth, restrained accent (no loud purple wash). */
+.np-card {
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.048) 0%,
+    rgba(255, 255, 255, 0.022) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.078);
+  border-radius: 1.5rem;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 4px 28px rgba(0, 0, 0, 0.14),
+    0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+/* =====================================================
+   ACCENT TEXT UTILITIES
+===================================================== */
+
+.np-text-gradient {
+  background: linear-gradient(
+    to right,
+    var(--np-accent-primary),
+    var(--np-accent-secondary)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Ensure in-flow links stay clickable (WebKit + stacked layers). */
+#npai-app-shell a[href] {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* WebKit: background-clip text on a child can shrink the <a> hit target; keep a real box on the anchor. */
+#npai-app-shell a[href]:has(.np-text-gradient) {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+}
+
+.landing-fade-up a[href] {
+  pointer-events: auto;
+  position: relative;
+  z-index: 1;
+}
+
+/* =====================================================
+   BUTTON ENHANCEMENT BASE
+===================================================== */
+
+.np-button-glow {
+  position: relative;
+  overflow: hidden;
+}
+
+.np-button-glow::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    to right,
+    var(--np-accent-primary),
+    var(--np-accent-secondary)
+  );
+  opacity: 0;
+  transition: opacity 200ms ease;
+  filter: blur(12px);
+}
+
+.np-button-glow:hover::after {
+  opacity: 0.25;
+}
+
+/* =====================================================
+   LOW CREDIT WARNING STYLE
+===================================================== */
+
+.np-warning-text {
+  color: var(--np-danger);
+  font-weight: 500;
+}
+
+/* =====================================================
+   SMOOTH FOCUS STATES
+===================================================== */
+
+:focus-visible {
+  outline: 2px solid var(--np-accent-primary);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* =====================================================
+   REMOVE DEFAULT INPUT STYLES
+===================================================== */
+
+input,
+textarea,
+select {
+  background-color: transparent;
+  outline: none;
+}
+
+/* =====================================================
+   ANTI FLICKER HARD FIX
+===================================================== */
+
+html {
+  background-color: var(--np-bg);
+}
+
+body {
+  background-color: var(--np-bg);
+}
+
+/* =====================================================
+   LANDING (subtle entrance, no layout shift)
+===================================================== */
+
+@keyframes landing-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.landing-fade-up {
+  animation: landing-fade-up 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  opacity: 0;
+  /* Opacity/transform layers can still receive hits while “invisible”; let taps reach siblings below (e.g. hero CTAs). */
+  pointer-events: none;
+}
+
+.landing-delay-1 {
+  animation-delay: 0.08s;
+}
+.landing-delay-2 {
+  animation-delay: 0.16s;
+}
+.landing-delay-3 {
+  animation-delay: 0.24s;
+}
