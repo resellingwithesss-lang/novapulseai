@@ -60,12 +60,12 @@ export default function RootLayout({
         <AppProviders>
           <div
             id="npai-app-shell"
-            className="relative min-h-screen min-w-0 overflow-x-hidden pointer-events-auto"
+            className="relative min-h-screen w-full min-w-0 max-w-none overflow-x-hidden bg-[#050816] pointer-events-auto"
           >
             <Navbar />
             <AdminHotkeyPanel />
 
-            <div className="relative z-0">{children}</div>
+            <div className="relative z-0 w-full max-w-none">{children}</div>
           </div>
         </AppProviders>
       </body>

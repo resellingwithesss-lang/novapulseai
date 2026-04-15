@@ -1,4 +1,7 @@
 export type UiPlan = "FREE" | "STARTER" | "PRO" | "ELITE"
+
+/** Stripe checkout / plan-change interval (shared across billing UI). */
+export type BillingInterval = "monthly" | "yearly"
 export type PlanToolId =
   | "clipper"
   | "prompt"
@@ -11,8 +14,19 @@ type PlanDefinition = {
   tools: PlanToolId[] | "ALL"
   priceId?: string
   yearlyPriceId?: string
+  yearlyPriceGbp?: number
   trialDays?: number
   monthlyPriceGbp: number
+}
+
+/** Display-only; server uses STRIPE_PRO_TRIAL_DAYS. 0 = no trial messaging. */
+function resolveClientProTrialDays(): number {
+  const raw = process.env.NEXT_PUBLIC_STRIPE_PRO_TRIAL_DAYS?.trim()
+  if (raw === undefined || raw === "") return 14
+  const n = Number.parseInt(raw, 10)
+  if (!Number.isFinite(n) || n < 0) return 14
+  if (n > 90) return 90
+  return n
 }
 
 // Mirrored from server plan.constants (FREE = try-before-pay, not Stripe).
@@ -27,6 +41,7 @@ export const PLAN_CONFIG: Record<UiPlan, PlanDefinition> = {
     tools: ["clipper", "prompt"],
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_STARTER_MONTHLY ?? "STRIPE_STARTER_ID",
     yearlyPriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_STARTER_YEARLY,
+    yearlyPriceGbp: 144,
     monthlyPriceGbp: 14.99,
   },
   PRO: {
@@ -34,7 +49,8 @@ export const PLAN_CONFIG: Record<UiPlan, PlanDefinition> = {
     tools: ["clipper", "prompt", "story-maker", "video-script"],
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY ?? "STRIPE_PRO_ID",
     yearlyPriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY,
-    trialDays: 3,
+    yearlyPriceGbp: 288,
+    trialDays: resolveClientProTrialDays(),
     monthlyPriceGbp: 29.99,
   },
   ELITE: {
@@ -42,6 +58,7 @@ export const PLAN_CONFIG: Record<UiPlan, PlanDefinition> = {
     tools: "ALL",
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_ELITE_MONTHLY ?? "STRIPE_ELITE_ID",
     yearlyPriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_ELITE_YEARLY,
+    yearlyPriceGbp: 480,
     monthlyPriceGbp: 49.99,
   },
 }
@@ -105,12 +122,34 @@ export function normalizePlan(plan?: string | null): UiPlan {
   return "FREE"
 }
 
+/** Mirrors server staff floor: ADMIN / SUPER_ADMIN see at least ELITE in UI when DB row lags. */
+export function displayPlanForUser(
+  plan: string | null | undefined,
+  role?: string | null
+): UiPlan {
+  const r = String(role || "").toUpperCase()
+  if (r !== "ADMIN" && r !== "SUPER_ADMIN") return normalizePlan(plan)
+  const p = normalizePlan(plan)
+  return planTierIndex(p) >= planTierIndex("ELITE") ? p : "ELITE"
+}
+
 export function getPlanCredits(plan?: string | null): number {
   return PLAN_CONFIG[normalizePlan(plan)].credits
 }
 
 export function getPlanMonthlyPriceGbp(plan?: string | null): number {
   return PLAN_CONFIG[normalizePlan(plan)].monthlyPriceGbp
+}
+
+export function getPlanPriceGbp(
+  plan: Exclude<UiPlan, "FREE"> | string | null | undefined,
+  billing: BillingInterval
+): number {
+  const config = PLAN_CONFIG[normalizePlan(plan)]
+  if (billing === "yearly" && typeof config.yearlyPriceGbp === "number") {
+    return config.yearlyPriceGbp
+  }
+  return config.monthlyPriceGbp
 }
 
 export function planAllowsTool(plan: string | null | undefined, toolId: PlanToolId): boolean {
@@ -154,8 +193,9 @@ function assertPlanConfigIntegrity() {
       throw new Error(`Invalid client plan config: PRO must include STARTER tool "${tool}"`)
     }
   }
-  if (!PLAN_CONFIG.PRO.trialDays || PLAN_CONFIG.PRO.trialDays <= 0) {
-    throw new Error("Invalid client plan config: PRO trialDays must be positive")
+  const td = PLAN_CONFIG.PRO.trialDays ?? 0
+  if (td < 0 || td > 90) {
+    throw new Error("Invalid client plan config: PRO trialDays must be 0–90")
   }
   const freeTools = PLAN_CONFIG.FREE.tools
   if (freeTools.length !== 1 || freeTools[0] !== "video-script") {

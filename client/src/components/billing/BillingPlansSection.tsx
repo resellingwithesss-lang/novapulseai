@@ -1,9 +1,10 @@
 import { ArrowUpRight, Shield } from "lucide-react"
 import { billingPlanTagline } from "@/components/billing/utils"
 import {
-  getPlanMonthlyPriceGbp,
+  getPlanPriceGbp,
   PLAN_CONFIG,
   planTierIndex,
+  type BillingInterval,
   type UiPlan,
 } from "@/lib/plans"
 
@@ -11,6 +12,8 @@ export const BILLING_PAID_TIERS: Exclude<UiPlan, "FREE">[] = ["STARTER", "PRO", 
 
 type Props = {
   normalizedPlan: UiPlan
+  billing: BillingInterval
+  onBillingChange: (billing: BillingInterval) => void
   showStarterCta: boolean
   showProCta: boolean
   showEliteCta: boolean
@@ -18,11 +21,13 @@ type Props = {
   needsPaidRecovery: boolean
   planActionLoading: string | null
   planActionError: string | null
-  onPlanChange: (plan: "STARTER" | "PRO" | "ELITE") => void
+  onPlanChange: (plan: "STARTER" | "PRO" | "ELITE", billing: BillingInterval) => void
 }
 
 export function BillingPlansSection({
   normalizedPlan,
+  billing,
+  onBillingChange,
   showStarterCta,
   showProCta,
   showEliteCta,
@@ -41,9 +46,26 @@ export function BillingPlansSection({
         Plans & upgrades
       </h2>
       <p className="mt-1 text-sm text-white/48">
-        Monthly billing shown in GBP. You can switch plans from the portal once subscribed, or use
-        the buttons below to start checkout.
+        Pick a billing interval, then use the buttons below to start checkout or change plans.
       </p>
+
+      <div className="mt-4 inline-flex rounded-full border border-white/[0.08] bg-black/30 p-1">
+        {(["monthly", "yearly"] as BillingInterval[]).map((interval) => (
+          <button
+            key={interval}
+            type="button"
+            onClick={() => onBillingChange(interval)}
+            className={
+              "rounded-full px-4 py-1.5 text-xs font-medium transition " +
+              (billing === interval
+                ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+                : "text-white/55 hover:text-white/85")
+            }
+          >
+            {interval === "monthly" ? "Monthly" : "Yearly"}
+          </button>
+        ))}
+      </div>
 
       {planActionError ? (
         <p className="mt-4 text-sm text-red-300/95" role="alert">
@@ -55,7 +77,7 @@ export function BillingPlansSection({
         {BILLING_PAID_TIERS.map((tier) => {
           const current = normalizedPlan === tier
           const credits = PLAN_CONFIG[tier].credits
-          const price = getPlanMonthlyPriceGbp(tier)
+          const price = getPlanPriceGbp(tier, billing)
           const showCta =
             (tier === "STARTER" && showStarterCta) ||
             (tier === "PRO" && showProCta) ||
@@ -77,18 +99,31 @@ export function BillingPlansSection({
                 </span>
               ) : null}
               <p className="text-lg font-semibold text-white">{tier}</p>
-              <p className="mt-2 text-sm leading-relaxed text-white/50">{billingPlanTagline(tier)}</p>
+              <p className="mt-2 text-sm leading-relaxed text-white/50">
+                {billingPlanTagline(tier)}
+              </p>
               <p className="mt-4 text-2xl font-semibold tabular-nums text-white">
                 £{price.toFixed(2)}
-                <span className="text-sm font-normal text-white/45">/mo</span>
+                <span className="text-sm font-normal text-white/45">
+                  {billing === "yearly" ? "/yr" : "/mo"}
+                </span>
               </p>
-              <p className="mt-1 text-xs text-white/45">{credits} credits / month included</p>
+              <p className="mt-1 text-[11px] text-white/38">
+                {billing === "yearly"
+                  ? "Billed yearly via Stripe checkout"
+                  : "Billed monthly via Stripe checkout"}
+              </p>
+              <p className="mt-1 text-xs text-white/45">
+                {billing === "yearly"
+                  ? `${credits} credits per month included with your plan`
+                  : `${credits} credits / month included`}
+              </p>
               <div className="mt-6 flex-1" />
               {showCta ? (
                 <button
                   type="button"
                   disabled={planActionLoading !== null}
-                  onClick={() => void onPlanChange(tier)}
+                  onClick={() => void onPlanChange(tier, billing)}
                   className={
                     "inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full px-4 text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-purple-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050816] disabled:cursor-not-allowed disabled:opacity-50 " +
                     (tier === "ELITE"
@@ -102,7 +137,7 @@ export function BillingPlansSection({
                       ? "Restore subscription"
                       : tier === "ELITE"
                         ? "Upgrade to Elite"
-                        : `Choose ${tier}`}
+                        : `Choose ${tier === "PRO" ? "Pro" : "Starter"}`}
                   <ArrowUpRight className="h-4 w-4 opacity-80" aria-hidden />
                 </button>
               ) : current ? (
@@ -128,7 +163,7 @@ export function BillingPlansSection({
 
       <p className="mt-6 flex flex-wrap items-center justify-center gap-1 text-center text-xs text-white/40">
         <Shield className="h-3.5 w-3.5 shrink-0" aria-hidden />
-        Payments secured by Stripe · Cancel or change plan anytime from the portal
+        Payments secured by Stripe · Cancel or change plan anytime from Billing
       </p>
     </section>
   )

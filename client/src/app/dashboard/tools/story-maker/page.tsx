@@ -12,7 +12,7 @@ import { useSearchParams } from "next/navigation"
 import { api, ApiError } from "@/lib/api"
 import ToolPageShell from "@/components/tools/ToolPageShell"
 import { useAuth } from "@/context/AuthContext"
-import { normalizePlan } from "@/lib/plans"
+import { displayPlanForUser } from "@/lib/plans"
 import { useEntitlementSnapshot, formatBlockedReason } from "@/hooks/useEntitlementSnapshot"
 import { normalizeToolOperation } from "@/lib/tool-operation"
 import UpgradeModal from "@/components/growth/UpgradeModal"
@@ -148,13 +148,13 @@ export default function StoryMakerPage() {
     }
     if (
       user?.subscriptionStatus === "TRIALING" &&
-      normalizePlan(user?.plan) === "PRO" &&
+      displayPlanForUser(user?.plan, user?.role) === "PRO" &&
       result
     ) {
       return "You’re using PRO trial. Keep your outputs after trial ends by upgrading now."
     }
     return null
-  }, [repeatUsageCount, user?.subscriptionStatus, user?.plan, result])
+  }, [repeatUsageCount, user?.subscriptionStatus, user?.plan, user?.role, result])
 
   /* ==============================
      Generate
@@ -394,7 +394,7 @@ export default function StoryMakerPage() {
         open={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
         message="You’ve reached your current limit for story generation."
-        currentPlan={user?.plan}
+        currentPlan={displayPlanForUser(user?.plan, user?.role)}
         requiredPlan={entitlement?.featureAccess.storyMaker.minimumPlan ?? "PRO"}
         benefits={[
           "Expanded story workflow tools",

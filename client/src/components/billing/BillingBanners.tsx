@@ -170,7 +170,7 @@ export function BillingBanners({
           <p className="font-medium text-white/90">You are on Free</p>
           <p className="mt-1 text-white/60">
             Includes a small credit pool for the Video Script Engine. Upgrade to unlock clip,
-            prompt, story, and video pipelines with monthly credits.
+            prompt, story, and Story Video Maker access with higher plan limits.
           </p>
         </div>
       ) : null}

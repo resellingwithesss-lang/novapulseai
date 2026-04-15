@@ -134,26 +134,27 @@ export default function Navbar() {
   return (
     <header
       ref={mobileRef}
-      className="sticky top-0 z-[200] border-b border-white/[0.08] bg-[#050816]/70 shadow-[0_6px_24px_rgba(0,0,0,0.26),inset_0_1px_0_rgba(255,255,255,0.045)] backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-[#050816]/55"
+      className={`sticky top-0 z-[200] backdrop-blur-xl backdrop-saturate-150 ${
+        isLanding
+          ? "border-b border-white/[0.028] bg-[#050816]/48 shadow-[0_4px_16px_rgba(0,0,0,0.14),inset_0_1px_0_rgba(255,255,255,0.024)] supports-[backdrop-filter]:bg-[#050816]/34"
+          : "border-b border-white/[0.08] bg-[#050816]/70 shadow-[0_6px_24px_rgba(0,0,0,0.26),inset_0_1px_0_rgba(255,255,255,0.045)] supports-[backdrop-filter]:bg-[#050816]/55"
+      }`}
     >
       <div
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-purple-500/16 to-transparent"
+        className={`pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent to-transparent ${
+          isLanding ? "via-purple-400/6" : "via-purple-500/16"
+        }`}
         aria-hidden
       />
 
-      {isLanding ? (
-        <div
-          className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_100%_60%_at_50%_-32%,rgba(124,58,237,0.12),transparent_62%)]"
-          aria-hidden
-        />
-      ) : (
+      {!isLanding && (
         <div
           className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_100%_80%_at_50%_-40%,rgba(88,28,135,0.14),transparent_55%)]"
           aria-hidden
         />
       )}
 
-      <div className="relative z-[1] mx-auto flex h-16 min-w-0 max-w-7xl items-center gap-3 px-4 sm:gap-4 sm:px-6 lg:gap-5 pointer-events-auto">
+      <div className="relative z-[1] mx-auto flex h-16 w-full min-w-0 max-w-none items-center gap-3 px-5 sm:gap-4 sm:px-8 lg:gap-5 lg:px-12 xl:px-16 pointer-events-auto">
         <Link
           href="/"
           className="group shrink-0 rounded-xl px-2.5 py-2 outline-none transition hover:bg-white/[0.045] focus-visible:ring-2 focus-visible:ring-purple-400/55 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050816]"
