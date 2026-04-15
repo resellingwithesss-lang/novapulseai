@@ -92,8 +92,6 @@ export default function HomePage() {
         className="pointer-events-none absolute inset-0 -z-10 min-h-full w-full min-w-0"
         aria-hidden
       >
-        {/* Top bloom — wider ellipses for a fuller-bleed, immersive field */}
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_140%_62%_at_50%_-10%,rgba(124,58,237,0.21),transparent_56%)]" />
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_85%_60%_at_72%_56%,rgba(236,72,153,0.18),transparent_58%)]" />
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_200%_90%_at_50%_102%,rgba(59,130,246,0.045),transparent_78%)]" />
       </div>
