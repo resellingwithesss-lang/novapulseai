@@ -82,7 +82,7 @@ This document matches the **implemented** launch guardrails in the monorepo (env
    `cd server && npx prisma migrate deploy`  
 3. **Set API secrets** on the host (see table above).  
 4. **Deploy API**; confirm `GET /health` = 200 and `GET /readyz` = 200.  
-5. **Configure Stripe webhook** to `https://<api>/api/billing/webhook` with the **production** signing secret (`STRIPE_WEBHOOK_SECRET`).  
+5. **Configure Stripe webhook** to `https://<api>/api/billing/webhook` with the **production** signing secret (`STRIPE_WEBHOOK_SECRET`). **Billing-specific events, trial policy, credit replay rules, and QA:** see **[billing-rollout.md](./billing-rollout.md)**.  
 6. **Google Cloud Console** — Authorized JavaScript origins: your **Next** URL(s). Authorized redirect URIs if you use redirect flows.  
 7. **Deploy Next** with `NEXT_PUBLIC_*` set for that environment.  
 8. **Smoke test:** register/login, Google sign-in, billing portal, one paid flow in Stripe test mode first, then production.
@@ -139,7 +139,7 @@ docker build \
 - [ ] Google One Tap / button (cookie present on return)  
 - [ ] CORS: no browser errors on credentialed `fetch` to API  
 - [ ] Stripe Checkout or portal opens; `return_url` lands on `/dashboard/billing`  
-- [ ] Stripe webhook: test event or real subscription updates DB (`User.plan`, credits)  
+- [ ] Stripe webhook: test event or real subscription updates DB (`User.plan`, credits) — full checklist: [billing-rollout.md](./billing-rollout.md)  
 - [ ] One generation or clip path hits OpenAI without 503 misconfig  
 - [ ] Optional: ad capture job on staging (Puppeteer + ffmpeg + disk)  
 - [ ] Logs: JSON lines in production (`server/src/lib/logger.ts`)
@@ -166,7 +166,9 @@ docker build \
 - `server/src/index.ts` — calls `validateServerEnvironment()`  
 - `server/src/modules/auth/auth.routes.ts` — `AUTH_COOKIE_SAMESITE`, `secure` when `none`  
 - `server/src/modules/billing/billing.manage.routes.ts` — portal `return_url`
-- `server/src/modules/billing/billing.routes.ts` — Stripe Checkout `success_url` / `cancel_url`  
+- `server/src/modules/billing/billing.routes.ts` — Stripe Checkout `success_url` / `cancel_url`, Zod body, server price map, PRO monthly trial, idempotency keys  
+- `server/src/modules/billing/webhook.routes.ts` — signed webhooks, subscription + invoice handlers, replay guards  
+- `docs/billing-rollout.md` — **Stripe billing rollout & QA** (env, migrations, webhook events, test/live checks)  
 - `server/prisma/schema.prisma` — `binaryTargets` for Linux containers  
 - `server/Dockerfile`, `server/.dockerignore`  
 - `client/Dockerfile`, `client/.dockerignore`  

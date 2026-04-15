@@ -6,6 +6,12 @@ export type BillingSubscription = {
   trialExpiresAt: string | null
   cancelAtPeriodEnd: boolean
   hasStripeCustomer?: boolean
+  /** Present when a paid→lower-paid change is deferred to period end (Stripe schedule + DB mirror). */
+  scheduledDowngrade?: {
+    targetPlan: string
+    targetBilling: string | null
+    effectiveAt: string
+  } | null
 }
 
 export type BillingInvoiceRow = {

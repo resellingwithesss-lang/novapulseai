@@ -17,12 +17,14 @@ import DashboardShell from "@/components/dashboard/DashboardShell"
 import { useAuth } from "@/context/AuthContext"
 import { formatBlockedReason, useEntitlementSnapshot } from "@/hooks/useEntitlementSnapshot"
 import { api, ApiError } from "@/lib/api"
+import { formatBillingCheckoutError } from "@/lib/billing-user-messages"
 import {
   displayPlanForUser,
   getPlanCredits,
   isPaidPlan,
   isUpgradeToPlan,
   planDisplayName,
+  type BillingInterval,
   type UiPlan,
 } from "@/lib/plans"
 
@@ -37,6 +39,8 @@ export default function BillingPage() {
   const [portalError, setPortalError] = useState<string | null>(null)
   const [planActionLoading, setPlanActionLoading] = useState<string | null>(null)
   const [planActionError, setPlanActionError] = useState<string | null>(null)
+  const [planNotice, setPlanNotice] = useState<string | null>(null)
+  const [billing, setBilling] = useState<BillingInterval>("monthly")
 
   const loadBilling = useCallback(async (isMounted?: () => boolean) => {
     if (isMounted && !isMounted()) return
@@ -118,34 +122,65 @@ export default function BillingPage() {
     }
   }
 
-  const startPlanChange = async (plan: "STARTER" | "PRO" | "ELITE") => {
+  const startPlanChange = async (
+    plan: "STARTER" | "PRO" | "ELITE",
+    billingType: BillingInterval
+  ) => {
     try {
       setPlanActionLoading(plan)
       setPlanActionError(null)
+      setPlanNotice(null)
       const endpoint =
         subscription?.subscriptionStatus === "ACTIVE" ||
         subscription?.subscriptionStatus === "TRIALING"
           ? "/billing/change-plan"
           : "/billing/checkout"
-      const data = await api.post<{ url?: string }>(endpoint, {
+      const data = await api.post<{
+        url?: string
+        type?: string
+        effectiveAt?: string
+        targetPlan?: string
+      }>(endpoint, {
         plan,
-        billing: "monthly",
+        billing: billingType,
       })
       if (data?.url) {
         window.location.href = data.url
+        return
+      }
+      if (data?.type === "scheduled_downgrade") {
+        const when = data.effectiveAt
+          ? new Date(data.effectiveAt).toLocaleDateString(undefined, {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            })
+          : "the end of your billing period"
+        setPlanNotice(
+          `Downgrade scheduled — you keep your current access until ${when}.`
+        )
+        await loadBilling()
+        await refreshEntitlement()
+        await refreshUser({ silent: true })
+        return
+      }
+      if (data?.type === "updated" || data?.type === "no_change") {
+        setPlanActionError(null)
+        setPlanNotice(
+          data.type === "updated"
+            ? "Your subscription was updated in Stripe."
+            : "You’re already on this plan in Stripe."
+        )
+        await loadBilling()
+        await refreshEntitlement()
+        await refreshUser({ silent: true })
         return
       }
       await loadBilling()
       await refreshEntitlement()
       await refreshUser({ silent: true })
     } catch (error: unknown) {
-      const msg =
-        error instanceof ApiError
-          ? error.message
-          : error instanceof Error
-            ? error.message
-            : "Unable to update plan."
-      setPlanActionError(msg)
+      setPlanActionError(formatBillingCheckoutError(error))
     } finally {
       setPlanActionLoading(null)
     }
@@ -313,8 +348,16 @@ export default function BillingPage() {
 
         <BillingFeatureAccess rows={featureRows} />
 
+        {planNotice ? (
+          <p className="text-sm text-emerald-300/95" role="status">
+            {planNotice}
+          </p>
+        ) : null}
+
         <BillingPlansSection
           normalizedPlan={normalizedPlan}
+          billing={billing}
+          onBillingChange={setBilling}
           showStarterCta={showStarterCta}
           showProCta={showProCta}
           showEliteCta={showEliteCta}

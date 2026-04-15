@@ -157,9 +157,21 @@ model User {
   stripeSubscriptionId String? @unique
 
   trialExpiresAt        DateTime?
+  /// Set once Stripe confirms a PRO subscription (trial or paid); blocks future PRO-monthly checkout trials.
+  billingProTrialConsumedAt DateTime?
+
   subscriptionStartedAt DateTime?
   subscriptionEndsAt    DateTime?
   cancelAtPeriodEnd     Boolean @default(false)
+
+  /// Stripe SubscriptionSchedule id when a downgrade is deferred to period end (Stripe source of truth).
+  stripeSubscriptionScheduleId String?
+  /// App tier the subscription will move to after `scheduledPlanEffectiveAt` (UX + reconciliation).
+  scheduledPlanTarget      Plan?
+  /// `monthly` | `yearly` — matches request body `billing` for the pending change.
+  scheduledPlanBilling     String?
+  /// Unix-aligned period end when the scheduled downgrade takes effect (from Stripe subscription).
+  scheduledPlanEffectiveAt DateTime?
 
   lastLoginAt   DateTime?
   lastActiveAt  DateTime?

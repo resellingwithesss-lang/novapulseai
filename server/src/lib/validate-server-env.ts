@@ -1,4 +1,5 @@
 import { buildProductionCorsOriginSet } from "./cors-allowlist"
+import { isPlausibleStripePriceId } from "../modules/billing/stripe-billing-errors"
 
 const isProduction = process.env.NODE_ENV === "production"
 
@@ -57,19 +58,37 @@ export function validateServerEnvironment(): void {
   const placeholder = (v: string | undefined) =>
     !v?.trim() || /replace_with|STRIPE_(STARTER|PRO|ELITE)_ID/i.test(v.trim())
 
-  if (placeholder(process.env.STRIPE_PRICE_STARTER_MONTHLY)) {
-    console.warn(
-      "⚠️ STRIPE_PRICE_STARTER_MONTHLY missing or looks like a placeholder — checkout for Starter may fail until set."
-    )
+  const stripePriceEnvKeys = [
+    "STRIPE_PRICE_STARTER_MONTHLY",
+    "STRIPE_PRICE_STARTER_YEARLY",
+    "STRIPE_PRICE_PRO_MONTHLY",
+    "STRIPE_PRICE_PRO_YEARLY",
+    "STRIPE_PRICE_ELITE_MONTHLY",
+    "STRIPE_PRICE_ELITE_YEARLY",
+  ] as const
+
+  for (const key of stripePriceEnvKeys) {
+    const raw = process.env[key]
+    if (placeholder(raw)) {
+      die(
+        `❌ Production requires ${key} set to a real Stripe Price id (price_...). Placeholders break checkout and plan changes.`
+      )
+    }
+    const v = raw!.trim()
+    if (!isPlausibleStripePriceId(v)) {
+      die(
+        `❌ ${key} must look like a Stripe price id (price_...). Got malformed value (length ${v.length}).`
+      )
+    }
   }
-  if (placeholder(process.env.STRIPE_PRICE_PRO_MONTHLY)) {
-    console.warn(
-      "⚠️ STRIPE_PRICE_PRO_MONTHLY missing or looks like a placeholder — checkout for Pro may fail until set."
-    )
-  }
-  if (placeholder(process.env.STRIPE_PRICE_ELITE_MONTHLY)) {
-    console.warn(
-      "⚠️ STRIPE_PRICE_ELITE_MONTHLY missing or looks like a placeholder — checkout for Elite may fail until set."
-    )
+
+  const trialRaw = process.env.STRIPE_PRO_TRIAL_DAYS?.trim()
+  if (trialRaw) {
+    const n = Number.parseInt(trialRaw, 10)
+    if (!Number.isFinite(n) || n < 0 || n > 90) {
+      console.warn(
+        "⚠️ STRIPE_PRO_TRIAL_DAYS must be an integer 0–90 when set; ignoring invalid value at runtime."
+      )
+    }
   }
 }

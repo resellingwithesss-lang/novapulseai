@@ -144,6 +144,9 @@ function normalizePath(path: string) {
  * That avoids CORS, matches dev CSP `connect-src 'self'`, and works when only
  * the Next app origin is correct (e.g. 127.0.0.1 vs localhost mismatch).
  * Server / tests: call the API base URL directly (no Next proxy).
+ *
+ * Upstream for `/api/*` is `NEXT_PUBLIC_API_URL` (see `client/next.config.js` rewrites
+ * and `docs/deployment-topology.md`). The browser never puts that host in the URL here.
  */
 function buildUrl(path: string, override?: string) {
   if (override) {
@@ -387,14 +390,21 @@ async function internalFetch<T = unknown>(
           data && typeof data === "object" && "code" in data && typeof (data as { code?: unknown }).code === "string"
             ? String((data as { code: string }).code)
             : ""
+        const billingMisconfigCodes = new Set([
+          "GOOGLE_NOT_CONFIGURED",
+          "DATABASE_SCHEMA_MIGRATION_REQUIRED",
+          "STRIPE_NOT_CONFIGURED",
+          "STRIPE_AUTH_CONFIG",
+          "MISSING_FRONTEND_URL",
+        ])
         const isMisconfig503 =
           response.status === 503 &&
-          (envelopeCode === "GOOGLE_NOT_CONFIGURED" ||
-            envelopeCode === "DATABASE_SCHEMA_MIGRATION_REQUIRED" ||
+          (billingMisconfigCodes.has(envelopeCode) ||
             msg.includes("google") ||
             msg.includes("not configured") ||
             msg.includes("database is missing") ||
-            msg.includes("schema not migrated"))
+            msg.includes("schema not migrated") ||
+            msg.includes("billing is not configured"))
         const isServerSideFailure =
           response.status >= 500 && !isMisconfig503
         if (CIRCUIT_ENABLED && isServerSideFailure) {

@@ -21,17 +21,28 @@ interface JwtPayload extends DefaultJwtPayload {
   tokenVersion?: number
 }
 
-function unauthorized(res: Response, message = "Unauthorized") {
+function requestIdFrom(req: Request): string | undefined {
+  const id = (req as Request & { requestId?: string }).requestId
+  return typeof id === "string" && id.trim() ? id.trim() : undefined
+}
+
+function unauthorized(res: Response, req: Request, message = "Unauthorized") {
+  const requestId = requestIdFrom(req)
   return res.status(401).json({
     success: false,
     message,
+    code: "UNAUTHORIZED",
+    ...(requestId ? { requestId } : {}),
   })
 }
 
-function forbidden(res: Response, message: string) {
+function forbidden(res: Response, req: Request, message: string) {
+  const requestId = requestIdFrom(req)
   return res.status(403).json({
     success: false,
     message,
+    code: "FORBIDDEN",
+    ...(requestId ? { requestId } : {}),
   })
 }
 
@@ -60,15 +71,18 @@ export async function requireAuth(
     }
 
     if (!token || token.length > MAX_JWT_CHARS) {
-      return unauthorized(res)
+      return unauthorized(res, req)
     }
 
     const secret = process.env.JWT_SECRET
     if (!secret) {
       log.error("auth_misconfigured", { reason: "JWT_SECRET missing" })
+      const requestId = requestIdFrom(req)
       return res.status(500).json({
         success: false,
         message: "Server misconfigured",
+        code: "JWT_SECRET_MISSING",
+        ...(requestId ? { requestId } : {}),
       })
     }
 
@@ -79,22 +93,22 @@ export async function requireAuth(
         algorithms: ["HS256"],
       }) as JwtPayload
     } catch {
-      return unauthorized(res)
+      return unauthorized(res, req)
     }
 
     if (!isValidJwtPayload(decoded)) {
-      return unauthorized(res, "Invalid token")
+      return unauthorized(res, req, "Invalid token")
     }
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.sub },
     })
 
-    if (!user) return unauthorized(res)
-    if (user.deletedAt) return forbidden(res, "Account deleted")
-    if (user.banned) return forbidden(res, "Account banned")
+    if (!user) return unauthorized(res, req)
+    if (user.deletedAt) return forbidden(res, req, "Account deleted")
+    if (user.banned) return forbidden(res, req, "Account banned")
     if (user.tokenVersion !== decoded.tokenVersion)
-      return unauthorized(res, "Session expired")
+      return unauthorized(res, req, "Session expired")
 
     req.user = user
     return next()
@@ -103,6 +117,6 @@ export async function requireAuth(
       requestId: typeof req.requestId === "string" ? req.requestId : undefined,
       message: err instanceof Error ? err.message : String(err),
     })
-    return unauthorized(res)
+    return unauthorized(res, req)
   }
 }
