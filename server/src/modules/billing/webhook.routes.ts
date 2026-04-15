@@ -3,8 +3,17 @@ import Stripe from "stripe"
 import { stripe } from "../../lib/stripe"
 import { prisma } from "../../lib/prisma"
 import { queueSubscriptionChangeEmail } from "../../lib/email-outbound"
-import { SubscriptionStatus, Plan, CreditType } from "@prisma/client"
-import { getPlanCredits, normalizePlanTier, resolvePlanFromStripePriceId } from "../plans/plan.constants"
+import { SubscriptionStatus, Plan, CreditType, Prisma } from "@prisma/client"
+import { isStaffBillingExemptRole } from "../../lib/staff-plan"
+import {
+  getPlanCredits,
+  normalizePlanTier,
+  planRank,
+  resolvePlanFromStripePriceId,
+} from "../plans/plan.constants"
+import { inferBillingIntervalFromStripePriceId } from "./plan-change-classification"
+import { logBillingEvent } from "./billing-events"
+import { markBillingProTrialConsumedIfProSubscriptionLive } from "./webhook-pro-trial"
 
 const router = Router()
 
@@ -43,6 +52,12 @@ function normalizePlan(raw: unknown): Plan | null {
   return normalizePlanTier(value)
 }
 
+function planFromSubscriptionMetadata(
+  metadata: Stripe.Metadata | null | undefined
+): Plan | null {
+  return normalizePlan(metadata?.plan ?? metadata?.planTier)
+}
+
 function mapStripeStatus(status: Stripe.Subscription.Status): SubscriptionStatus {
   switch (status) {
     case "active":
@@ -73,7 +88,10 @@ function creditsForPlan(plan: Plan): number {
  * Some Stripe TS versions don't include `invoice.subscription` on `Stripe.Invoice` typings.
  */
 function getInvoiceSubscriptionId(invoice: Stripe.Invoice): string | null {
-  const sub = (invoice as any)?.subscription
+  const inv = invoice as Stripe.Invoice & {
+    subscription?: string | { id?: string } | null
+  }
+  const sub = inv.subscription
   if (!sub) return null
   if (typeof sub === "string") return sub
   if (typeof sub === "object" && typeof sub.id === "string") return sub.id
@@ -104,9 +122,10 @@ router.post("/", async (req: Request, res: Response) => {
       signature,
       webhookSecret
     )
-  } catch (err: any) {
-    console.error("Signature verification failed:", err.message)
-    return res.status(400).send(`Webhook Error: ${err.message}`)
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "invalid_payload"
+    console.error("Signature verification failed:", msg)
+    return res.status(400).send(`Webhook Error: ${msg}`)
   }
 
   const existingEvent = await prisma.stripeEvent.findUnique({
@@ -150,7 +169,7 @@ router.post("/", async (req: Request, res: Response) => {
 
         const userId = subscription.metadata?.userId
         const plan =
-          normalizePlan(subscription.metadata?.plan) ??
+          planFromSubscriptionMetadata(subscription.metadata) ??
           resolvePlanFromStripePriceId(subscription.items?.data?.[0]?.price?.id)
 
         if (!userId) {
@@ -173,15 +192,33 @@ router.post("/", async (req: Request, res: Response) => {
         const refillCredits = creditsForPlan(plan)
 
         await prisma.$transaction(async (tx) => {
+          const duplicate = await tx.creditTransaction.findFirst({
+            where: {
+              userId,
+              metadata: {
+                path: ["stripeEventId"],
+                equals: event.id,
+              },
+            },
+            select: { id: true },
+          })
+          if (duplicate) {
+            return
+          }
+
           const user = await tx.user.findUnique({
             where: { id: userId },
             select: {
               id: true,
               stripeCustomerId: true,
+              role: true,
             },
           })
 
           if (!user) return
+          if (isStaffBillingExemptRole(user.role)) {
+            return
+          }
 
           const stripeCustomerId = getCustomerId(subscription.customer)
 
@@ -212,20 +249,28 @@ router.post("/", async (req: Request, res: Response) => {
             },
           })
 
+          const ledgerMetadata: Prisma.InputJsonValue = {
+            stripeEventId: event.id,
+            stripeInvoiceId: invoice.id,
+            stripeSubscriptionId: subscription.id,
+            plan,
+          }
+
           await tx.creditTransaction.create({
             data: {
               userId,
               amount: refillCredits,
               type: CreditType.CREDIT_ADD,
               reason: "Monthly billing reset",
-              metadata: {
-                stripeEventId: event.id,
-                stripeInvoiceId: invoice.id,
-                stripeSubscriptionId: subscription.id,
-                plan,
-              },
-            } as any, // keep compat if metadata type is JsonValue
+              metadata: ledgerMetadata,
+            },
           })
+        })
+
+        logBillingEvent("invoice_paid_webhook", {
+          userId,
+          stripeEventId: event.id,
+          plan,
         })
 
         break
@@ -241,7 +286,7 @@ router.post("/", async (req: Request, res: Response) => {
         const subscription = event.data.object as Stripe.Subscription
 
         const userId = subscription.metadata?.userId
-        const metadataPlan = normalizePlan(subscription.metadata?.plan)
+        const metadataPlan = planFromSubscriptionMetadata(subscription.metadata)
         const pricePlan = resolvePlanFromStripePriceId(subscription.items?.data?.[0]?.price?.id)
         const plan = metadataPlan ?? pricePlan
 
@@ -259,6 +304,10 @@ router.post("/", async (req: Request, res: Response) => {
             plan: true,
             trialExpiresAt: true,
             credits: true,
+            role: true,
+            scheduledPlanTarget: true,
+            scheduledPlanBilling: true,
+            stripeSubscriptionScheduleId: true,
           },
         })
         if (!existingUser) break
@@ -274,9 +323,34 @@ router.post("/", async (req: Request, res: Response) => {
           })
         }
 
-        const resolvedPlan = plan ?? existingUser.plan
+        let resolvedPlan = (plan ?? existingUser.plan) as Plan
+        if (
+          isStaffBillingExemptRole(existingUser.role) &&
+          plan &&
+          planRank(normalizePlanTier(plan)) < planRank(normalizePlanTier(existingUser.plan))
+        ) {
+          resolvedPlan = existingUser.plan as Plan
+        }
+
         const shouldResetCreditsForPlanChange = existingUser.plan !== resolvedPlan
         const resetCredits = creditsForPlan(resolvedPlan)
+
+        const newPriceId = subscription.items?.data?.[0]?.price?.id ?? null
+        const inferredBilling = inferBillingIntervalFromStripePriceId(newPriceId)
+        const pendingMatchesStripe =
+          existingUser.scheduledPlanTarget &&
+          resolvedPlan === existingUser.scheduledPlanTarget &&
+          Boolean(inferredBilling) &&
+          inferredBilling === existingUser.scheduledPlanBilling
+
+        if (pendingMatchesStripe) {
+          logBillingEvent("plan_change_pending_cleared_webhook", {
+            userId,
+            stripeEventId: event.id,
+            subscriptionId: subscription.id,
+            plan: resolvedPlan,
+          })
+        }
 
         await prisma.user.update({
           where: { id: userId },
@@ -300,6 +374,14 @@ router.post("/", async (req: Request, res: Response) => {
               : null,
 
             cancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
+            ...(pendingMatchesStripe
+              ? {
+                  stripeSubscriptionScheduleId: null,
+                  scheduledPlanTarget: null,
+                  scheduledPlanBilling: null,
+                  scheduledPlanEffectiveAt: null,
+                }
+              : {}),
             ...(shouldResetCreditsForPlanChange
               ? {
                   credits: resetCredits,
@@ -310,10 +392,72 @@ router.post("/", async (req: Request, res: Response) => {
           },
         })
 
+        await markBillingProTrialConsumedIfProSubscriptionLive({ userId, subscription })
+
+        logBillingEvent("subscription_sync_webhook", {
+          userId,
+          stripeEventId: event.id,
+          eventType: event.type,
+          subscriptionId: subscription.id,
+          status: subscription.status,
+        })
+
         void queueSubscriptionChangeEmail(userId).catch((err) => {
           console.warn("[stripe] subscription email queue", err)
         })
 
+        break
+      }
+
+      case "checkout.session.completed": {
+        const session = event.data.object as Stripe.Checkout.Session
+        if (session.mode !== "subscription") break
+
+        const userId =
+          (session.metadata?.userId && String(session.metadata.userId)) ||
+          (session.client_reference_id && String(session.client_reference_id)) ||
+          null
+        if (!userId) {
+          console.warn("checkout.session.completed missing user reference", {
+            stripeEventId: event.id,
+            sessionId: session.id,
+          })
+          break
+        }
+
+        const rawSub = session.subscription
+        const subId =
+          typeof rawSub === "string"
+            ? rawSub
+            : rawSub && typeof rawSub === "object" && "id" in rawSub && typeof rawSub.id === "string"
+              ? rawSub.id
+              : null
+        if (!subId) break
+
+        const subscription = await stripe.subscriptions.retrieve(subId)
+        await markBillingProTrialConsumedIfProSubscriptionLive({ userId, subscription })
+
+        const cust = getCustomerId(session.customer)
+        const linked = await prisma.user.updateMany({
+          where: { id: userId },
+          data: {
+            ...(cust ? { stripeCustomerId: cust } : {}),
+            stripeSubscriptionId: subId,
+          },
+        })
+        if (linked.count === 0) {
+          console.warn("checkout.session.completed user row not found", {
+            stripeEventId: event.id,
+            userId,
+            sessionId: session.id,
+          })
+        }
+
+        logBillingEvent("checkout_session_completed_webhook", {
+          userId,
+          stripeEventId: event.id,
+          checkoutSessionId: session.id,
+        })
         break
       }
 
@@ -325,20 +469,39 @@ router.post("/", async (req: Request, res: Response) => {
         const userId = subscription.metadata?.userId
         if (!userId) break
 
-        await prisma.user.update({
+        const subUser = await prisma.user.findUnique({
           where: { id: userId },
-          data: {
-            plan: Plan.FREE,
-            subscriptionStatus: SubscriptionStatus.CANCELED,
-            stripeSubscriptionId: null,
-            subscriptionStartedAt: null,
-            subscriptionEndsAt: null,
-            cancelAtPeriodEnd: false,
-            credits: creditsForPlan(Plan.FREE),
-            monthlyCredits: creditsForPlan(Plan.FREE),
-            monthlyResetAt: new Date(),
-          },
+          select: { role: true },
         })
+        if (!subUser) break
+
+        if (isStaffBillingExemptRole(subUser.role)) {
+          await prisma.user.update({
+            where: { id: userId },
+            data: {
+              stripeSubscriptionId: null,
+              subscriptionStatus: SubscriptionStatus.CANCELED,
+              subscriptionStartedAt: null,
+              subscriptionEndsAt: null,
+              cancelAtPeriodEnd: false,
+            },
+          })
+        } else {
+          await prisma.user.update({
+            where: { id: userId },
+            data: {
+              plan: Plan.FREE,
+              subscriptionStatus: SubscriptionStatus.CANCELED,
+              stripeSubscriptionId: null,
+              subscriptionStartedAt: null,
+              subscriptionEndsAt: null,
+              cancelAtPeriodEnd: false,
+              credits: creditsForPlan(Plan.FREE),
+              monthlyCredits: creditsForPlan(Plan.FREE),
+              monthlyResetAt: new Date(),
+            },
+          })
+        }
 
         void queueSubscriptionChangeEmail(userId).catch((err) => {
           console.warn("[stripe] subscription email queue", err)
@@ -363,6 +526,11 @@ router.post("/", async (req: Request, res: Response) => {
               : null,
           },
         })
+        logBillingEvent("invoice_payment_failed_webhook", {
+          userId,
+          stripeEventId: event.id,
+          invoiceId: invoice.id,
+        })
         break
       }
 
@@ -384,8 +552,9 @@ router.post("/", async (req: Request, res: Response) => {
     })
 
     return res.json({ received: true })
-  } catch (error) {
-    console.error("Webhook error:", error)
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error("Webhook error:", detail)
     return res.status(500).send("Webhook failed")
   } finally {
     await prisma.$queryRaw`SELECT pg_advisory_unlock(hashtext(${event.id}))`

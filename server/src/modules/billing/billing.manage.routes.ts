@@ -4,6 +4,9 @@ import { prisma } from "../../lib/prisma"
 import { resolveFrontendBaseUrl } from "../../lib/frontend-url"
 import { requireAuth, AuthRequest } from "../auth/auth.middleware"
 import { buildEntitlementSnapshot } from "./billing.access"
+import { staffFloorPlan } from "../../lib/staff-plan"
+import { logBillingEvent } from "./billing-events"
+import { requireCsrfForCookieAuth } from "../../middlewares/csrf-protect"
 
 const router = Router()
 
@@ -78,6 +81,11 @@ router.get(
           cancelAtPeriodEnd: true,
           stripeSubscriptionId: true,
           stripeCustomerId: true,
+          role: true,
+          scheduledPlanTarget: true,
+          scheduledPlanBilling: true,
+          scheduledPlanEffectiveAt: true,
+          stripeSubscriptionScheduleId: true,
         },
       })
 
@@ -88,13 +96,31 @@ router.get(
         })
       }
 
-      const { stripeCustomerId, ...rest } = user
+      const {
+        stripeCustomerId,
+        role,
+        plan,
+        scheduledPlanTarget,
+        scheduledPlanBilling,
+        scheduledPlanEffectiveAt,
+        stripeSubscriptionScheduleId: _scheduleId,
+        ...rest
+      } = user
 
       return res.json({
         success: true,
         subscription: {
           ...rest,
+          plan: staffFloorPlan(plan, role),
           hasStripeCustomer: Boolean(stripeCustomerId),
+          scheduledDowngrade:
+            scheduledPlanTarget && scheduledPlanEffectiveAt
+              ? {
+                  targetPlan: scheduledPlanTarget,
+                  targetBilling: scheduledPlanBilling,
+                  effectiveAt: scheduledPlanEffectiveAt.toISOString(),
+                }
+              : null,
         },
       })
     } catch (error) {
@@ -158,6 +184,7 @@ router.get(
 router.post(
   "/portal",
   requireAuth,
+  requireCsrfForCookieAuth,
   async (req: AuthRequest, res: Response) => {
     try {
       if (!req.user) {
@@ -170,9 +197,15 @@ router.post(
       })
 
       if (!user?.stripeCustomerId) {
+        logBillingEvent("portal_session_create_failed", {
+          userId: req.user.id,
+          reason: "no_stripe_customer",
+        })
         return res.status(400).json({
           success: false,
-          message: "No Stripe customer",
+          code: "NO_STRIPE_CUSTOMER",
+          message:
+            "No billing profile yet. Start a paid plan from Billing first, or contact support if you believe this is an error.",
         })
       }
 
@@ -185,13 +218,25 @@ router.post(
         })
       }
 
+      logBillingEvent("portal_session_create_requested", {
+        userId: req.user.id,
+      })
+
       const session = await stripe.billingPortal.sessions.create({
         customer: user.stripeCustomerId,
         return_url: `${base}/dashboard/billing`,
       })
 
+      logBillingEvent("portal_session_create_succeeded", {
+        userId: req.user.id,
+      })
+
       return res.json({ success: true, url: session.url })
-    } catch {
+    } catch (err) {
+      logBillingEvent("portal_session_create_failed", {
+        userId: req.user!.id,
+        reason: "exception",
+      })
       return res.status(500).json({
         success: false,
         message: "Failed to open billing portal",
@@ -207,6 +252,7 @@ router.post(
 router.post(
   "/cancel",
   requireAuth,
+  requireCsrfForCookieAuth,
   async (req: AuthRequest, res: Response) => {
     try {
       if (!req.user) {
@@ -254,6 +300,7 @@ router.post(
 router.post(
   "/resume",
   requireAuth,
+  requireCsrfForCookieAuth,
   async (req: AuthRequest, res: Response) => {
     try {
       if (!req.user) {

@@ -2,6 +2,7 @@ import { Router, Response } from "express"
 import { z } from "zod"
 import { prisma } from "../../lib/prisma"
 import { ok, fail } from "../../lib/http"
+import { staffFloorPlan } from "../../lib/staff-plan"
 import { requireAuth, AuthRequest } from "../auth/auth.middleware"
 
 const router = Router()
@@ -57,6 +58,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res: Response) => {
       totalGenerations: true,
       plan: true,
       subscriptionStatus: true,
+      role: true,
     },
   })
 
@@ -86,7 +88,7 @@ router.get("/", requireAuth, async (req: AuthRequest, res: Response) => {
       bonusCredits: user.bonusCredits,
       lifetimeCreditsUsed: user.lifetimeCreditsUsed,
       totalGenerations: user.totalGenerations,
-      plan: user.plan,
+      plan: staffFloorPlan(user.plan, user.role),
       subscriptionStatus: user.subscriptionStatus,
     },
   })

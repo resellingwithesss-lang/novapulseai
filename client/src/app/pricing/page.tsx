@@ -1,16 +1,20 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
-import { api, ApiError } from "@/lib/api"
+import { api } from "@/lib/api"
+import { formatBillingCheckoutError } from "@/lib/billing-user-messages"
 import PricingPlanCard, {
   type PricingFeatureGroup,
 } from "./_components/PricingPlanCard"
 import {
   PLAN_CONFIG as SHARED_PLAN_CONFIG,
   WORKFLOW_LIMITS,
+  displayPlanForUser,
   normalizePlan,
   planDisplayName,
+  type BillingInterval,
+  type UiPlan,
 } from "@/lib/plans"
 import { useAuth } from "@/context/AuthContext"
 import {
@@ -21,11 +25,10 @@ import {
   clearResumeCheckoutFlag,
 } from "@/lib/planIntent"
 
-type BillingType = "monthly" | "yearly"
-type UiPlan = "STARTER" | "PRO" | "ELITE"
+type PaidTier = Exclude<UiPlan, "FREE">
 
 type Subscription = {
-  plan?: "FREE" | "STARTER" | "PRO" | "ELITE"
+  plan?: UiPlan
   subscriptionStatus?:
     | "TRIALING"
     | "ACTIVE"
@@ -36,7 +39,7 @@ type Subscription = {
 }
 
 type PlanConfig = {
-  stripePlan: "STARTER" | "PRO" | "ELITE"
+  stripePlan: PaidTier
   monthly: number
   yearly: number
   credits: string
@@ -52,13 +55,21 @@ type PlanConfig = {
 }
 
 const CREDITS_GUIDE =
-  "One credit isn’t one word — it’s one billed run. Scripts, clips, and video jobs consume credits based on length and tool; heavier outputs use more. Your balance and ledger match Billing & Settings."
+  "One credit isn’t one word — it’s one billed run where credits apply. Script and story generation draw from your monthly credit pool; plan access controls which tools you can run. Your balance and ledger are shown in Billing & Settings."
 
-const PLAN_DISPLAY_CONFIG: Record<UiPlan, PlanConfig> = {
+const PRO_TRIAL_DAYS = Math.max(0, SHARED_PLAN_CONFIG.PRO.trialDays ?? 0)
+const PRO_TRIAL_ENABLED = PRO_TRIAL_DAYS > 0
+const yearlyPriceToMinor = (yearlyGbp?: number, monthlyGbp?: number) =>
+  Math.round((yearlyGbp ?? (monthlyGbp ?? 0) * 12) * 100)
+
+const PLAN_DISPLAY_CONFIG: Record<PaidTier, PlanConfig> = {
   STARTER: {
     stripePlan: "STARTER",
     monthly: Math.round(SHARED_PLAN_CONFIG.STARTER.monthlyPriceGbp * 100),
-    yearly: 14400,
+    yearly: yearlyPriceToMinor(
+      SHARED_PLAN_CONFIG.STARTER.yearlyPriceGbp,
+      SHARED_PLAN_CONFIG.STARTER.monthlyPriceGbp
+    ),
     credits: `${SHARED_PLAN_CONFIG.STARTER.credits} credits / month`,
     audience: "For solo creators shipping weekly",
     subtitle:
@@ -91,7 +102,10 @@ const PLAN_DISPLAY_CONFIG: Record<UiPlan, PlanConfig> = {
   PRO: {
     stripePlan: "PRO",
     monthly: Math.round(SHARED_PLAN_CONFIG.PRO.monthlyPriceGbp * 100),
-    yearly: 28800,
+    yearly: yearlyPriceToMinor(
+      SHARED_PLAN_CONFIG.PRO.yearlyPriceGbp,
+      SHARED_PLAN_CONFIG.PRO.monthlyPriceGbp
+    ),
     credits: `${SHARED_PLAN_CONFIG.PRO.credits.toLocaleString()} credits / month`,
     audience: "For creators scaling scripts & stories",
     subtitle:
@@ -114,22 +128,29 @@ const PLAN_DISPLAY_CONFIG: Record<UiPlan, PlanConfig> = {
         ],
       },
       {
-        heading: "Trial",
-        items: [
-          `Try Pro free for ${SHARED_PLAN_CONFIG.PRO.trialDays || 3} days via Stripe, then paid Pro unless you cancel`,
-        ],
+        heading: PRO_TRIAL_ENABLED ? "Trial" : "Billing",
+        items: PRO_TRIAL_ENABLED
+          ? [
+              `Try Pro free for ${PRO_TRIAL_DAYS} days on monthly checkout via Stripe, then paid Pro unless you cancel`,
+            ]
+          : ["Pro monthly and yearly bill through Stripe — no promotional checkout trial at the moment."],
       },
     ],
-    buttonText: `Start ${SHARED_PLAN_CONFIG.PRO.trialDays || 3}-day Pro trial`,
+    buttonText: PRO_TRIAL_ENABLED
+      ? `Start ${PRO_TRIAL_DAYS}-day Pro trial`
+      : "Subscribe to Pro",
     highlight: true,
     topBadge: "Most creators choose Pro",
-    pillBadge: `${SHARED_PLAN_CONFIG.PRO.trialDays || 3}-day trial · Stripe`,
+    pillBadge: PRO_TRIAL_ENABLED ? `${PRO_TRIAL_DAYS}-day trial · Stripe` : "Stripe · monthly or yearly",
     ctaVariant: "primary",
   },
   ELITE: {
     stripePlan: "ELITE",
     monthly: Math.round(SHARED_PLAN_CONFIG.ELITE.monthlyPriceGbp * 100),
-    yearly: 48000,
+    yearly: yearlyPriceToMinor(
+      SHARED_PLAN_CONFIG.ELITE.yearlyPriceGbp,
+      SHARED_PLAN_CONFIG.ELITE.monthlyPriceGbp
+    ),
     credits: `${SHARED_PLAN_CONFIG.ELITE.credits.toLocaleString()} credits / month`,
     audience: "For power users & lean teams",
     subtitle:
@@ -167,8 +188,8 @@ export default function PricingPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { refreshUser, user, status } = useAuth()
-  const [billing, setBilling] = useState<BillingType>("monthly")
-  const [loadingPlan, setLoadingPlan] = useState<UiPlan | null>(null)
+  const [billing, setBilling] = useState<BillingInterval>("monthly")
+  const [loadingPlan, setLoadingPlan] = useState<PaidTier | null>(null)
   const [subscription, setSubscription] = useState<Subscription | null>(null)
   const [loadingSub, setLoadingSub] = useState(true)
   const [pageNotice, setPageNotice] = useState<{
@@ -244,8 +265,8 @@ export default function PricingPage() {
 
   const startCheckout = useCallback(
     async (
-      plan: UiPlan,
-      billingOverride?: BillingType
+      plan: PaidTier,
+      billingOverride?: BillingInterval
     ): Promise<boolean> => {
       const selectedBilling = billingOverride ?? billing
 
@@ -276,6 +297,11 @@ export default function PricingPage() {
 
         const data = await api.post<{
           url?: string
+          type?: string
+          requestId?: string
+          effectiveAt?: string
+          targetPlan?: string
+          message?: string
         }>(endpoint, {
           plan: config.stripePlan,
           billing: selectedBilling,
@@ -287,17 +313,45 @@ export default function PricingPage() {
           return true
         }
 
+        if (data?.type === "scheduled_downgrade") {
+          clearCheckoutPlanIntent()
+          const when = data.effectiveAt
+            ? new Date(data.effectiveAt).toLocaleDateString(undefined, {
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+              })
+            : "the end of your billing period"
+          setPageNotice({
+            text: `Downgrade scheduled — you keep your current access until ${when}. Opening Billing…`,
+            tone: "success",
+          })
+          await refreshUser({ silent: true })
+          window.location.href = "/dashboard/billing"
+          return true
+        }
+
+        if (data?.type === "updated" || data?.type === "no_change") {
+          clearCheckoutPlanIntent()
+          setPageNotice({
+            text:
+              data.type === "updated"
+                ? "Your subscription was updated in Stripe. Opening Billing to confirm…"
+                : "You’re already on this plan in Stripe. Opening Billing…",
+            tone: "success",
+          })
+          await refreshUser({ silent: true })
+          window.location.href = "/dashboard/billing"
+          return true
+        }
+
         clearCheckoutPlanIntent()
-        window.location.href = "/dashboard/billing"
-        return true
+        setCheckoutError(
+          "Billing did not return a checkout link. Open Billing from your dashboard or try again."
+        )
+        return false
       } catch (error: unknown) {
-        const msg =
-          error instanceof ApiError
-            ? error.message
-            : error instanceof Error
-              ? error.message
-              : "Something went wrong."
-        setCheckoutError(msg)
+        setCheckoutError(formatBillingCheckoutError(error))
         return false
       } finally {
         setLoadingPlan(null)
@@ -329,9 +383,19 @@ export default function PricingPage() {
     })()
   }, [user, status, startCheckout])
 
-  function isCurrentPlan(plan: UiPlan): boolean {
-    if (!subscription?.plan) return false
-    return normalizePlan(subscription.plan) === normalizePlan(PLAN_DISPLAY_CONFIG[plan].stripePlan)
+  const pricingTierLabel = useMemo(() => {
+    if (status === "authenticated" && user) {
+      return displayPlanForUser(subscription?.plan ?? user.plan, user.role)
+    }
+    if (subscription?.plan) return normalizePlan(subscription.plan)
+    return null
+  }, [status, user, subscription?.plan])
+
+  function isCurrentPlan(plan: PaidTier): boolean {
+    if (!pricingTierLabel) return false
+    return (
+      pricingTierLabel === normalizePlan(PLAN_DISPLAY_CONFIG[plan].stripePlan)
+    )
   }
 
   return (
@@ -357,9 +421,9 @@ export default function PricingPage() {
           </h1>
 
           <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-white/52 sm:mt-5 sm:text-lg">
-            Credits power every run — scripts, clips, and video workflows. Start free, graduate to
-            Starter for automation, <span className="text-white/72">choose Pro when you need scripts + Story Maker</span>, or Elite when you’re
-            driving Story Video Maker at scale.
+            Start free, graduate to Starter for automation,{" "}
+            <span className="text-white/72">choose Pro when you need scripts + Story Maker</span>,{" "}
+            or Elite when you’re driving Story Video Maker at scale.
           </p>
 
           <div className="mt-7 flex justify-center sm:mt-9">
@@ -368,7 +432,7 @@ export default function PricingPage() {
               role="group"
               aria-label="Billing period"
             >
-              {(["monthly", "yearly"] as BillingType[]).map((type) => (
+              {(["monthly", "yearly"] as BillingInterval[]).map((type) => (
                 <button
                   key={type}
                   type="button"
@@ -385,10 +449,10 @@ export default function PricingPage() {
             </div>
           </div>
 
-          {!loadingSub && subscription?.plan && (
+          {!loadingSub && pricingTierLabel && (
             <p className="mt-5 text-sm text-white/38">
-              Current subscription ·{" "}
-              <span className="text-white/55">{planDisplayName(subscription.plan)}</span>
+              Current plan ·{" "}
+              <span className="text-white/55">{planDisplayName(pricingTierLabel)}</span>
             </p>
           )}
           {pageNotice && (
@@ -403,9 +467,16 @@ export default function PricingPage() {
           {checkoutError && <p className="mt-3 text-sm text-red-300/95">{checkoutError}</p>}
           <p className="mx-auto mt-4 max-w-2xl text-xs leading-relaxed text-white/38">
             Free includes {SHARED_PLAN_CONFIG.FREE.credits} credits and Video Script only. Paid plans bill
-            securely through Stripe; cancel or change anytime from Billing. Pro includes a one-time{" "}
-            {SHARED_PLAN_CONFIG.PRO.trialDays || 3}-day trial, then continues as paid Pro unless you
-            cancel during the trial.
+            securely through Stripe; cancel or change anytime from Billing.
+            {PRO_TRIAL_ENABLED ? (
+              <>
+                {" "}
+                Pro monthly checkout includes a one-time {PRO_TRIAL_DAYS}-day trial, then continues as paid
+                Pro unless you cancel during the trial.
+              </>
+            ) : (
+              <> Pro is paid from the first invoice on the plan you choose.</>
+            )}
           </p>
         </div>
 
@@ -439,7 +510,7 @@ export default function PricingPage() {
         </div>
 
         <div className="mt-14 grid items-end gap-8 md:grid-cols-3 md:gap-6 lg:gap-7">
-          {(Object.keys(PLAN_DISPLAY_CONFIG) as UiPlan[]).map((plan) => {
+          {(Object.keys(PLAN_DISPLAY_CONFIG) as PaidTier[]).map((plan) => {
             const config = PLAN_DISPLAY_CONFIG[plan]
             const price =
               billing === "monthly" ? config.monthly : config.yearly
@@ -485,7 +556,7 @@ export default function PricingPage() {
             <div>
               <p className="text-sm font-medium text-white/80">Aligned with the app</p>
               <p className="mt-1 text-xs leading-relaxed text-white/45">
-                Credits, plan names, and limits match Billing & Settings — one source of truth.
+                Credits, plan names, and limits are kept aligned with Billing & Settings.
               </p>
             </div>
           </div>

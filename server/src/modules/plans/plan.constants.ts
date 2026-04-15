@@ -12,7 +12,20 @@ type PlanDefinition = {
   /** Stripe price id — FREE has none */
   priceId?: string
   yearlyPriceId?: string
-  trialDays?: number
+}
+
+/**
+ * PRO monthly checkout trial length (days). Server-only; Stripe Dashboard trial settings are not used.
+ * `STRIPE_PRO_TRIAL_DAYS`: unset defaults to **14**; `0` disables checkout trials; max **90**.
+ */
+export function getProCheckoutTrialDays(): number {
+  const raw = process.env.STRIPE_PRO_TRIAL_DAYS?.trim()
+  if (raw === undefined || raw === "") return 14
+  const n = Number.parseInt(raw, 10)
+  if (!Number.isFinite(n)) return 14
+  if (n <= 0) return 0
+  if (n > 90) return 90
+  return n
 }
 
 export const PLAN_CONFIG: Record<PlanTier, PlanDefinition> = {
@@ -31,7 +44,6 @@ export const PLAN_CONFIG: Record<PlanTier, PlanDefinition> = {
     tools: ["clipper", "prompt", "story-maker", "video-script"],
     priceId: process.env.STRIPE_PRICE_PRO_MONTHLY ?? "STRIPE_PRO_ID",
     yearlyPriceId: process.env.STRIPE_PRICE_PRO_YEARLY,
-    trialDays: 3,
   },
   ELITE: {
     credits: 5000,
@@ -145,8 +157,9 @@ function assertPlanConfigIntegrity() {
       throw new Error(`Invalid plan config: PRO must include STARTER tool "${tool}"`)
     }
   }
-  if (!PLAN_CONFIG.PRO.trialDays || PLAN_CONFIG.PRO.trialDays <= 0) {
-    throw new Error("Invalid plan config: PRO trialDays must be a positive number")
+  const trialDays = getProCheckoutTrialDays()
+  if (trialDays < 0 || trialDays > 90) {
+    throw new Error("Invalid plan config: getProCheckoutTrialDays() out of range")
   }
   const freeTools = PLAN_CONFIG.FREE.tools
   if (freeTools.length !== 1 || freeTools[0] !== "video-script") {

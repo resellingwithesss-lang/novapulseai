@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation"
 import { Mic2, Quote, Shield, Wand2 } from "lucide-react"
 import DashboardShell from "@/components/dashboard/DashboardShell"
 import { useAuth } from "@/context/AuthContext"
-import { getWorkflowLimitsForPlan } from "@/lib/plans"
+import { displayPlanForUser, getWorkflowLimitsForPlan } from "@/lib/plans"
 import { ApiError } from "@/lib/api"
 import {
   createBrandVoice,
@@ -120,7 +120,9 @@ export default function BrandVoicesPage() {
     Map<string, { count: number; lastAt: string | null }>
   >(() => new Map())
 
-  const limits = getWorkflowLimitsForPlan(user?.plan)
+  const limits = getWorkflowLimitsForPlan(
+    displayPlanForUser(user?.plan, user?.role)
+  )
   const atCap = items.length >= limits.brandVoices
 
   const load = useCallback(async () => {

@@ -4,6 +4,7 @@ import assert from "node:assert/strict"
 import {
   PLAN_CONFIG,
   getPlanCredits,
+  getProCheckoutTrialDays,
   hasPlanAtLeast,
   normalizePlanTier,
   planIncludesTool,
@@ -50,10 +51,10 @@ test("plan ladder ordering and minimum checks are safe", () => {
 })
 
 test("stripe price id mapping and trial policy are correct", () => {
-  assert.equal(PLAN_CONFIG.PRO.trialDays, 3)
-  assert.equal(PLAN_CONFIG.FREE.trialDays, undefined)
-  assert.equal(PLAN_CONFIG.STARTER.trialDays, undefined)
-  assert.equal(PLAN_CONFIG.ELITE.trialDays, undefined)
+  const trialDays = getProCheckoutTrialDays()
+  assert.ok(trialDays >= 0 && trialDays <= 90)
+  assert.equal(PLAN_CONFIG.FREE.priceId, undefined)
+  assert.equal(PLAN_CONFIG.STARTER.priceId !== undefined, true)
 
   assert.equal(
     resolvePlanFromStripePriceId(PLAN_CONFIG.STARTER.priceId),

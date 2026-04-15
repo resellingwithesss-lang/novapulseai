@@ -6,7 +6,7 @@ import Link from "next/link"
 import { Boxes, Coins, Sparkles, Wand2 } from "lucide-react"
 import DashboardShell from "@/components/dashboard/DashboardShell"
 import { useAuth } from "@/context/AuthContext"
-import { getWorkflowLimitsForPlan } from "@/lib/plans"
+import { displayPlanForUser, getWorkflowLimitsForPlan } from "@/lib/plans"
 import { ApiError } from "@/lib/api"
 import CreatorWorkflowSelectors from "@/components/workflow/CreatorWorkflowSelectors"
 import {
@@ -61,7 +61,9 @@ export default function ContentPacksPage() {
   const [generating, setGenerating] = useState(false)
   const [postGenerate, setPostGenerate] = useState<{ id: string; title: string } | null>(null)
 
-  const limits = getWorkflowLimitsForPlan(user?.plan)
+  const limits = getWorkflowLimitsForPlan(
+    displayPlanForUser(user?.plan, user?.role)
+  )
   const atCap = items.length >= limits.contentPacks
 
   const wsName = useMemo(() => {

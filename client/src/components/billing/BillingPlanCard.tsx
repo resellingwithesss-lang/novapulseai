@@ -1,7 +1,7 @@
 import type { BillingSubscription } from "@/components/billing/types"
 import { billingStatusChipMeta, formatBillingDate } from "@/components/billing/utils"
 import { BillingCard } from "@/components/billing/BillingCard"
-import type { UiPlan } from "@/lib/plans"
+import { planDisplayName, type UiPlan } from "@/lib/plans"
 
 type Props = {
   subscription: BillingSubscription
@@ -35,7 +35,7 @@ export function BillingPlanCard({
             data-testid="billing-current-plan"
             className="mt-2 text-2xl font-semibold tracking-tight text-white sm:text-3xl"
           >
-            {normalizedPlan}
+            {planDisplayName(normalizedPlan)}
           </p>
         </div>
         <span

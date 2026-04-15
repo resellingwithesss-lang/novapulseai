@@ -1,18 +1,15 @@
 "use client"
 
 import { useMemo } from "react"
-import {
-  getPlanCredits,
-  isFreePlan,
-  normalizePlan,
-} from "@/lib/plans"
+import { getPlanCredits, isFreePlan } from "@/lib/plans"
 import { useAuth } from "@/context/AuthContext"
+import { useEffectivePlan } from "@/hooks/useEffectivePlan"
 
 export default function UsageBar() {
   const { user } = useAuth()
-  const plan = normalizePlan(user?.plan)
+  const plan = useEffectivePlan()
   const total = getPlanCredits(plan)
-  const free = isFreePlan(user?.plan)
+  const free = isFreePlan(plan)
   const remaining = Math.max(0, user?.credits ?? 0)
   const used = Math.max(0, total - remaining)
   const pct = Math.min(100, Math.round((used / total) * 100))

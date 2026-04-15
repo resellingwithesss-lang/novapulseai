@@ -6,7 +6,7 @@ import { ArrowLeft, Sparkles } from "lucide-react"
 import TrialBanner from "@/components/growth/TrialBanner"
 import UsageBar from "@/components/growth/UsageBar"
 import { useAuth } from "@/context/AuthContext"
-import { normalizePlan } from "@/lib/plans"
+import { displayPlanForUser } from "@/lib/plans"
 import type { ToolId } from "@/config/tools"
 
 type ToolPageShellProps = {
@@ -37,7 +37,7 @@ export default function ToolPageShell({
   const showTrialBanner =
     user?.subscriptionStatus === "TRIALING" &&
     !!user.trialExpiresAt &&
-    normalizePlan(user?.plan) === "PRO"
+    displayPlanForUser(user?.plan, user?.role) === "PRO"
   const statusClass =
     statusTone === "success"
       ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"

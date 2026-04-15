@@ -1,4 +1,5 @@
 import type { Plan, SubscriptionStatus } from "@prisma/client"
+import { isStaffBillingExemptRole, staffEffectivePlanString } from "../../lib/staff-plan"
 import {
   type PlanTier,
   type ToolId,
@@ -92,7 +93,11 @@ function baseBlockReason(
     return "ACCOUNT_SUSPENDED"
   }
 
-  const normalizedPlan = normalizePlanTier(user.plan)
+  if (isStaffBillingExemptRole(user.role)) {
+    return null
+  }
+
+  const normalizedPlan = normalizePlanTier(staffEffectivePlanString(user.plan, user.role))
 
   /* FREE: no paid subscription required — tool + credit gates apply per feature */
   if (isFreePlanTier(normalizedPlan)) {
@@ -187,13 +192,15 @@ export function buildEntitlementSnapshot(
   }
 ): EntitlementSnapshot {
   const now = options?.now ?? new Date()
-  const normalizedPlan = normalizePlanTier(user.plan)
+  const planForEntitlements = staffEffectivePlanString(user.plan, user.role)
+  const normalizedPlan = normalizePlanTier(planForEntitlements)
   const status = normalizeSubscriptionStatus(user.subscriptionStatus)
   const creditsRemaining = Math.max(0, user.credits ?? 0)
   const isUnlimited = false
   const isPaid =
-    !isFreePlanTier(normalizedPlan) &&
-    (status === "ACTIVE" || status === "TRIALING")
+    isStaffBillingExemptRole(user.role) ||
+    (!isFreePlanTier(normalizedPlan) &&
+      (status === "ACTIVE" || status === "TRIALING"))
   const isTrialActive =
     status === "TRIALING" && (!!user.trialExpiresAt ? user.trialExpiresAt > now : true)
   const baseReason = baseBlockReason(user, now)
@@ -234,7 +241,7 @@ export function buildEntitlementSnapshot(
     storyCost: options?.storyCost ?? 1,
   })
 
-  const wf = getWorkflowLimits(user.plan)
+  const wf = getWorkflowLimits(planForEntitlements)
 
   const prompt: FeatureAccessDecision =
     baseReason
@@ -247,7 +254,7 @@ export function buildEntitlementSnapshot(
           )
 
   return {
-    plan: user.plan,
+    plan: planForEntitlements,
     normalizedPlan: normalizedPlan as Plan,
     subscriptionStatus: status,
     isTrialActive,

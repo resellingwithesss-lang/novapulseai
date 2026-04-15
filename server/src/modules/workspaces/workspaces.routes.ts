@@ -1,6 +1,7 @@
 import { Router, Response } from "express"
 import { z } from "zod"
 import { prisma } from "../../lib/prisma"
+import { staffFloorPlan } from "../../lib/staff-plan"
 import { requireAuth, AuthRequest } from "../auth/auth.middleware"
 import {
   getWorkflowLimits,
@@ -180,9 +181,9 @@ router.get("/", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { plan: true },
+      select: { plan: true, role: true },
     })
-    const plan = user?.plan ?? "FREE"
+    const plan = user ? staffFloorPlan(user.plan, user.role) : "FREE"
     const limits = getWorkflowLimits(plan)
     const items = await prisma.workspace.findMany({
       where: { userId },
@@ -246,9 +247,9 @@ router.post("/", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { plan: true },
+      select: { plan: true, role: true },
     })
-    const plan = user?.plan ?? "FREE"
+    const plan = user ? staffFloorPlan(user.plan, user.role) : "FREE"
     const count = await prisma.workspace.count({ where: { userId } })
     if (isAtWorkflowLimit(plan, "workspaces", count)) {
       const cap = getWorkflowLimits(plan).workspaces

@@ -8,6 +8,7 @@ import {
   useEntitlementSnapshot,
 } from "@/hooks/useEntitlementSnapshot"
 import {
+  displayPlanForUser,
   getWorkflowLimitsForPlan,
   planDisplayName,
   subscriptionStatusDisplay,
@@ -25,10 +26,11 @@ export default function SettingsAccountStrip() {
     return null
   }
 
-  const plan = planDisplayName(user.plan)
+  const uiPlan = displayPlanForUser(user.plan, user.role)
+  const plan = planDisplayName(uiPlan)
   const sub = subscriptionStatusDisplay(user.subscriptionStatus)
   const credits = user.credits ?? 0
-  const limits = getWorkflowLimitsForPlan(user.plan)
+  const limits = getWorkflowLimitsForPlan(uiPlan)
   const accessNote =
     entitlement &&
     (entitlement.blockedReason || entitlement.upgradeRequired)

@@ -11,7 +11,7 @@ import {
   ReactNode,
 } from "react"
 import { api, ApiError } from "@/lib/api"
-import { normalizePlan } from "@/lib/plans"
+import { displayPlanForUser } from "@/lib/plans"
 import { getTrialUrgency } from "@/lib/growth"
 
 /* =====================================================
@@ -236,6 +236,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [safeSet])
 
   /* =====================================================
+     REFRESH SESSION WHEN TAB RETURNS (plan / role changes)
+  ===================================================== */
+
+  useEffect(() => {
+    if (typeof document === "undefined") return
+    let t: ReturnType<typeof setTimeout> | undefined
+    const onVis = () => {
+      if (document.visibilityState !== "visible") return
+      clearTimeout(t)
+      t = setTimeout(() => {
+        void refreshUserRef.current({ silent: true })
+      }, 400)
+    }
+    document.addEventListener("visibilitychange", onVis)
+    return () => {
+      document.removeEventListener("visibilitychange", onVis)
+      clearTimeout(t)
+    }
+  }, [])
+
+  /* =====================================================
      AUTH ACTIONS
   ===================================================== */
 
@@ -340,11 +361,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user?.role === "SUPER_ADMIN",
       isTrial:
         user?.subscriptionStatus === "TRIALING" &&
-        normalizePlan(user?.plan) === "PRO",
-      isFree: normalizePlan(user?.plan) === "FREE",
-      isStarter: normalizePlan(user?.plan) === "STARTER",
-      isPro: normalizePlan(user?.plan) === "PRO",
-      isElite: normalizePlan(user?.plan) === "ELITE",
+        displayPlanForUser(user?.plan, user?.role) === "PRO",
+      isFree: displayPlanForUser(user?.plan, user?.role) === "FREE",
+      isStarter: displayPlanForUser(user?.plan, user?.role) === "STARTER",
+      isPro: displayPlanForUser(user?.plan, user?.role) === "PRO",
+      isElite: displayPlanForUser(user?.plan, user?.role) === "ELITE",
       trialDaysLeft,
       trialHoursLeft,
       trialUrgency,
