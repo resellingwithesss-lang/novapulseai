@@ -235,7 +235,7 @@ export default function StoryVideoMakerPage() {
             </p>
             <p className="mt-2 whitespace-pre-wrap text-white/70">{videoBrief}</p>
             <p className="mt-2 text-xs text-white/45">
-              Use this as guidance while you pick the page URL to render. It is not sent to the server yet.
+              Use this as operator guidance while choosing page URL and render settings.
             </p>
           </div>
         )}

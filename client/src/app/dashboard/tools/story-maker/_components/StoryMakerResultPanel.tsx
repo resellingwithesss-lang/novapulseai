@@ -28,27 +28,33 @@ export default function StoryMakerResultPanel({
   result,
 }: StoryMakerResultPanelProps) {
   const [copied, setCopied] = useState(false)
+  const [copyError, setCopyError] = useState<string | null>(null)
   const [showBreakdown, setShowBreakdown] = useState(false)
 
   const copyAll = async () => {
-    await navigator.clipboard.writeText(
-      [
-        result.hook,
-        "",
-        result.script,
-        "",
-        result.caption,
-        "",
-        result.hashtags.join(" "),
-        result.pinComment ? `\nPin comment:\n${result.pinComment}` : "",
-        result.productionNotes ? `\nProduction notes:\n${result.productionNotes}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n")
-    )
+    try {
+      await navigator.clipboard.writeText(
+        [
+          result.hook,
+          "",
+          result.script,
+          "",
+          result.caption,
+          "",
+          result.hashtags.join(" "),
+          result.pinComment ? `\nPin comment:\n${result.pinComment}` : "",
+          result.productionNotes ? `\nProduction notes:\n${result.productionNotes}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n")
+      )
 
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+      setCopied(true)
+      setCopyError(null)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setCopyError("Clipboard access failed. Copy text directly from the sections below.")
+    }
   }
 
   return (
@@ -91,6 +97,11 @@ export default function StoryMakerResultPanel({
       <div className="mb-3 rounded-xl border border-purple-500/25 bg-purple-500/10 px-3 py-2 text-xs text-purple-100">
         Upgrade path: scale this story into multiple production-ready variants with Pro/Elite workflows.
       </div>
+      {copyError ? (
+        <div className="mb-3 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-200/95">
+          {copyError}
+        </div>
+      ) : null}
       <div className="space-y-5">
         <Section title="Hook" content={result.hook} />
         <Section title="Script" content={result.script} />

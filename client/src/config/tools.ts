@@ -29,8 +29,8 @@ export const tools: ToolDefinition[] = [
   {
     id: "prompt",
     title: "Prompt Intelligence",
-    description: "Build reusable high-performance prompts tailored to your content goals.",
-    outcome: "Prompt templates you can reuse across tools",
+    description: "Build reusable prompt templates locally for your content workflow.",
+    outcome: "Structured prompt template ready to use in downstream tools",
     path: "/dashboard/tools/prompt",
     tier: "starter",
     category: "content",
