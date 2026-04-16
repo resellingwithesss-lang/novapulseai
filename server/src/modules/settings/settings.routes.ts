@@ -4,6 +4,7 @@ import { prisma } from "../../lib/prisma"
 import { ok, fail } from "../../lib/http"
 import { staffFloorPlan } from "../../lib/staff-plan"
 import { requireAuth, AuthRequest } from "../auth/auth.middleware"
+import { requireCsrfForCookieAuth } from "../../middlewares/csrf-protect"
 
 const router = Router()
 
@@ -94,7 +95,11 @@ router.get("/", requireAuth, async (req: AuthRequest, res: Response) => {
   })
 })
 
-router.patch("/profile", requireAuth, async (req: AuthRequest, res: Response) => {
+router.patch(
+  "/profile",
+  requireAuth,
+  requireCsrfForCookieAuth,
+  async (req: AuthRequest, res: Response) => {
   const parsed = profilePatchSchema.safeParse(req.body)
   if (!parsed.success) {
     return fail(res, 400, "Invalid body", { issues: parsed.error.flatten() })
@@ -112,9 +117,14 @@ router.patch("/profile", requireAuth, async (req: AuthRequest, res: Response) =>
   })
 
   return ok(res, { displayName: updated.displayName })
-})
+  }
+)
 
-router.patch("/preferences", requireAuth, async (req: AuthRequest, res: Response) => {
+router.patch(
+  "/preferences",
+  requireAuth,
+  requireCsrfForCookieAuth,
+  async (req: AuthRequest, res: Response) => {
   const parsed = preferencesPatchSchema.safeParse(req.body)
   if (!parsed.success) {
     return fail(res, 400, "Invalid preferences", { issues: parsed.error.flatten() })
@@ -164,7 +174,8 @@ router.patch("/preferences", requireAuth, async (req: AuthRequest, res: Response
   })
 
   return ok(res, { preferences: merged })
-})
+  }
+)
 
 router.get("/credits-ledger", requireAuth, async (req: AuthRequest, res: Response) => {
   const take = Math.min(100, Math.max(1, Number(req.query.limit) || 40))

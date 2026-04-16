@@ -43,6 +43,7 @@ export default function LoginPage() {
   const isGoogleAuthEnabled = Boolean(
     process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.trim()
   )
+  const previewAccountEmail = process.env.NEXT_PUBLIC_PREVIEW_ACCOUNT_EMAIL?.trim() || ""
 
   const registerHref = useMemo(() => {
     const next = new URLSearchParams()
@@ -264,6 +265,12 @@ export default function LoginPage() {
             Secure session cookies. Manage billing and plans from your
             dashboard.
           </p>
+          {previewAccountEmail && (
+            <p className="mt-2 text-center text-xs text-white/45">
+              Preview account email:{" "}
+              <span className="font-medium text-white/75">{previewAccountEmail}</span>
+            </p>
+          )}
         </div>
       </div>
     </main>

@@ -53,7 +53,7 @@ export default function AdminHotkeyPanel() {
       return
     }
 
-    if (user.role !== "ADMIN") {
+    if (user.role !== "ADMIN" && user.role !== "SUPER_ADMIN") {
       alert("Admin access required.")
       return
     }

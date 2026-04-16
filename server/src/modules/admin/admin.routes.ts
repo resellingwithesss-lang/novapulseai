@@ -20,6 +20,16 @@ import { expandAdminBroadcastAsync } from "../../lib/email-broadcast"
 import { normalizePlanTier, PLAN_MONTHLY_GBP } from "../plans/plan.constants"
 
 const router = Router()
+const adminSafeUserSelect = {
+  id: true,
+  email: true,
+  role: true,
+  plan: true,
+  subscriptionStatus: true,
+  credits: true,
+  banned: true,
+  createdAt: true,
+} as const
 
 const emailBroadcastLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
@@ -420,8 +430,41 @@ router.get("/overview", async (_req, res) => {
 router.get("/ad-jobs", async (req, res) => {
   try {
     const limit = Math.min(Math.max(Number(req.query.limit) || 40, 1), 100)
+    const status =
+      typeof req.query.status === "string" &&
+      req.query.status.trim() &&
+      req.query.status !== "all"
+        ? req.query.status.trim()
+        : null
+    const kind =
+      req.query.kind === "original" || req.query.kind === "rerender"
+        ? req.query.kind
+        : null
+    const hasOutput =
+      req.query.hasOutput === "true"
+        ? true
+        : req.query.hasOutput === "false"
+          ? false
+          : null
+    const query = typeof req.query.query === "string" ? req.query.query.trim() : ""
 
     const rows = await prisma.adJob.findMany({
+      where: {
+        ...(status ? { status } : {}),
+        ...(hasOutput === true
+          ? { outputUrl: { not: null } }
+          : hasOutput === false
+            ? { outputUrl: null }
+            : {}),
+        ...(query
+          ? {
+              OR: [
+                { jobId: { contains: query } },
+                { userId: { contains: query } },
+              ],
+            }
+          : {}),
+      },
       orderBy: { updatedAt: "desc" },
       take: limit,
       select: {
@@ -489,8 +532,12 @@ router.get("/ad-jobs", async (req, res) => {
         }
       })
     )
+    const filteredJobs =
+      kind == null
+        ? jobs
+        : jobs.filter((job) => (kind === "original" ? job.kind === "original" : job.kind === "rerender"))
 
-    return ok(res, { limit, jobs })
+    return ok(res, { limit, jobs: filteredJobs })
   } catch (err) {
     console.error("ADMIN AD JOBS LIST ERROR:", err)
     return fail(res, 500, "Failed to fetch ad jobs")
@@ -501,29 +548,40 @@ router.get("/users", async (req, res) => {
   try {
     const page = Number(req.query.page) || 1
     const limit = Math.min(Number(req.query.limit) || 25, 100)
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : ""
+    const plan = Object.values(Plan).includes(req.query.plan as Plan)
+      ? (req.query.plan as Plan)
+      : undefined
+    const subscriptionStatus = Object.values(SubscriptionStatus).includes(
+      req.query.subscriptionStatus as SubscriptionStatus
+    )
+      ? (req.query.subscriptionStatus as SubscriptionStatus)
+      : undefined
 
+    const where = {
+      deletedAt: null,
+      ...(search
+        ? {
+            email: {
+              contains: search,
+              mode: "insensitive" as const,
+            },
+          }
+        : {}),
+      ...(plan ? { plan } : {}),
+      ...(subscriptionStatus ? { subscriptionStatus } : {}),
+    }
     const users = await prisma.user.findMany({
-      where: { deletedAt: null },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        plan: true,
-        subscriptionStatus: true,
-        credits: true,
-        banned: true,
-        createdAt: true,
-      },
+      where,
+      select: adminSafeUserSelect,
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * limit,
       take: limit,
     })
 
-    const total = await prisma.user.count({
-      where: { deletedAt: null },
-    })
+    const total = await prisma.user.count({ where })
 
-    return ok(res, { page, total, users })
+    return ok(res, { page, total, users, limit })
   } catch (err) {
     console.error("ADMIN USERS ERROR:", err)
     return fail(res, 500, "Failed to fetch users")
@@ -687,6 +745,7 @@ router.patch("/users/:id/plan", async (req: AuthRequest, res: Response) => {
       data: {
         plan,
       },
+      select: adminSafeUserSelect,
     })
 
     return ok(res, {
@@ -718,6 +777,7 @@ router.patch("/users/:id/credits", async (req: AuthRequest, res) => {
         data: {
           credits: { increment: amount },
         },
+        select: adminSafeUserSelect,
       })
 
       await tx.creditTransaction.create({
@@ -761,6 +821,7 @@ router.patch("/users/:id/ban", async (req, res) => {
         banned,
         tokenVersion: { increment: 1 },
       },
+      select: adminSafeUserSelect,
     })
 
     return ok(res, {

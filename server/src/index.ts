@@ -17,6 +17,7 @@ import { assertApiDatabaseReady } from "./lib/prisma-schema-health";
 import { validateServerEnvironment } from "./lib/validate-server-env";
 import { log, serializeErr } from "./lib/logger";
 import { startEmailQueueWorker } from "./lib/email-outbound";
+import { recoverPendingClipJobs } from "./modules/clip/clip.job.processor";
 
 /* =====================================================
    ENV VALIDATION (all environments + production strict)
@@ -140,6 +141,9 @@ async function start(): Promise<void> {
         const duration = Date.now() - startTime;
 
         startEmailQueueWorker();
+        void recoverPendingClipJobs().catch((err) => {
+          log.error("clip_job_recovery_failed", serializeErr(err));
+        });
 
         console.log(`
 🚀 NovaPulseAI API

@@ -4,7 +4,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useState } from "react"
 import { ApiError } from "@/lib/api"
-import { clearAuth } from "@/lib/auth"
+import { useAuth } from "@/context/AuthContext"
 import { fetchSettings, changePassword, type SettingsProfile } from "@/lib/settingsApi"
 import {
   SettingsCard,
@@ -13,6 +13,7 @@ import {
 
 export default function SecuritySettingsPage() {
   const router = useRouter()
+  const { logout } = useAuth()
   const [profile, setProfile] = useState<SettingsProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [currentPassword, setCurrentPassword] = useState("")
@@ -60,7 +61,7 @@ export default function SecuritySettingsPage() {
     setPwBusy(true)
     try {
       await changePassword({ currentPassword, newPassword })
-      clearAuth()
+      await logout()
       router.replace("/login?reason=password-reset")
     } catch (err) {
       setPwError((err as ApiError)?.message ?? "Could not update password.")

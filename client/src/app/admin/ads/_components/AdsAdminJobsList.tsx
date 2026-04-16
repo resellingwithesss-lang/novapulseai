@@ -37,6 +37,10 @@ export default function AdsAdminJobsList({
   onOpenJob,
 }: AdsAdminJobsListProps) {
   const [rows, setRows] = useState<AdminAdJobListRow[]>([])
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [kindFilter, setKindFilter] = useState("all")
+  const [outputFilter, setOutputFilter] = useState("all")
+  const [query, setQuery] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -47,7 +51,11 @@ export default function AdsAdminJobsList({
       const res = await api.get<{
         success?: boolean
         jobs?: AdminAdJobListRow[]
-      }>("/admin/ad-jobs?limit=50")
+      }>(
+        `/admin/ad-jobs?limit=50&status=${encodeURIComponent(statusFilter)}&kind=${encodeURIComponent(
+          kindFilter
+        )}&hasOutput=${encodeURIComponent(outputFilter)}&query=${encodeURIComponent(query.trim())}`
+      )
       setRows(Array.isArray(res.jobs) ? res.jobs : [])
     } catch (e: unknown) {
       setRows([])
@@ -55,7 +63,7 @@ export default function AdsAdminJobsList({
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [kindFilter, outputFilter, query, statusFilter])
 
   useEffect(() => {
     void load()
@@ -77,6 +85,45 @@ export default function AdsAdminJobsList({
         >
           Refresh
         </button>
+      </div>
+      <div className="mt-4 grid gap-2 md:grid-cols-4">
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search jobId / userId"
+          className="rounded-lg border border-white/15 bg-black/25 px-3 py-2 text-xs text-white"
+        />
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="rounded-lg border border-white/15 bg-black/25 px-3 py-2 text-xs text-white"
+        >
+          <option value="all">All statuses</option>
+          <option value="queued">Queued</option>
+          <option value="processing">Processing</option>
+          <option value="completed">Completed</option>
+          <option value="failed">Failed</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+        <select
+          value={kindFilter}
+          onChange={(e) => setKindFilter(e.target.value)}
+          className="rounded-lg border border-white/15 bg-black/25 px-3 py-2 text-xs text-white"
+        >
+          <option value="all">All lineage</option>
+          <option value="original">Original</option>
+          <option value="rerender">Rerender</option>
+        </select>
+        <select
+          value={outputFilter}
+          onChange={(e) => setOutputFilter(e.target.value)}
+          className="rounded-lg border border-white/15 bg-black/25 px-3 py-2 text-xs text-white"
+        >
+          <option value="all">Output: all</option>
+          <option value="true">Output: ready</option>
+          <option value="false">Output: missing</option>
+        </select>
       </div>
 
       {error && (

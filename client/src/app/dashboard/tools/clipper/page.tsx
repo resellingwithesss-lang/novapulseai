@@ -171,6 +171,12 @@ export default function ClipperPage() {
   const pollAbortRef = useRef(false)
   const [validationHint, setValidationHint] = useState("")
   const [requestContextId, setRequestContextId] = useState("")
+  const [workspaceId, setWorkspaceId] = useState("")
+  const [sourceContentPackId, setSourceContentPackId] = useState("")
+  const [sourceGenerationId, setSourceGenerationId] = useState("")
+  const [sourceType, setSourceType] = useState<
+    "" | "CONTENT_PACK" | "GENERATION" | "MANUAL"
+  >("")
   const [qualitySignals, setQualitySignals] = useState<string[]>([])
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [lastFailureRequestId, setLastFailureRequestId] = useState<string | null>(null)
@@ -352,6 +358,10 @@ export default function ClipperPage() {
     const clipsParam = searchParams.get("clips")
     const subtitleParam = searchParams.get("subtitleStyle")
     const context = searchParams.get("contextId")
+    const workspace = searchParams.get("workspaceId")
+    const sourcePack = searchParams.get("sourceContentPackId")
+    const sourceGeneration = searchParams.get("sourceGenerationId")
+    const sourceTypeParam = searchParams.get("sourceType")
 
     if (source && !video) {
       setSourceMode("youtube")
@@ -383,6 +393,16 @@ export default function ClipperPage() {
     }
     if (context) {
       setRequestContextId(context)
+    }
+    if (workspace) setWorkspaceId(workspace)
+    if (sourcePack) setSourceContentPackId(sourcePack)
+    if (sourceGeneration) setSourceGenerationId(sourceGeneration)
+    if (
+      sourceTypeParam === "CONTENT_PACK" ||
+      sourceTypeParam === "GENERATION" ||
+      sourceTypeParam === "MANUAL"
+    ) {
+      setSourceType(sourceTypeParam)
     }
     const clipAngle = searchParams.get("clipAngle")
     if (clipAngle?.trim()) {
@@ -525,9 +545,15 @@ export default function ClipperPage() {
         }
         formData.append("captionCustomColor", safeHex)
       }
+      if (workspaceId) formData.append("workspaceId", workspaceId)
+      if (sourceContentPackId) formData.append("sourceContentPackId", sourceContentPackId)
+      if (sourceGenerationId) formData.append("sourceGenerationId", sourceGenerationId)
+      if (sourceType) formData.append("sourceType", sourceType)
 
       const enqueued = await api.post<CreateClipJobResponse>("/clip/create", formData, {
         timeout: 120_000,
+        retry: 0,
+        idempotencyKey: `clip-create:${crypto.randomUUID()}`,
       })
 
       if (!enqueued.success || !enqueued.jobId) {

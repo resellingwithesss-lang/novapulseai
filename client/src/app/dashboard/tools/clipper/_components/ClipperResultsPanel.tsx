@@ -217,8 +217,8 @@ export default function ClipperResultsPanel({
       )}
 
       <p className="mb-4 text-xs text-white/45">
-        Hand off timestamps and titles into Story Maker or Prompt Intelligence. Story Video Maker is available for
-        higher-tier video automation when you are ready to scale renders.
+        Hand off timestamps and titles into Story Maker or Prompt Intelligence. Story Video uses website input, so this
+        handoff passes clip text as a creative brief only.
       </p>
       {downloadError && (
         <div
@@ -264,8 +264,12 @@ export default function ClipperResultsPanel({
             contextId: contextId || undefined,
           })
           const storyVideoHandoff = buildToolHandoffUrl("/dashboard/tools/story-video-maker", {
-            topic: clip.title || `Clip ${clip.index + 1} · ${clip.timestampRangeLabel || ""}`,
-            contextId: contextId || undefined,
+            videoBrief:
+              clip.summary ||
+              clip.title ||
+              `Clip ${clip.index + 1} · ${clip.timestampRangeLabel || ""}`,
+            sourceGenerationId: contextId || undefined,
+            sourceType: contextId ? "GENERATION" : undefined,
           })
 
           return (

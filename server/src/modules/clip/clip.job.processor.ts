@@ -2,13 +2,19 @@ import { unlink } from "fs/promises"
 import path from "path"
 import { YoutubeTranscript } from "youtube-transcript"
 import { v4 as uuidv4 } from "uuid"
+import pLimit from "p-limit"
 import { downloadYoutubeVideo } from "../../utils/youtube.downloader"
 import {
   ClipInputError,
   generateClips,
   summarizeClipQualitySignals,
 } from "./clip.service"
-import { loadJob, pruneStaleJobs, saveJob } from "./clip.job.store"
+import {
+  listRecoverableJobIds,
+  loadJob,
+  pruneStaleJobs,
+  saveJob,
+} from "./clip.job.store"
 import type {
   ClipJobRecord,
   ClipJobStage,
@@ -19,6 +25,11 @@ import { logToolEvent } from "../../lib/tool-logger"
 import { log, serializeErr } from "../../lib/logger"
 
 const scheduled = new Set<string>()
+const clipWorkerLimit = Math.max(
+  1,
+  Number(process.env.CLIP_JOB_CONCURRENCY ?? "2") || 2
+)
+const runLimited = pLimit(clipWorkerLimit)
 
 function mergePipelineProgress(evt: ClipPipelineProgressEvent): {
   clipJobStage: ClipJobStage
@@ -75,7 +86,7 @@ export function scheduleClipJob(jobId: string): void {
   if (scheduled.has(jobId)) return
   scheduled.add(jobId)
   setImmediate(() => {
-    void runClipJob(jobId)
+    void runLimited(() => runClipJob(jobId))
       .catch((err) => {
         log.error("clip_job_unhandled_rejection", {
           jobId,
@@ -85,6 +96,18 @@ export function scheduleClipJob(jobId: string): void {
       .finally(() => {
         scheduled.delete(jobId)
       })
+  })
+}
+
+export async function recoverPendingClipJobs(): Promise<void> {
+  const recoverableJobIds = await listRecoverableJobIds()
+  if (recoverableJobIds.length === 0) return
+  for (const jobId of recoverableJobIds) {
+    scheduleClipJob(jobId)
+  }
+  log.info("clip_job_recovery_scheduled", {
+    count: recoverableJobIds.length,
+    concurrency: clipWorkerLimit,
   })
 }
 

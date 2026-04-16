@@ -445,11 +445,13 @@ export function useAdsJobPolling({
 
   const cancel = useCallback(async () => {
     const currentJobId = state.jobId
+    let cancelConfirmed = false
     if (currentJobId && cancelPath) {
       try {
         await api.post(cancelPath(currentJobId), {}, { silent: true, timeout: 8000, retry: 0 })
+        cancelConfirmed = true
       } catch {
-        // If cancellation API fails, we still stop polling locally.
+        cancelConfirmed = false
       }
     }
     cancelledRef.current = true
@@ -459,9 +461,17 @@ export function useAdsJobPolling({
       loading: false,
       stageText: DEFAULT_STAGE,
       error: prev.jobId
-        ? `${cancelPath ? "Generation cancelled" : "Tracking paused"} for Job ID: ${prev.jobId}`
+        ? `${
+            cancelPath
+              ? cancelConfirmed
+                ? "Generation cancellation confirmed"
+                : "Tracking stopped locally; server cancellation not confirmed"
+              : "Tracking paused"
+          } for Job ID: ${prev.jobId}`
         : cancelPath
-          ? "Generation cancelled."
+          ? cancelConfirmed
+            ? "Generation cancellation confirmed."
+            : "Tracking stopped locally; server cancellation not confirmed."
           : "Tracking paused.",
     }))
     clearPersisted()

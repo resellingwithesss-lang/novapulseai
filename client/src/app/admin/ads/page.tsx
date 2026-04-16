@@ -163,7 +163,11 @@ export default function AdsPage() {
           renderTopVariants,
           ...(fastPreviewGenerate ? { previewMode: "fast" as const } : {}),
         },
-        { timeout: LONG_REQUEST_TIMEOUT_MS }
+        {
+          timeout: LONG_REQUEST_TIMEOUT_MS,
+          retry: 0,
+          idempotencyKey: `admin-ads-generate:${crypto.randomUUID()}`,
+        }
       )
       const operation = normalizeToolOperation(res)
 

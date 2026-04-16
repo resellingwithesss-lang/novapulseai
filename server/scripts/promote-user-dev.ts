@@ -16,12 +16,20 @@ const BONUS_CREDITS = 250_000
 
 async function main() {
   const raw = process.argv[2]?.trim()
+  const allowProd = process.argv.includes("--allow-prod")
   if (!raw) {
-    console.error("Usage: node -r dotenv/config -r ts-node/register scripts/promote-user-dev.ts <email>")
+    console.error(
+      "Usage: node -r dotenv/config -r ts-node/register scripts/promote-user-dev.ts <email> [--allow-prod]"
+    )
     process.exit(1)
   }
   if (!process.env.DATABASE_URL?.trim()) {
     console.error("DATABASE_URL is not set.")
+    process.exit(1)
+  }
+  const env = (process.env.NODE_ENV || "development").toLowerCase()
+  if (env === "production" && !allowProd) {
+    console.error("Refusing to run in production without --allow-prod")
     process.exit(1)
   }
 

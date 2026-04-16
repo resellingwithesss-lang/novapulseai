@@ -214,7 +214,7 @@ export default function VideoScriptPage() {
         title: output[0]?.hook ? `Video scripts: ${output[0].hook.slice(0, 48)}` : "Video script output",
         summary: `Generated ${output.length} script variation(s).`,
         continuePath: "/dashboard/tools/story-video-maker",
-        nextAction: "Turn this script into a full video.",
+        nextAction: "Use this script as a Story Video creative brief.",
       })
       recordEmailReadyEvent("OUTPUT_CREATED", `output:video:${Date.now()}`, {
         tool: "video",

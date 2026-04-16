@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, unlink, writeFile } from "fs/promises"
+import { mkdir, readFile, readdir, rename, unlink, writeFile } from "fs/promises"
 import path from "path"
 import type { ClipJobRecord } from "./clip.job.types"
 
@@ -20,8 +20,7 @@ export async function saveJob(record: ClipJobRecord): Promise<void> {
   const tmp = `${target}.${process.pid}.tmp`
   const payload = JSON.stringify(record, null, 0)
   await writeFile(tmp, payload, "utf8")
-  await writeFile(target, payload, "utf8")
-  await unlink(tmp).catch(() => {})
+  await rename(tmp, target)
 }
 
 export async function loadJob(jobId: string): Promise<ClipJobRecord | null> {
@@ -57,6 +56,38 @@ export async function pruneStaleJobs(): Promise<void> {
     }
   } catch {
     /* dir missing */
+  }
+}
+
+export async function listRecoverableJobIds(): Promise<string[]> {
+  try {
+    const names = await readdir(JOBS_DIR)
+    const ids: string[] = []
+    for (const name of names) {
+      if (!name.endsWith(".json")) continue
+      const fp = path.join(JOBS_DIR, name)
+      try {
+        const raw = await readFile(fp, "utf8")
+        const rec = JSON.parse(raw) as ClipJobRecord
+        if (
+          rec?.jobId &&
+          (rec.status === "queued" ||
+            rec.status === "ingesting" ||
+            rec.status === "analyzing" ||
+            rec.status === "selecting_moments" ||
+            rec.status === "trimming" ||
+            rec.status === "captioning" ||
+            rec.status === "finalizing")
+        ) {
+          ids.push(rec.jobId)
+        }
+      } catch {
+        // Ignore malformed records here; prune handles age cleanup separately.
+      }
+    }
+    return ids
+  } catch {
+    return []
   }
 }
 
