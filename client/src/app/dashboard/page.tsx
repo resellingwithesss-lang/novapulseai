@@ -107,7 +107,7 @@ export default function DashboardPage() {
 
   return (
     <DashboardShell>
-      <div className="space-y-14">
+      <div className="space-y-12">
         {isPastDue && (
           <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm leading-relaxed text-red-300/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
             ⚠ Payment past due — update billing to avoid service interruption.
@@ -125,7 +125,7 @@ export default function DashboardPage() {
           workflow={wfLoading ? null : wfData}
         />
 
-        <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-5">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <ToolCard title="Video Script" href="/dashboard/tools/video" />
           <ToolCard title="Clip Generator" href="/dashboard/tools/clipper" />
           <ToolCard title="Prompt Generator" href="/dashboard/tools/prompt" />
@@ -138,21 +138,21 @@ export default function DashboardPage() {
         <section className="np-card p-6 md:p-8">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold tracking-[-0.015em] text-white/[0.97]">Studio</h2>
-              <p className="mt-2 text-sm leading-relaxed text-white/50">
+              <h2 className="np-title-section">Studio</h2>
+              <p className="np-text-body mt-2 text-sm">
                 Workspaces, brand voices, and multi-output content packs — your workflow layer on top of tools.
               </p>
             </div>
             <Link
               href="/dashboard/content-packs"
-              className="rounded-full border border-purple-400/28 bg-gradient-to-b from-purple-500/14 to-purple-900/8 px-4 py-2 text-sm font-medium tracking-[-0.01em] text-purple-100/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] outline-none ring-1 ring-purple-500/12 transition-[border-color,background-color] hover:border-purple-400/40 focus-visible:ring-2 focus-visible:ring-purple-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0f19]"
+              className="np-btn np-btn-secondary rounded-full px-4 py-2 font-medium text-purple-100/95 hover:border-purple-300/45 hover:bg-purple-500/[0.18] hover:shadow-[0_12px_24px_-16px_rgba(139,92,246,0.75)] outline-none focus-visible:ring-2 focus-visible:ring-purple-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0f19]"
             >
               New content pack
             </Link>
           </div>
           <div className="mt-6 grid gap-6 md:grid-cols-2">
             <div>
-              <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-white/40">Workspaces</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-white/48">Workspaces</h3>
               <ul className="mt-3 space-y-2 text-sm text-white/78">
                 {studioWs.length === 0 && (
                   <li className="text-white/45">None yet — create one to anchor your tools.</li>
@@ -176,7 +176,7 @@ export default function DashboardPage() {
               </Link>
             </div>
             <div>
-              <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-white/40">Brand voices</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-white/48">Brand voices</h3>
               <ul className="mt-3 space-y-2 text-sm text-white/78">
                 {studioBv.length === 0 && (
                   <li className="text-white/45">None yet — save tone & CTA defaults.</li>
@@ -205,8 +205,8 @@ export default function DashboardPage() {
         <section className="np-card p-6 md:p-8">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold tracking-[-0.015em] text-white/[0.97]">Recent account activity</h2>
-              <p className="mt-2 text-sm leading-relaxed text-white/50">
+              <h2 className="np-title-section">Recent account activity</h2>
+              <p className="np-text-body mt-2 text-sm">
                 Last generations on your account — open the library for jobs, search, and device shortcuts.
               </p>
             </div>
@@ -225,23 +225,23 @@ export default function DashboardPage() {
               Loading activity…
             </p>
           )}
-          <ul className="mt-5 space-y-2">
+          <ul className="mt-5 space-y-2.5">
             {!activityLoading && recentGens.length === 0 && (
-              <li className="rounded-2xl border border-white/[0.078] bg-black/25 px-4 py-3.5 text-sm leading-relaxed text-white/55">
+              <li className="np-card-soft px-4 py-3.5 text-sm leading-relaxed text-white/58">
                 No server generations yet — start with Video Script or a workflow template above.
               </li>
             )}
             {recentGens.map((g) => (
               <li
                 key={g.id}
-                className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-white/[0.078] bg-black/25 px-4 py-3.5"
+                className="np-card-soft flex flex-wrap items-start justify-between gap-3 px-4 py-3.5"
               >
                 <div>
                   <p className="text-xs font-semibold uppercase text-violet-300/90">
                     {generationTypeLabel(g.type)}
                   </p>
                   <p className="mt-1 text-sm text-white/82">{g.inputPreview}</p>
-                  <p className="mt-1 text-xs text-white/42">
+                  <p className="mt-1 text-xs text-white/48">
                     {new Date(g.createdAt).toLocaleString()} · {g.creditsUsed} cr
                   </p>
                 </div>
@@ -257,24 +257,24 @@ export default function DashboardPage() {
         </section>
 
         <section className="np-card p-6 md:p-8">
-          <h2 className="text-lg font-semibold tracking-[-0.015em] text-white/[0.97]">Continue on this device</h2>
-          <p className="mt-2 text-sm leading-relaxed text-white/50">
+          <h2 className="np-title-section">Continue on this device</h2>
+          <p className="np-text-body mt-2 text-sm">
             Pinned and recent outputs from your browser — fast return to unfinished work.
           </p>
           <div className="mt-5 space-y-3">
             {recentOutputs.length === 0 && (
-              <div className="rounded-2xl border border-white/[0.078] bg-black/25 px-4 py-3.5 text-sm leading-relaxed text-white/55">
+              <div className="np-card-soft px-4 py-3.5 text-sm leading-relaxed text-white/58">
                 No local shortcuts yet. Generate from any tool to build your continuity list.
               </div>
             )}
             {recentOutputs.map((item) => (
               <div
                 key={item.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/[0.078] bg-black/25 px-4 py-3.5"
+                className="np-card-soft flex flex-wrap items-center justify-between gap-3 px-4 py-3.5"
               >
                 <div>
                   <p className="text-sm font-medium tracking-[-0.01em] text-white/[0.97]">{item.title}</p>
-                  <p className="text-xs text-white/50">
+                  <p className="text-xs text-white/56">
                     {item.summary || item.nextAction || "Continue workflow"}
                     {item.pinned ? " · pinned" : ""}
                   </p>
@@ -293,25 +293,25 @@ export default function DashboardPage() {
           <div className="mt-6 flex flex-wrap gap-2.5 text-xs">
             <Link
               href="/dashboard/library"
-              className="rounded-full border border-white/[0.14] bg-white/[0.035] px-3 py-1.5 font-medium text-white/72 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] outline-none transition-[background-color,border-color,color] hover:border-white/22 hover:bg-white/[0.055] hover:text-white/86 focus-visible:ring-2 focus-visible:ring-purple-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0f19]"
+              className="np-btn-chip outline-none focus-visible:ring-2 focus-visible:ring-purple-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0f19]"
             >
               Full library
             </Link>
             <Link
               href="/dashboard/tools/story-video-maker"
-              className="rounded-full border border-white/[0.14] bg-white/[0.035] px-3 py-1.5 font-medium text-white/72 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] outline-none transition-[background-color,border-color,color] hover:border-white/22 hover:bg-white/[0.055] hover:text-white/86 focus-visible:ring-2 focus-visible:ring-purple-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0f19]"
+              className="np-btn-chip outline-none focus-visible:ring-2 focus-visible:ring-purple-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0f19]"
             >
               Finish your video
             </Link>
             <Link
               href="/dashboard/tools/story-maker"
-              className="rounded-full border border-white/[0.14] bg-white/[0.035] px-3 py-1.5 font-medium text-white/72 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] outline-none transition-[background-color,border-color,color] hover:border-white/22 hover:bg-white/[0.055] hover:text-white/86 focus-visible:ring-2 focus-visible:ring-purple-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0f19]"
+              className="np-btn-chip outline-none focus-visible:ring-2 focus-visible:ring-purple-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0f19]"
             >
               Expand your script
             </Link>
             <Link
               href="/dashboard/tools/video"
-              className="rounded-full border border-white/[0.14] bg-white/[0.035] px-3 py-1.5 font-medium text-white/72 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] outline-none transition-[background-color,border-color,color] hover:border-white/22 hover:bg-white/[0.055] hover:text-white/86 focus-visible:ring-2 focus-visible:ring-purple-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0f19]"
+              className="np-btn-chip outline-none focus-visible:ring-2 focus-visible:ring-purple-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0f19]"
             >
               Generate variations
             </Link>

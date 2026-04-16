@@ -134,9 +134,11 @@ export default function Navbar() {
   return (
     <header
       ref={mobileRef}
-      className={`sticky top-0 z-[200] backdrop-blur-xl backdrop-saturate-150 ${
+      className={`sticky top-0 z-[200] ${
+        isLanding ? "" : "backdrop-blur-xl backdrop-saturate-150"
+      } ${
         isLanding
-          ? "border-b border-transparent bg-[#050816]/48 supports-[backdrop-filter]:bg-[#050816]/34"
+          ? "border-b border-transparent bg-[#050816]/42 supports-[backdrop-filter]:bg-[#050816]/30"
           : "border-b border-white/[0.08] bg-[#050816]/70 shadow-[0_6px_24px_rgba(0,0,0,0.26),inset_0_1px_0_rgba(255,255,255,0.045)] supports-[backdrop-filter]:bg-[#050816]/55"
       }`}
     >
@@ -168,7 +170,7 @@ export default function Navbar() {
           className="hidden min-w-0 flex-1 items-center justify-center md:flex"
           aria-label="Main"
         >
-          <div className="flex max-w-full items-center gap-px overflow-visible rounded-full border border-white/[0.085] bg-white/[0.038] px-1 py-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.045)] lg:px-1.5 lg:py-1">
+          <div className="flex max-w-full items-center gap-px overflow-visible rounded-full border border-white/[0.065] bg-white/[0.03] px-1 py-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_14px_24px_-24px_rgba(0,0,0,0.8)] lg:px-1.5 lg:py-1">
             {user ? (
               <>
                 <NavLink href="/dashboard">Dashboard</NavLink>

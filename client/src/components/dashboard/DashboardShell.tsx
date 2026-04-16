@@ -64,23 +64,23 @@ export default function DashboardShell({
 
       {/* Ambient wash — same restrained language as marketing hero (no heavy blur orbs). */}
       <div className="pointer-events-none absolute inset-0 -z-10" aria-hidden>
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_100%_70%_at_50%_-15%,rgba(124,58,237,0.11),transparent_58%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_55%,rgba(236,72,153,0.07),transparent_55%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_110%_72%_at_50%_-18%,rgba(124,58,237,0.08),transparent_62%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_55%,rgba(236,72,153,0.05),transparent_60%)]" />
       </div>
 
-      <div className="mx-auto max-w-7xl space-y-10 px-4 pb-20 pt-10 sm:px-6 md:space-y-12 md:pt-14">
+      <div className="mx-auto max-w-7xl space-y-8 px-6 pb-16 pt-8 sm:px-8 md:space-y-12 md:pt-12 lg:px-12">
         {isProTrial ? <TrialBanner /> : <UsageBar />}
 
         {showCommandHero ? (
-          <div className="max-w-2xl space-y-4">
-            <h1 className="text-4xl font-semibold leading-[1.08] tracking-[-0.022em] text-white md:text-5xl">
+          <div className="max-w-2xl space-y-3">
+            <h1 className="text-4xl font-semibold leading-[1.06] tracking-[-0.024em] text-white md:text-5xl">
               <span className="text-white">Your Creator</span>
-              <span className="block bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
+              <span className="block bg-gradient-to-r from-purple-300 to-fuchsia-300 bg-clip-text text-transparent">
                 Command Center
               </span>
             </h1>
 
-            <p className="text-base font-normal leading-relaxed text-white/50 md:text-lg md:leading-[1.7] md:text-white/52">
+            <p className="text-base font-normal leading-relaxed text-white/58 md:text-lg md:leading-[1.65] md:text-white/60">
               One operating system for ideation, scripting, repurposing, and publishing workflows.
               Clear outputs, measurable progress, and less time lost to tool switching.
             </p>
