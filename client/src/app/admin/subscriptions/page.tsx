@@ -1,7 +1,9 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { api } from "@/lib/api"
+import { useRouter } from "next/navigation"
+import { api, ApiError } from "@/lib/api"
+import { useAuth } from "@/context/AuthContext"
 import { normalizePlan } from "@/lib/plans"
 
 type User = {
@@ -15,9 +17,13 @@ type User = {
 }
 
 export default function SubscriptionsPage() {
+  const router = useRouter()
+  const { isSuperAdmin, refreshUser } = useAuth()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [previewBusyId, setPreviewBusyId] = useState<string | null>(null)
+  const [previewErr, setPreviewErr] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [planFilter, setPlanFilter] = useState<
     "ALL" | "FREE" | "STARTER" | "PRO" | "ELITE"
@@ -50,6 +56,29 @@ export default function SubscriptionsPage() {
     )
     .slice(0, 100)
 
+  const startPreviewAsUser = useCallback(
+    async (userId: string) => {
+      setPreviewErr(null)
+      setPreviewBusyId(userId)
+      try {
+        await api.post("/admin/impersonation/start", { userId })
+        await refreshUser({ silent: false })
+        router.push("/dashboard")
+      } catch (e) {
+        const msg =
+          e instanceof ApiError
+            ? e.message
+            : e instanceof Error
+              ? e.message
+              : "Could not start preview"
+        setPreviewErr(msg)
+      } finally {
+        setPreviewBusyId(null)
+      }
+    },
+    [refreshUser, router]
+  )
+
   const filteredUsers = useMemo(() => {
     return latestUsers
       .filter((user) => {
@@ -78,7 +107,22 @@ export default function SubscriptionsPage() {
       <h1 className="text-3xl font-bold">Subscriptions</h1>
       <p className="text-sm text-white/55">
         Recent subscription accounts with plan, status, and credit visibility for support and billing operations.
+        {isSuperAdmin ? (
+          <span className="mt-2 block text-xs text-amber-200/75">
+            <span className="font-medium text-amber-100/90">Preview as user</span> — audited session; exit from the top
+            banner.
+          </span>
+        ) : null}
       </p>
+
+      {previewErr ? (
+        <div
+          className="rounded-xl border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-100/95"
+          role="alert"
+        >
+          {previewErr}
+        </div>
+      ) : null}
 
       <div className="grid gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 md:grid-cols-4">
         <input
@@ -136,18 +180,21 @@ export default function SubscriptionsPage() {
       ) : (
         <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
           <div className="grid grid-cols-12 border-b border-white/10 px-4 py-3 text-xs uppercase tracking-wide text-white/45">
-            <div className="col-span-4">Account</div>
+            <div className={isSuperAdmin ? "col-span-3" : "col-span-4"}>Account</div>
             <div className="col-span-2">Plan</div>
             <div className="col-span-2">Status</div>
             <div className="col-span-2">Credits</div>
-            <div className="col-span-2">Created</div>
+            <div className={isSuperAdmin ? "col-span-1" : "col-span-2"}>Created</div>
+            {isSuperAdmin ? <div className="col-span-2 text-right">Preview</div> : null}
           </div>
           {filteredUsers.map((u) => (
             <div
               key={u.id}
               className="grid grid-cols-12 items-center border-b border-white/5 px-4 py-3 text-sm last:border-none"
             >
-              <div className="col-span-4 truncate pr-3 text-white">{u.email}</div>
+              <div className={isSuperAdmin ? "col-span-3 truncate pr-3 text-white" : "col-span-4 truncate pr-3 text-white"}>
+                {u.email}
+              </div>
               <div className="col-span-2 text-purple-300">{normalizePlan(u.plan)}</div>
               <div className="col-span-2">
                 <span className={`rounded-full border px-2 py-1 text-xs ${statusBadgeClass(u.subscriptionStatus)}`}>
@@ -155,9 +202,22 @@ export default function SubscriptionsPage() {
                 </span>
               </div>
               <div className="col-span-2 text-white/70">{u.credits.toLocaleString()}</div>
-              <div className="col-span-2 text-white/55">
+              <div className={isSuperAdmin ? "col-span-1 text-white/55" : "col-span-2 text-white/55"}>
                 {new Date(u.createdAt).toLocaleDateString()}
               </div>
+              {isSuperAdmin ? (
+                <div className="col-span-2 flex justify-end">
+                  <button
+                    type="button"
+                    disabled={Boolean(previewBusyId) || u.banned}
+                    title={u.banned ? "Cannot preview banned accounts" : "Sign in as this user in this browser"}
+                    onClick={() => void startPreviewAsUser(u.id)}
+                    className="rounded-lg border border-amber-400/35 bg-amber-500/15 px-3 py-1.5 text-xs font-medium text-amber-100 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {previewBusyId === u.id ? "Starting…" : "Preview as user"}
+                  </button>
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

@@ -21,12 +21,17 @@ import AdsDualVariantCompare, {
 import AdsJobLineagePanel from "./AdsJobLineagePanel"
 import AdsJobOperatorReview from "./AdsJobOperatorReview"
 import { buildToolHandoffUrl } from "@/lib/tool-handoff"
+import PremiumVideoPreview, {
+  coerceAdsPlatform,
+  platformToPreviewAspect,
+} from "@/components/media/PremiumVideoPreview"
+import { buildAdVideoFilename } from "@/lib/adExport"
 
 /** Matches main ad job worker progress bands (see admin ads page). */
 function stageFromProgressRerender(p: number) {
   if (p < 18) return "Analyzing website structure"
   if (p < 30) return "Preparing variant render"
-  if (p < 41) return "Generating AI voiceover"
+  if (p < 41) return "Preparing audio & timing"
   if (p < 52) return "Capturing website (browser)"
   if (p < 57) return "Building cinematic timeline (encode)"
   if (p < 71) return "Color grading & audio mix"
@@ -115,6 +120,29 @@ function readJobFastPreview(jobRecord: AdsJobRecord | null): boolean {
   return (m as Record<string, unknown>).fastPreview === true
 }
 
+function humanizePresetId(id: string): string {
+  return id.replace(/_/g, " ")
+}
+
+function readStudioTrace(jobRecord: AdsJobRecord | null): {
+  studioCreativeModeId?: string
+  videoPackaging?: string
+  voiceMode?: string
+  captionAccentHex?: string
+} {
+  const m = jobRecord?.metadata
+  if (!m || typeof m !== "object") return {}
+  const o = m as Record<string, unknown>
+  return {
+    studioCreativeModeId:
+      typeof o.studioCreativeModeId === "string" ? o.studioCreativeModeId : undefined,
+    videoPackaging: typeof o.videoPackaging === "string" ? o.videoPackaging : undefined,
+    voiceMode: typeof o.voiceMode === "string" ? o.voiceMode : undefined,
+    captionAccentHex:
+      typeof o.captionAccentHex === "string" ? o.captionAccentHex : undefined,
+  }
+}
+
 function readOperatorBrief(jobRecord: AdsJobRecord | null): string | null {
   const m = jobRecord?.metadata
   if (!m || typeof m !== "object") return null
@@ -142,6 +170,12 @@ export default function AdsJobReviewPanel({
   const [rerenderReason, setRerenderReason] = useState("")
   const [rerenderFastPreview, setRerenderFastPreview] = useState(false)
   const [rerenderPosting, setRerenderPosting] = useState(false)
+  const [copiedFlash, setCopiedFlash] = useState<string | null>(null)
+
+  const flashCopied = useCallback((message: string) => {
+    setCopiedFlash(message)
+    window.setTimeout(() => setCopiedFlash(null), 2200)
+  }, [])
 
   /** Scoped per job under review so rerender progress does not leak across lineage navigation. */
   const rerenderStorageKey = jobId
@@ -211,6 +245,7 @@ export default function AdsJobReviewPanel({
 
   const lineage = useMemo(() => readJobLineage(jobRecord), [jobRecord])
   const operatorBriefText = useMemo(() => readOperatorBrief(jobRecord), [jobRecord])
+  const studioTrace = useMemo(() => readStudioTrace(jobRecord), [jobRecord])
   const metaSiteUrl = useMemo(() => readMetadataSiteUrl(jobRecord), [jobRecord])
   const storyVideoHandoff = useMemo(() => {
     if (!metaSiteUrl) return null
@@ -286,13 +321,25 @@ export default function AdsJobReviewPanel({
       platform: jobRecord?.platform,
       tone: jobRecord?.tone,
       duration: jobRecord?.duration,
+      generationTrace: studioTrace,
+      operatorBrief: operatorBriefText,
       selectedVariantId: script?.selectedVariantId,
       focusVariantId: focusVariantId ?? winnerId,
       script,
       scenePlan: jobRecord?.scenePlan,
     }
     void navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
-  }, [jobId, jobRecord, script, focusVariantId, winnerId])
+    flashCopied("Full package copied")
+  }, [
+    jobId,
+    jobRecord,
+    script,
+    focusVariantId,
+    winnerId,
+    studioTrace,
+    operatorBriefText,
+    flashCopied,
+  ])
 
   const copyPlainScript = useCallback(() => {
     const v = focusedVariant ?? winner
@@ -303,16 +350,34 @@ export default function AdsJobReviewPanel({
       sceneSummary && `Scene summary:\n${sceneSummary}`,
     ].filter(Boolean)
     void navigator.clipboard.writeText(lines.join("\n\n"))
-  }, [focusedVariant, winner, sceneSummary])
+    flashCopied("Script copied")
+  }, [focusedVariant, winner, sceneSummary, flashCopied])
 
-  const downloadName = (() => {
+  const fallbackDownloadName = useMemo(() => {
     if (!resolvedVideo) return "video.mp4"
     try {
       return filenameFromPublicPath(new URL(resolvedVideo).pathname)
     } catch {
       return "video.mp4"
     }
-  })()
+  }, [resolvedVideo])
+
+  const exportFilename = useMemo(
+    () => (jobId ? buildAdVideoFilename(jobId) : fallbackDownloadName),
+    [jobId, fallbackDownloadName]
+  )
+
+  const previewAspect = platformToPreviewAspect(coerceAdsPlatform(jobRecord?.platform))
+
+  const audioMixSummary = useMemo(() => {
+    if (studioTrace.voiceMode === "silent_music_only") {
+      return "Music bed only — no voiceover on this render."
+    }
+    if (studioTrace.voiceMode === "ai_openai_tts") {
+      return "AI voiceover + music (OpenAI TTS) — preview matches viewer audio."
+    }
+    return null
+  }, [studioTrace.voiceMode])
 
   const scoreSelection = script?.scoreSelection
   const thresholdGate =
@@ -358,6 +423,51 @@ export default function AdsJobReviewPanel({
         <section className="rounded-2xl border border-purple-500/25 bg-purple-500/[0.06] p-5">
           <h2 className="text-sm font-semibold text-purple-100/95">Operator brief</h2>
           <p className="mt-2 whitespace-pre-wrap text-sm text-white/75">{operatorBriefText}</p>
+        </section>
+      ) : null}
+
+      {studioTrace.studioCreativeModeId ||
+      studioTrace.videoPackaging ||
+      studioTrace.voiceMode ||
+      studioTrace.captionAccentHex ? (
+        <section className="rounded-2xl border border-cyan-500/20 bg-cyan-500/[0.06] p-5">
+          <h2 className="text-sm font-semibold text-cyan-100/95">Generation trace</h2>
+          <dl className="mt-3 grid gap-2 text-sm text-white/70 sm:grid-cols-2">
+            {studioTrace.studioCreativeModeId ? (
+              <>
+                <dt className="text-white/45">Studio mode</dt>
+                <dd className="font-medium text-white/85">
+                  {humanizePresetId(studioTrace.studioCreativeModeId)}
+                </dd>
+              </>
+            ) : null}
+            {studioTrace.videoPackaging ? (
+              <>
+                <dt className="text-white/45">Video packaging</dt>
+                <dd className="font-medium text-white/85">
+                  {humanizePresetId(studioTrace.videoPackaging)}
+                </dd>
+              </>
+            ) : null}
+            {studioTrace.voiceMode ? (
+              <>
+                <dt className="text-white/45">Voice</dt>
+                <dd className="font-medium text-white/85">
+                  {studioTrace.voiceMode === "silent_music_only"
+                    ? "Music only (no VO)"
+                    : "AI voice (OpenAI TTS)"}
+                </dd>
+              </>
+            ) : null}
+            {studioTrace.captionAccentHex ? (
+              <>
+                <dt className="text-white/45">Caption accent</dt>
+                <dd className="font-mono text-xs font-medium text-white/85">
+                  #{studioTrace.captionAccentHex}
+                </dd>
+              </>
+            ) : null}
+          </dl>
         </section>
       ) : null}
 
@@ -433,6 +543,12 @@ export default function AdsJobReviewPanel({
                 </span>
               )}
             </p>
+            {audioMixSummary ? (
+              <p className="mt-2 max-w-prose text-xs leading-relaxed text-white/48">
+                <span className="font-medium text-white/65">Sound · </span>
+                {audioMixSummary}
+              </p>
+            ) : null}
           </div>
           {jobId && (
             <code className="rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-[11px] text-white/55">
@@ -447,39 +563,35 @@ export default function AdsJobReviewPanel({
             script={script}
             rows={renderedVariantRows}
             normalizeOutputUrl={normalizeOutputUrl}
-            downloadBaseName={downloadName}
+            platform={coerceAdsPlatform(jobRecord?.platform)}
             onOperatorReviewChange={async () => {
               setReviewTick(t => t + 1)
               await onOperatorReviewChange?.()
             }}
             onRerenderVariant={id => void startRerenderFromVariant(id)}
             rerenderPosting={rerenderPosting}
+            onCopied={flashCopied}
           />
         ) : resolvedVideo ? (
-          <div className="mt-5 space-y-4">
-            <video
-              src={resolvedVideo}
-              controls
-              playsInline
-              preload="metadata"
-              className="w-full max-w-2xl rounded-xl border border-white/10"
-            />
-            <div className="flex flex-wrap gap-2">
+          <div className="mt-6 space-y-4">
+            <PremiumVideoPreview src={resolvedVideo} aspect={previewAspect} />
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={() => void navigator.clipboard.writeText(resolvedVideo)}
+                onClick={() => {
+                  void navigator.clipboard.writeText(resolvedVideo)
+                  flashCopied("Video link copied")
+                }}
                 className="rounded-lg border border-white/15 bg-white/[0.06] px-3 py-2 text-xs font-medium text-white/85 hover:bg-white/[0.1]"
               >
-                Copy video URL
+                Copy link
               </button>
               <button
                 type="button"
-                onClick={() =>
-                  void downloadMediaBlob(resolvedVideo, downloadName)
-                }
+                onClick={() => void downloadMediaBlob(resolvedVideo, exportFilename)}
                 className="rounded-lg border border-white/15 bg-white/[0.06] px-3 py-2 text-xs font-medium text-white/85 hover:bg-white/[0.1]"
               >
-                Download
+                Download MP4
               </button>
             </div>
           </div>
@@ -490,6 +602,9 @@ export default function AdsJobReviewPanel({
               : "No output video URL on this job (failed early or legacy)."}
           </p>
         )}
+        {copiedFlash ? (
+          <p className="mt-3 text-xs font-medium text-emerald-300/90">{copiedFlash}</p>
+        ) : null}
       </section>
 
       {jobId && !showDualVariantCompare && (

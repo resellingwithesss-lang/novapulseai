@@ -1,5 +1,6 @@
 "use client"
 
+import PremiumVideoPreview from "@/components/media/PremiumVideoPreview"
 import ToolResultLayout from "@/components/tools/results/ToolResultLayout"
 import { downloadMediaBlob, filenameFromPublicPath } from "@/lib/mediaOrigin"
 
@@ -7,33 +8,31 @@ type AdsResultPanelProps = {
   videoUrl: string
 }
 
-export default function AdsResultPanel({
-  videoUrl,
-}: AdsResultPanelProps) {
+export default function AdsResultPanel({ videoUrl }: AdsResultPanelProps) {
   const downloadName = (() => {
     try {
       const path = new URL(videoUrl).pathname
       return filenameFromPublicPath(path)
     } catch {
-      return "video.mp4"
+      return "NovaPulseAI-Ad.mp4"
     }
   })()
 
   return (
     <ToolResultLayout
-      title="Generated Video"
+      title="Ad render"
       state="success"
-      statusLabel="Completed"
-      summary="Your ad render is ready. Download or open the video, then continue to script and clip workflows."
+      statusLabel="Ready"
+      summary="Playback uses the same master file as download — captions, hook/CTA cards, and mix match what you configured."
       actions={[
         {
-          label: "Copy Link",
+          label: "Copy link",
           onClick: () => {
             void navigator.clipboard.writeText(videoUrl)
           },
         },
         {
-          label: "Download",
+          label: "Download MP4",
           onClick: () => void downloadMediaBlob(videoUrl, downloadName),
           tone: "secondary",
         },
@@ -45,17 +44,11 @@ export default function AdsResultPanel({
         },
       ]}
       nextSteps={[
-        { label: "Create Next Script", href: "/dashboard/tools/video" },
-        { label: "Repurpose with Clipper", href: "/dashboard/tools/clipper" },
+        { label: "Video script", href: "/dashboard/tools/video" },
+        { label: "Clipper", href: "/dashboard/tools/clipper" },
       ]}
     >
-      <video
-        src={videoUrl}
-        controls
-        playsInline
-        preload="metadata"
-        className="w-full rounded-xl border border-white/10"
-      />
+      <PremiumVideoPreview src={videoUrl} aspect="9:16" />
     </ToolResultLayout>
   )
 }

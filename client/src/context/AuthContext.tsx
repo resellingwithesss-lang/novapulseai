@@ -67,13 +67,21 @@ type RefreshOptions = {
   rethrow?: boolean
 }
 
+export type AdminPreviewSession = {
+  impersonatorId: string
+  impersonatorEmail: string
+} | null
+
 type AuthContextType = {
   user: User | null
   status: AuthStatus
   /** True after the first /auth/me attempt finishes (success, 401, or error). */
   hasResolvedSession: boolean
+  /** SUPER_ADMIN preview-as-user: operator context for banner + exit. */
+  adminPreview: AdminPreviewSession
   isAuthenticated: boolean
   isAdmin: boolean
+  isSuperAdmin: boolean
   isTrial: boolean
   isFree: boolean
   isStarter: boolean
@@ -105,6 +113,9 @@ const AuthContext = createContext<AuthContextType | null>(null)
 type MeResponse = {
   success?: boolean
   user: User | null
+  impersonation?: {
+    impersonator: { id: string; email: string }
+  } | null
 }
 
 /* =====================================================
@@ -115,6 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [status, setStatus] = useState<AuthStatus>("loading")
   const [hasResolvedSession, setHasResolvedSession] = useState(false)
+  const [adminPreview, setAdminPreview] = useState<AdminPreviewSession>(null)
 
   const requestSeq = useRef(0)
   const mounted = useRef(false)
@@ -148,11 +160,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (seq !== requestSeq.current) return null
 
         const nextUser: User | null = data?.user ?? null
+        const imp = data?.impersonation?.impersonator
 
         if (nextUser) {
           safeSet(() => {
             setUser(nextUser)
             setStatus("authenticated")
+            if (imp?.id && imp.email) {
+              setAdminPreview({
+                impersonatorId: imp.id,
+                impersonatorEmail: imp.email,
+              })
+            } else {
+              setAdminPreview(null)
+            }
           })
           return nextUser
         }
@@ -160,6 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         safeSet(() => {
           setUser(null)
           setStatus("unauthenticated")
+          setAdminPreview(null)
         })
         return null
       } catch (err) {
@@ -171,6 +193,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           safeSet(() => {
             setUser(null)
             setStatus("unauthenticated")
+            setAdminPreview(null)
           })
           return null
         }
@@ -182,6 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         safeSet(() => {
           setUser(null)
           setStatus("unauthenticated")
+          setAdminPreview(null)
         })
 
         if (rethrow) {
@@ -229,6 +253,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       safeSet(() => {
         setUser(null)
         setStatus("unauthenticated")
+        setAdminPreview(null)
       })
     }
 
@@ -282,6 +307,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         safeSet(() => {
           setUser(null)
           setStatus("unauthenticated")
+          setAdminPreview(null)
         })
         throw err
       }
@@ -317,6 +343,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         safeSet(() => {
           setUser(null)
           setStatus("unauthenticated")
+          setAdminPreview(null)
         })
         throw err
       }
@@ -327,17 +354,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     requestSeq.current += 1
 
-    safeSet(() => {
-      setUser(null)
-      setStatus("unauthenticated")
-    })
-
     try {
       await api.post("/auth/logout")
     } catch {
       // ignore logout errors
     }
-  }, [safeSet])
+
+    await refreshUser({ silent: true })
+  }, [refreshUser])
 
   /* =====================================================
      DERIVED STATE
@@ -369,10 +393,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       status,
       hasResolvedSession,
+      adminPreview,
       isAuthenticated: status === "authenticated",
       isAdmin:
         user?.role === "ADMIN" ||
         user?.role === "SUPER_ADMIN",
+      isSuperAdmin: user?.role === "SUPER_ADMIN",
       isTrial:
         user?.subscriptionStatus === "TRIALING" &&
         displayPlanForUser(user?.plan, user?.role) === "PRO",
@@ -392,6 +418,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       status,
       hasResolvedSession,
+      adminPreview,
       trialDaysLeft,
       trialHoursLeft,
       trialUrgency,

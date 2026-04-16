@@ -2,6 +2,11 @@
 
 import { useMemo } from "react"
 import type { AdsJobRecord } from "@/hooks/useAdsJobPolling"
+import PremiumVideoPreview, {
+  coerceAdsPlatform,
+  platformToPreviewAspect,
+} from "@/components/media/PremiumVideoPreview"
+import { buildAdVideoFilename } from "@/lib/adExport"
 import { downloadMediaBlob } from "@/lib/mediaOrigin"
 import {
   formatBreakdownLines,
@@ -79,11 +84,11 @@ type AdsDualVariantCompareProps = {
   script: ParsedStoredAdScript | null
   rows: RenderedRow[]
   normalizeOutputUrl: (url: string) => string
-  /** Base name for downloads (from primary output URL). */
-  downloadBaseName: string
+  platform?: string | null
   onOperatorReviewChange?: () => void | Promise<void>
   onRerenderVariant: (variantId: string) => void | Promise<void>
   rerenderPosting: boolean
+  onCopied?: (message: string) => void
 }
 
 export default function AdsDualVariantCompare({
@@ -91,11 +96,13 @@ export default function AdsDualVariantCompare({
   script,
   rows,
   normalizeOutputUrl,
-  downloadBaseName,
+  platform,
   onOperatorReviewChange,
   onRerenderVariant,
   rerenderPosting,
+  onCopied,
 }: AdsDualVariantCompareProps) {
+  const aspect = platformToPreviewAspect(coerceAdsPlatform(platform))
   const sorted = useMemo(
     () => [...rows].sort((a, b) => a.rank - b.rank),
     [rows]
@@ -164,39 +171,33 @@ export default function AdsDualVariantCompare({
 
               <div className="space-y-3 p-4">
                 {url ? (
-                  <video
-                    src={url}
-                    controls
-                    playsInline
-                    preload="metadata"
-                    className="w-full rounded-lg border border-white/10"
-                  />
+                  <PremiumVideoPreview src={url} aspect={aspect} />
                 ) : (
                   <p className="text-sm text-red-300/90">
                     {row.failedReason || "Render failed"}
                   </p>
                 )}
 
-                {url ? (
+                                              {url ? (
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => void navigator.clipboard.writeText(url)}
+                      onClick={() => {
+                        void navigator.clipboard.writeText(url)
+                        onCopied?.("Link copied")
+                      }}
                       className="rounded-lg border border-white/15 bg-white/[0.06] px-2.5 py-1.5 text-[11px] font-medium text-white/85 hover:bg-white/[0.1]"
                     >
-                      Copy URL
+                      Copy link
                     </button>
                     <button
                       type="button"
                       onClick={() =>
-                        void downloadMediaBlob(
-                          url,
-                          `${downloadBaseName.replace(/\.mp4$/i, "")}-rank${row.rank}.mp4`
-                        )
+                        void downloadMediaBlob(url, buildAdVideoFilename(jobId, row.rank))
                       }
                       className="rounded-lg border border-white/15 bg-white/[0.06] px-2.5 py-1.5 text-[11px] font-medium text-white/85 hover:bg-white/[0.1]"
                     >
-                      Download
+                      Download MP4
                     </button>
                     {canRerender ? (
                       <button

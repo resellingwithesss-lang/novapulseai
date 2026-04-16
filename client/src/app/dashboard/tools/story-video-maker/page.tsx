@@ -115,7 +115,7 @@ export default function StoryVideoMakerPage() {
   const stageFromProgress = (p: number) => {
     if (p < 18) return "Analyzing website structure..."
     if (p < 30) return "Building ad script and scenes..."
-    if (p < 41) return "Generating voiceover..."
+    if (p < 41) return "Preparing audio & timing..."
     if (p < 52) return "Capturing site (browser — often the longest step)..."
     if (p < 57) return "Building cinematic timeline (encode)..."
     if (p < 71) return "Color grading & audio mix..."
