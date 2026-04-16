@@ -142,6 +142,18 @@ export default function DashboardPage() {
           <ToolCard title="Story Video Generator" href="/dashboard/tools/story-video-maker" />
         </section>
 
+        <p className="-mt-6 text-center text-xs text-white/45">
+          <Link
+            href="/dashboard/affiliate"
+            className="font-medium text-purple-200/90 underline-offset-2 hover:text-purple-100 hover:underline"
+          >
+            Referral program
+          </Link>
+          <span className="text-white/35"> · </span>
+          Share your link; earn when referred customers subscribe—rates, rules, and payouts are
+          explained on the affiliate page.
+        </p>
+
         <WorkflowGoalTemplates />
 
         <section className="np-card p-6 md:p-8">

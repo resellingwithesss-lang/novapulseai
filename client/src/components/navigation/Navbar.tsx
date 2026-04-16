@@ -358,6 +358,9 @@ export default function Navbar() {
               <MobileRow href="/dashboard/billing" onClick={closeMobile}>
                 Billing
               </MobileRow>
+              <MobileRow href="/dashboard/affiliate" onClick={closeMobile}>
+                Referrals
+              </MobileRow>
               <MobileRow href="/pricing" onClick={closeMobile}>
                 Plans &amp; pricing
               </MobileRow>
