@@ -89,32 +89,59 @@ function isPathUnderRoot(file: string, root: string): boolean {
   return rel !== "" && !rel.startsWith(`..${path.sep}`) && rel !== ".." && !path.isAbsolute(rel)
 }
 
-/** Lines from yt-dlp that look like existing filesystem paths (after_move:filepath, etc.). */
+function pushResolvedPathIfFileExists(rawPath: string, out: string[]): void {
+  let p = rawPath.trim().replace(/^["']|["']$/g, "")
+  if (!p) return
+  try {
+    const resolved = path.resolve(path.normalize(p))
+    if (existsSync(resolved) && statSync(resolved).isFile()) {
+      out.push(resolved)
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Lines from yt-dlp that look like existing filesystem paths:
+ * - plain absolute paths (incl. after_move:filepath)
+ * - "[download] Destination: …" (often the only path line when --print is missing)
+ * - "Merging formats into …"
+ */
 function extractCandidatePathsFromOutput(text: string): string[] {
   const out: string[] = []
   for (const raw of text.split(/\r?\n/)) {
-    let line = raw.trim()
-    if (!line) continue
-    if (/^\[/.test(line)) continue
-    line = line.replace(/^["']|["']$/g, "")
+    const line = raw.trim()
     if (!line) continue
 
-    if (line.startsWith("/") && !line.includes("://")) {
-      try {
-        const resolved = path.resolve(line)
-        if (existsSync(resolved)) out.push(resolved)
-      } catch {
-        /* ignore */
-      }
+    const destBracket = line.match(/^\[download\]\s+Destination:\s*(.+)$/i)
+    if (destBracket) {
+      pushResolvedPathIfFileExists(destBracket[1], out)
       continue
     }
-    if (/^[A-Za-z]:[\\/]/.test(line)) {
-      try {
-        const n = path.resolve(path.normalize(line))
-        if (existsSync(n)) out.push(n)
-      } catch {
-        /* ignore */
-      }
+
+    const mergeInto = line.match(/Merging formats into\s+"([^"]+)"/i)
+    if (mergeInto) {
+      pushResolvedPathIfFileExists(mergeInto[1], out)
+      continue
+    }
+    const mergeIntoUnquoted = line.match(/Merging formats into\s+(\S[^\r\n]*\.(?:mp4|mkv|webm|mov))/i)
+    if (mergeIntoUnquoted) {
+      pushResolvedPathIfFileExists(mergeIntoUnquoted[1], out)
+      continue
+    }
+
+    if (/^\[/.test(line)) continue
+
+    let plain = line.replace(/^["']|["']$/g, "")
+    if (!plain) continue
+
+    if (plain.startsWith("/") && !plain.includes("://")) {
+      pushResolvedPathIfFileExists(plain, out)
+      continue
+    }
+    if (/^[A-Za-z]:[\\/]/.test(plain)) {
+      pushResolvedPathIfFileExists(plain, out)
     }
   }
   return [...new Set(out)]
@@ -123,6 +150,18 @@ function extractCandidatePathsFromOutput(text: string): string[] {
 function classifyYoutubeDlError(stderr: string, stdout: string): string {
   const text = `${stderr}\n${stdout}`.toLowerCase()
 
+  if (/no such option:\s*--no-newline|no such option:.*newline/i.test(text)) {
+    return "Server misconfiguration: the API is running an outdated build that passes an invalid yt-dlp flag. Redeploy the latest server image."
+  }
+  if (/no such option:/i.test(text)) {
+    return "Server misconfiguration: an invalid yt-dlp option was passed. Check server logs for the exact flag and redeploy."
+  }
+  if (/sign in to confirm you.?re not a bot|not a bot|bot check/i.test(text)) {
+    return "YouTube blocked automated access (bot check). Try again later, set YT_DLP_COOKIES, or upload the video file."
+  }
+  if (/no supported javascript runtime|javascript runtime|ejs\b|formats may be missing/i.test(text)) {
+    return "YouTube extraction is degraded on this server (JavaScript runtime / EJS). Update yt-dlp or install a JS runtime per yt-dlp docs, or upload the file."
+  }
   if (/private video|members only|is private|privacy status/i.test(text)) {
     return "Private video: this link is not publicly accessible. Upload the file instead or use a public URL."
   }
@@ -465,6 +504,9 @@ export const downloadYoutubeVideo = async (url: string): Promise<string> => {
       total: ATTEMPTS.length,
       strategy: spec.name,
       jobDir,
+      /** If true, an old build is still running (bad dargs + newline:false). Must be false after fix. */
+      argvContainsNoNewline: argv.some((a) => /no-newline/i.test(String(a))),
+      argvJoined: argv.join(" "),
       filesBefore: filesBeforeList,
       argv,
       urlHost: (() => {
