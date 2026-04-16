@@ -84,7 +84,16 @@ export default function StoryVideoMakerPage() {
     const w = searchParams.get("workspaceId")
     if (w) setWorkspaceId(w)
     const vb = searchParams.get("videoBrief")
+    const topic = searchParams.get("topic")
+    const contextId = searchParams.get("contextId")
     if (vb) setVideoBrief(vb)
+    else if (topic) {
+      setVideoBrief(contextId ? `${topic}\n\nContext: ${contextId}` : topic)
+    }
+    const platformParam = searchParams.get("platform")
+    if (platformParam === "tiktok" || platformParam === "instagram" || platformParam === "youtube") {
+      setPlatform(platformParam)
+    }
     const p = searchParams.get("sourceContentPackId")
     if (p) setSourceContentPackId(p)
     const g = searchParams.get("sourceGenerationId")
@@ -162,7 +171,11 @@ export default function StoryVideoMakerPage() {
           ...(sourceGenerationId ? { sourceGenerationId } : {}),
           ...(sourceType ? { sourceType } : {}),
         },
-        { timeout: LONG_REQUEST_TIMEOUT_MS }
+        {
+          timeout: LONG_REQUEST_TIMEOUT_MS,
+          retry: 0,
+          idempotencyKey: `ads-generate:${crypto.randomUUID()}`,
+        }
       )
       const operation = normalizeToolOperation(response)
 
@@ -429,7 +442,7 @@ export default function StoryVideoMakerPage() {
           statusLabel={polling.state.loading ? "Rendering" : polling.state.error ? "Blocked" : "Waiting"}
           loadingMessage={`${polling.state.stageText} (${polling.state.progress}%)`}
           errorMessage={polling.state.error ?? undefined}
-          emptyMessage="No video generated yet. Submit a website URL and choose output settings to start."
+          emptyMessage="No video generated yet. Submit a website URL and packaging settings to start."
           actions={
             polling.state.error
               ? [{ label: "Retry Generation", onClick: generate }]

@@ -183,7 +183,12 @@ export default function StoryMakerPage() {
           ...(sourceGenerationId ? { sourceGenerationId } : {}),
           ...(sourceType ? { sourceType } : {}),
         },
-        { signal: abortRef.current.signal, timeout: 120000 }
+        {
+          signal: abortRef.current.signal,
+          timeout: 120000,
+          retry: 0,
+          idempotencyKey: `story-maker:${crypto.randomUUID()}`,
+        }
       )
       const operation = normalizeToolOperation<StoryOutput>(data, {
         resultKey: "result",
@@ -201,7 +206,7 @@ export default function StoryMakerPage() {
         title: output.title || "Story output",
         summary: output.hook,
         continuePath: "/dashboard/tools/story-video-maker",
-        nextAction: "Turn this story into a full video.",
+        nextAction: "Use this as a creative brief for Story Video.",
       })
       recordEmailReadyEvent("OUTPUT_CREATED", `output:story-maker:${Date.now()}`, {
         tool: "story-maker",
@@ -360,7 +365,7 @@ export default function StoryMakerPage() {
           onClick={() => abortRef.current?.abort()}
           className="mt-2 w-full rounded-full border border-white/15 bg-white/5 py-2 text-xs text-white/70 hover:bg-white/10"
         >
-          Cancel current generation
+          Stop waiting (request may still finish server-side)
         </button>
       )}
 

@@ -35,6 +35,7 @@ export default function DashboardPage() {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [studioWs, setStudioWs] = useState<WorkspaceDto[]>([])
   const [studioBv, setStudioBv] = useState<BrandVoiceDto[]>([])
+  const [studioLoadError, setStudioLoadError] = useState<string | null>(null)
 
   const {
     generations,
@@ -52,9 +53,11 @@ export default function DashboardPage() {
         const [ws, bv] = await Promise.all([fetchWorkspaces(), fetchBrandVoices()])
         setStudioWs((ws.workspaces ?? []).slice(0, 4))
         setStudioBv((bv.brandVoices ?? []).slice(0, 4))
+        setStudioLoadError(null)
       } catch {
         setStudioWs([])
         setStudioBv([])
+        setStudioLoadError("Could not load studio data. Retry from Workspaces or Brand Voices.")
       }
     })()
   }, [user])
@@ -98,7 +101,13 @@ export default function DashboardPage() {
   if (!user) {
     return (
       <DashboardShell>
-        <div className="text-red-400">Failed to load dashboard.</div>
+        <div className="np-card-soft p-5 text-sm text-white/75">
+          Session unavailable. Please{" "}
+          <Link href="/login" className="text-purple-200 underline">
+            sign in again
+          </Link>{" "}
+          to continue.
+        </div>
       </DashboardShell>
     )
   }
@@ -151,6 +160,11 @@ export default function DashboardPage() {
             </Link>
           </div>
           <div className="mt-6 grid gap-6 md:grid-cols-2">
+            {studioLoadError && (
+              <div className="md:col-span-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-100/90">
+                {studioLoadError}
+              </div>
+            )}
             <div>
               <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-white/48">Workspaces</h3>
               <ul className="mt-3 space-y-2 text-sm text-white/78">
