@@ -136,16 +136,16 @@ export default function Navbar() {
       ref={mobileRef}
       className={`sticky top-0 z-[200] backdrop-blur-xl backdrop-saturate-150 ${
         isLanding
-          ? "border-b border-white/[0.028] bg-[#050816]/48 shadow-[0_4px_16px_rgba(0,0,0,0.14),inset_0_1px_0_rgba(255,255,255,0.024)] supports-[backdrop-filter]:bg-[#050816]/34"
+          ? "border-b border-transparent bg-[#050816]/48 supports-[backdrop-filter]:bg-[#050816]/34"
           : "border-b border-white/[0.08] bg-[#050816]/70 shadow-[0_6px_24px_rgba(0,0,0,0.26),inset_0_1px_0_rgba(255,255,255,0.045)] supports-[backdrop-filter]:bg-[#050816]/55"
       }`}
     >
-      <div
-        className={`pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent to-transparent ${
-          isLanding ? "via-purple-400/6" : "via-purple-500/16"
-        }`}
-        aria-hidden
-      />
+      {!isLanding && (
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-purple-500/16 to-transparent"
+          aria-hidden
+        />
+      )}
 
       {!isLanding && (
         <div
