@@ -12,6 +12,7 @@ import { log, serializeErr } from "../../lib/logger"
 import { fail, ok } from "../../lib/http"
 import { staffFloorPlan } from "../../lib/staff-plan"
 import { requireAuth, AuthRequest } from "./auth.middleware"
+import { requireCsrfForCookieAuth } from "../../middlewares/csrf-protect"
 import {
   AuthProvider,
   Plan,
@@ -689,7 +690,7 @@ router.post("/google", credentialLimiter, async (req, res) => {
 LOGOUT
 ===================================================== */
 
-router.post("/logout", requireAuth, async (req: AuthRequest, res) => {
+router.post("/logout", requireAuth, requireCsrfForCookieAuth, async (req: AuthRequest, res) => {
   await prisma.user.update({
     where: { id: req.user!.id },
     data: { tokenVersion: { increment: 1 } },
@@ -724,7 +725,7 @@ router.get("/me", requireAuth, async (req: AuthRequest, res) => {
 CHANGE PASSWORD (local accounts only)
 ===================================================== */
 
-router.post("/change-password", requireAuth, async (req: AuthRequest, res) => {
+router.post("/change-password", requireAuth, requireCsrfForCookieAuth, async (req: AuthRequest, res) => {
   const parsed = changePasswordSchema.safeParse(req.body)
   if (!parsed.success) {
     return fail(res, 400, "Invalid request", { issues: parsed.error.flatten() })

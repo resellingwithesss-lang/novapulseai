@@ -171,10 +171,6 @@ export default function HomePage() {
         aria-labelledby="workflow-heading"
       >
         <div
-          className="pointer-events-none absolute left-1/2 top-0 -z-10 h-[min(100%,48rem)] w-screen max-w-none -translate-x-1/2 bg-gradient-to-b from-purple-500/[0.045] via-transparent to-transparent"
-          aria-hidden
-        />
-        <div
           className="pointer-events-none absolute bottom-0 left-1/2 -z-10 h-40 w-screen max-w-none -translate-x-1/2 bg-gradient-to-t from-[#050816]/90 via-[#050816]/35 to-transparent"
           aria-hidden
         />
@@ -233,10 +229,6 @@ export default function HomePage() {
         aria-labelledby="outcomes-heading"
       >
         <div
-          className="pointer-events-none absolute left-1/2 top-0 -z-10 h-48 w-screen max-w-none -translate-x-1/2 bg-gradient-to-b from-white/[0.05] via-white/[0.02] to-transparent"
-          aria-hidden
-        />
-        <div
           className="pointer-events-none absolute bottom-0 left-1/2 -z-10 h-32 w-screen max-w-none -translate-x-1/2 bg-gradient-to-t from-[#050816]/85 to-transparent"
           aria-hidden
         />
@@ -276,10 +268,6 @@ export default function HomePage() {
 
       {/* —— Pricing bridge —— */}
       <section className="relative py-24 md:py-28">
-        <div
-          className="pointer-events-none absolute left-1/2 top-0 -z-10 h-full w-screen max-w-none -translate-x-1/2 bg-gradient-to-b from-transparent via-white/[0.02] to-transparent"
-          aria-hidden
-        />
         <div className="relative mx-auto w-full max-w-5xl px-5 sm:px-8 lg:px-10 xl:px-12">
           <div className="relative overflow-hidden rounded-3xl border border-white/[0.078] bg-gradient-to-br from-purple-600/10 via-[#0a0d18] to-pink-600/7 p-9 shadow-[inset_0_1px_0_rgba(255,255,255,0.045),0_4px_32px_rgba(0,0,0,0.14)] ring-1 ring-inset ring-white/[0.03] md:p-12 lg:p-14">
             <div
@@ -318,10 +306,6 @@ export default function HomePage() {
 
       {/* —— Final CTA —— */}
       <section className="relative pb-28 pt-24 text-center md:pb-36 md:pt-28">
-        <div
-          className="pointer-events-none absolute left-1/2 top-0 -z-10 h-36 w-screen max-w-none -translate-x-1/2 bg-gradient-to-b from-white/[0.03] to-transparent"
-          aria-hidden
-        />
         <div className="relative mx-auto w-full max-w-5xl px-5 sm:px-8 lg:px-10 xl:px-12">
           <div className="mx-auto max-w-2xl">
             <h2 className="text-balance text-2xl font-semibold tracking-[-0.022em] text-white/[0.97] md:text-[1.875rem] md:leading-snug">

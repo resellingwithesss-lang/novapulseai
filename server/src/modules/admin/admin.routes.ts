@@ -7,6 +7,7 @@ import { fail, ok } from "../../lib/http"
 import { resolveRequestId } from "../../lib/tool-response"
 import { requireAuth, AuthRequest } from "../auth/auth.middleware"
 import { requireAdmin } from "../auth/admin.middleware"
+import { requireCsrfForCookieAuth } from "../../middlewares/csrf-protect"
 import {
   Plan,
   Role,
@@ -33,6 +34,7 @@ const emailBroadcastLimiter = rateLimit({
 
 router.use(requireAuth)
 router.use(requireAdmin)
+router.use(requireCsrfForCookieAuth)
 
 /* ===============================
    DASHBOARD STATS
