@@ -14,6 +14,10 @@ import {
   readCheckoutPlanIntent,
   setResumeCheckoutFlag,
 } from "@/lib/planIntent"
+import {
+  persistReferralFromSearchParams,
+  referralCodeForAuth,
+} from "@/lib/referralCookie"
 
 function getSafeRedirectPath(candidate: string | null) {
   if (!candidate) return "/dashboard"
@@ -53,6 +57,8 @@ export default function LoginPage() {
     const billing = searchParams.get("billing")
     if (plan) next.set("plan", plan)
     if (billing) next.set("billing", billing)
+    const ref = searchParams.get("ref")
+    if (ref) next.set("ref", ref)
     const q = next.toString()
     return q ? `/register?${q}` : "/register"
   }, [searchParams])
@@ -66,6 +72,10 @@ export default function LoginPage() {
   useEffect(() => {
     const intent = parsePlanIntentFromSearchParams(searchParams)
     if (intent) writeCheckoutPlanIntent(intent)
+  }, [searchParams])
+
+  useEffect(() => {
+    persistReferralFromSearchParams(searchParams)
   }, [searchParams])
 
   useEffect(() => {
@@ -124,7 +134,11 @@ export default function LoginPage() {
           accessTokenLen: accessToken.length,
         })
       }
-      await api.post("/auth/google", { accessToken })
+      const refCode = referralCodeForAuth(searchParams)
+      await api.post("/auth/google", {
+        accessToken,
+        ...(refCode ? { referralCode: refCode } : {}),
+      })
       const next = await refreshUser({ silent: true })
       if (!next) {
         throw new ApiError(

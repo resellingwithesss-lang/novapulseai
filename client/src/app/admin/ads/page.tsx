@@ -46,6 +46,8 @@ export default function AdsPage() {
   const [renderTopVariants, setRenderTopVariants] = useState<1 | 2>(1)
   /** Opt-in faster capture/encode; sends `previewMode: "fast"` only when true. */
   const [fastPreviewGenerate, setFastPreviewGenerate] = useState(false)
+  /** Stored on job metadata for audit; does not replace site analysis. */
+  const [operatorBrief, setOperatorBrief] = useState("")
 
 /* ====================================================== */
 /* HELPERS */
@@ -161,6 +163,9 @@ export default function AdsPage() {
           ultra,
           creativeMode,
           renderTopVariants,
+          ...(operatorBrief.trim()
+            ? { operatorBrief: operatorBrief.trim().slice(0, 4000) }
+            : {}),
           ...(fastPreviewGenerate ? { previewMode: "fast" as const } : {}),
         },
         {
@@ -236,7 +241,9 @@ export default function AdsPage() {
   </h1>
 
   <p className="text-white/60 mb-10">
-  Generate cinematic ads for TikTok, Instagram and YouTube.
+  Generate cinematic ads for TikTok, Instagram and YouTube. The optional operator brief is internal
+  context only—it is stored on the job for review, then can be carried into Story Video Maker via the
+  handoff link (same site URL and brief when you open a completed job).
   </p>
 
   {/* INPUTS */}
@@ -251,6 +258,25 @@ export default function AdsPage() {
   disabled={job.state.loading}
   className="col-span-2 px-4 py-3 rounded-xl bg-white/10 border border-white/20"
   />
+
+  <label className="col-span-2 space-y-2">
+    <span className="block text-xs font-medium uppercase tracking-wide text-white/50">
+      Operator brief (optional)
+    </span>
+    <textarea
+      value={operatorBrief}
+      onChange={(e) => setOperatorBrief(e.target.value)}
+      disabled={job.state.loading}
+      maxLength={4000}
+      rows={4}
+      placeholder="e.g. emphasize annual plan, hook on time saved, avoid competitor names…"
+      className="w-full resize-y rounded-xl bg-white/10 border border-white/20 px-4 py-3 text-sm text-white placeholder:text-white/35"
+    />
+    <span className="block text-[11px] text-white/40">
+      Saved on the job record (not sent to the model as the main brief). Shown in review and prefilled
+      in the Story Video handoff when the URL allows. Max 4000 characters.
+    </span>
+  </label>
 
   <select
   value={tone}

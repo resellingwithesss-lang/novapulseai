@@ -14,6 +14,7 @@ import {
 import { inferBillingIntervalFromStripePriceId } from "./plan-change-classification"
 import { logBillingEvent } from "./billing-events"
 import { markBillingProTrialConsumedIfProSubscriptionLive } from "./webhook-pro-trial"
+import { recordReferralCommissionFromInvoice } from "../referrals/referral.service"
 
 const router = Router()
 
@@ -202,9 +203,6 @@ router.post("/", async (req: Request, res: Response) => {
             },
             select: { id: true },
           })
-          if (duplicate) {
-            return
-          }
 
           const user = await tx.user.findUnique({
             where: { id: userId },
@@ -232,38 +230,50 @@ router.post("/", async (req: Request, res: Response) => {
             return
           }
 
-          // ✅ Hard reset credits to plan credits (prevents 1k vs 5k drift)
-          await tx.user.update({
-            where: { id: userId },
-            data: {
-              subscriptionStatus: mapStripeStatus(subscription.status),
-              subscriptionEndsAt: getItemPeriodEnd(subscription)
-                ? new Date(getItemPeriodEnd(subscription)! * 1000)
-                : null,
+          if (!duplicate) {
+            // ✅ Hard reset credits to plan credits (prevents 1k vs 5k drift)
+            await tx.user.update({
+              where: { id: userId },
+              data: {
+                subscriptionStatus: mapStripeStatus(subscription.status),
+                subscriptionEndsAt: getItemPeriodEnd(subscription)
+                  ? new Date(getItemPeriodEnd(subscription)! * 1000)
+                  : null,
+                plan,
+
+                // HARD RESET:
+                credits: refillCredits,
+                monthlyCredits: refillCredits,
+                monthlyResetAt: new Date(),
+              },
+            })
+
+            const ledgerMetadata: Prisma.InputJsonValue = {
+              stripeEventId: event.id,
+              stripeInvoiceId: invoice.id,
+              stripeSubscriptionId: subscription.id,
               plan,
+            }
 
-              // HARD RESET:
-              credits: refillCredits,
-              monthlyCredits: refillCredits,
-              monthlyResetAt: new Date(),
-            },
-          })
-
-          const ledgerMetadata: Prisma.InputJsonValue = {
-            stripeEventId: event.id,
-            stripeInvoiceId: invoice.id,
-            stripeSubscriptionId: subscription.id,
-            plan,
+            await tx.creditTransaction.create({
+              data: {
+                userId,
+                amount: refillCredits,
+                type: CreditType.CREDIT_ADD,
+                reason: "Monthly billing reset",
+                metadata: ledgerMetadata,
+              },
+            })
           }
 
-          await tx.creditTransaction.create({
-            data: {
-              userId,
-              amount: refillCredits,
-              type: CreditType.CREDIT_ADD,
-              reason: "Monthly billing reset",
-              metadata: ledgerMetadata,
-            },
+          // Always attempt: idempotent on stripeInvoiceId. Retries after a duplicate ledger row
+          // must still record commission if the first pass failed mid-transaction.
+          await recordReferralCommissionFromInvoice({
+            tx,
+            stripeEventId: event.id,
+            invoice,
+            refereeUserId: userId,
+            plan,
           })
         })
 

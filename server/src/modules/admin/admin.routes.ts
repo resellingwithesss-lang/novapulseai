@@ -10,11 +10,13 @@ import { requireAdmin } from "../auth/admin.middleware"
 import { requireCsrfForCookieAuth } from "../../middlewares/csrf-protect"
 import {
   Plan,
+  Prisma,
   Role,
   CreditType,
   SubscriptionStatus,
   EmailCampaignStatus,
   EmailLogType,
+  ReferralCommissionStatus,
 } from "@prisma/client"
 import { expandAdminBroadcastAsync } from "../../lib/email-broadcast"
 import { normalizePlanTier, PLAN_MONTHLY_GBP } from "../plans/plan.constants"
@@ -1047,6 +1049,158 @@ router.get("/email/campaigns", async (req, res) => {
   } catch (err) {
     console.error("ADMIN EMAIL CAMPAIGNS ERROR:", err)
     return fail(res, 500, "Failed to fetch email campaigns")
+  }
+})
+
+/* ===============================
+   REFERRALS / AFFILIATE OPS
+================================ */
+
+router.get("/referrals/summary", async (_req, res) => {
+  try {
+    const [totalRows, byStatus, signupsWithReferrer] = await Promise.all([
+      prisma.referralCommission.count(),
+      prisma.referralCommission.groupBy({
+        by: ["status"],
+        _count: { _all: true },
+        _sum: { commissionAmountMinor: true },
+      }),
+      prisma.user.count({
+        where: { deletedAt: null, referredByUserId: { not: null } },
+      }),
+    ])
+
+    const minor = (v: unknown): number => {
+      if (typeof v === "bigint") return Number(v)
+      if (typeof v === "number" && Number.isFinite(v)) return v
+      const n = Number(v)
+      return Number.isFinite(n) ? n : 0
+    }
+
+    const statusBreakdown = byStatus.map((r) => ({
+      status: r.status,
+      count: r._count._all,
+      totalCommissionMinor: minor(r._sum.commissionAmountMinor),
+    }))
+
+    return ok(res, {
+      totalCommissions: totalRows,
+      attributedSignups: signupsWithReferrer,
+      byStatus: statusBreakdown,
+      rateBps: Number(process.env.REFERRAL_COMMISSION_RATE_BPS ?? "500") || 500,
+      firstPaymentOnly: process.env.REFERRAL_FIRST_PAYMENT_ONLY !== "false",
+    })
+  } catch (err) {
+    console.error("ADMIN REFERRALS SUMMARY ERROR:", err)
+    return fail(res, 500, "Failed to fetch referral summary")
+  }
+})
+
+router.get("/referrals/commissions", async (req, res) => {
+  try {
+    const page = Math.max(Number(req.query.page) || 1, 1)
+    const limit = Math.min(Math.max(Number(req.query.limit) || 30, 1), 100)
+    const statusRaw = typeof req.query.status === "string" ? req.query.status.trim() : ""
+    const status = Object.values(ReferralCommissionStatus).includes(
+      statusRaw as ReferralCommissionStatus
+    )
+      ? (statusRaw as ReferralCommissionStatus)
+      : undefined
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : ""
+
+    const where = {
+      ...(status ? { status } : {}),
+      ...(search
+        ? {
+            OR: [
+              { stripeInvoiceId: { contains: search, mode: "insensitive" as const } },
+              {
+                referrer: {
+                  email: { contains: search, mode: "insensitive" as const },
+                },
+              },
+              {
+                referee: {
+                  email: { contains: search, mode: "insensitive" as const },
+                },
+              },
+            ],
+          }
+        : {}),
+    }
+
+    const [rows, total] = await Promise.all([
+      prisma.referralCommission.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+        select: {
+          id: true,
+          status: true,
+          currency: true,
+          invoiceAmountMinor: true,
+          commissionRateBps: true,
+          commissionAmountMinor: true,
+          plan: true,
+          stripeInvoiceId: true,
+          stripeEventId: true,
+          createdAt: true,
+          referrer: { select: { id: true, email: true, referralCode: true } },
+          referee: { select: { id: true, email: true } },
+        },
+      }),
+      prisma.referralCommission.count({ where }),
+    ])
+
+    return ok(res, {
+      page,
+      limit,
+      total,
+      commissions: rows.map((c) => ({
+        ...c,
+        createdAt: c.createdAt.toISOString(),
+      })),
+    })
+  } catch (err) {
+    console.error("ADMIN REFERRALS COMMISSIONS ERROR:", err)
+    return fail(res, 500, "Failed to fetch referral commissions")
+  }
+})
+
+router.patch("/referrals/commissions/:id", async (req, res) => {
+  try {
+    const { id } = req.params
+    const parsed = z
+      .object({
+        status: z.nativeEnum(ReferralCommissionStatus),
+      })
+      .safeParse(req.body ?? {})
+    if (!parsed.success) {
+      return fail(res, 400, "Invalid status", { errors: parsed.error.flatten() })
+    }
+
+    const updated = await prisma.referralCommission.update({
+      where: { id },
+      data: { status: parsed.data.status },
+      select: {
+        id: true,
+        status: true,
+        commissionAmountMinor: true,
+        currency: true,
+        stripeInvoiceId: true,
+        referrer: { select: { id: true, email: true } },
+        referee: { select: { id: true, email: true } },
+      },
+    })
+
+    return ok(res, { commission: updated })
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025") {
+      return fail(res, 404, "Commission not found")
+    }
+    console.error("ADMIN REFERRAL COMMISSION PATCH ERROR:", err)
+    return fail(res, 500, "Failed to update commission")
   }
 })
 

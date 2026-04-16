@@ -21,6 +21,11 @@ import {
   SubscriptionStatus,
   type User as DbUser,
 } from "@prisma/client"
+import {
+  generateUniqueReferralCode,
+  normalizeReferralCode,
+  resolveReferrerId,
+} from "../referrals/referral.service"
 
 const router = Router()
 
@@ -67,6 +72,7 @@ const googleClient = new OAuth2Client()
 const registerSchema = z.object({
   email: z.string().email().max(255),
   password: z.string().min(8).max(100),
+  referralCode: z.string().max(32).optional(),
 })
 
 const loginSchema = z.object({
@@ -87,6 +93,7 @@ const googleSchema = z.preprocess((raw: unknown) => {
   .object({
     idToken: z.string().min(10).optional(),
     accessToken: z.string().min(10).optional(),
+    referralCode: z.string().max(32).optional(),
   })
   .refine(
     (value) => Boolean(value.idToken || value.accessToken),
@@ -343,6 +350,13 @@ router.post("/register", credentialLimiter, async (req, res) => {
 
     const hashed = await bcrypt.hash(parsed.data.password, 12)
 
+    const refNorm = normalizeReferralCode(parsed.data.referralCode)
+    let referredByUserId: string | null = null
+    if (refNorm) {
+      referredByUserId = await resolveReferrerId(refNorm)
+    }
+    const referralCode = await generateUniqueReferralCode()
+
     const user = await prisma.user.create({
       data: {
         email,
@@ -353,6 +367,8 @@ router.post("/register", credentialLimiter, async (req, res) => {
         subscriptionStatus: "CANCELED",
         credits: 4,
         tokenVersion: 0,
+        referralCode,
+        ...(referredByUserId ? { referredByUserId } : {}),
       },
     })
 
@@ -559,6 +575,12 @@ router.post("/google", credentialLimiter, async (req, res) => {
         })
       } else {
         try {
+          const refNorm = normalizeReferralCode(parsed.data.referralCode)
+          let referredByUserId: string | null = null
+          if (refNorm) {
+            referredByUserId = await resolveReferrerId(refNorm)
+          }
+          const referralCode = await generateUniqueReferralCode()
           user = await prisma.user.create({
             data: {
               email,
@@ -568,6 +590,8 @@ router.post("/google", credentialLimiter, async (req, res) => {
               subscriptionStatus: SubscriptionStatus.CANCELED,
               credits: 4,
               tokenVersion: 0,
+              referralCode,
+              ...(referredByUserId ? { referredByUserId } : {}),
             },
           })
           googleAccountCreated = true

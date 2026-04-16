@@ -18,6 +18,8 @@ export type PersistedAdJobMetadata = {
   creativeMode?: "cinematic" | "ugc_social"
   /** Opt-in fast preview / dev capture+encode (see AD_FAST_PREVIEW, previewMode). */
   fastPreview?: boolean
+  /** Optional operator notes from Admin Ad Studio / API (audit + handoff). */
+  operatorBrief?: string
   /** How many top-scored variants to render (1 default). */
   renderTopVariants?: 1 | 2
   /** Completed (or failed) renders when `renderTopVariants` > 1. Primary `outputUrl` stays rank 1. */

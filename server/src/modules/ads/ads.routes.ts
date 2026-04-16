@@ -164,6 +164,8 @@ const generateSchema = z.object({
   sourceType: z.enum(["CONTENT_PACK", "GENERATION", "MANUAL"]).optional(),
   /** Dev / iteration: faster capture and lighter encodes (also enable via AD_FAST_PREVIEW). */
   previewMode: z.enum(["fast"]).optional(),
+  /** Operator / internal brief — stored on job metadata for traceability (does not replace site analysis). */
+  operatorBrief: z.string().trim().max(4000).optional(),
 })
 
 type GenerateBody = z.infer<typeof generateSchema>
@@ -1380,6 +1382,9 @@ router.post(
         creativeMode: data.creativeMode ?? "cinematic",
         renderTopVariants: renderTop,
         ...(fastPreview ? { fastPreview: true } : {}),
+        ...(data.operatorBrief && data.operatorBrief.length > 0
+          ? { operatorBrief: data.operatorBrief.slice(0, 4000) }
+          : {}),
       } satisfies PersistedAdJobMetadata as unknown as Prisma.InputJsonValue,
       ...(workspaceIdForJob ? { workspaceId: workspaceIdForJob } : {}),
       ...(data.sourceContentPackId

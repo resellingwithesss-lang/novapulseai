@@ -14,6 +14,11 @@ import {
   readCheckoutPlanIntent,
   setResumeCheckoutFlag,
 } from "@/lib/planIntent"
+import {
+  persistReferralFromSearchParams,
+  referralCodeForAuth,
+  normalizeReferralParam,
+} from "@/lib/referralCookie"
 
 function getSafeRedirectPath(candidate: string | null) {
   if (!candidate) return "/dashboard"
@@ -50,6 +55,8 @@ export default function RegisterPage() {
     const billing = searchParams.get("billing")
     if (plan) next.set("plan", plan)
     if (billing) next.set("billing", billing)
+    const ref = searchParams.get("ref")
+    if (ref) next.set("ref", ref)
     const q = next.toString()
     return q ? `/login?${q}` : "/login"
   }, [searchParams])
@@ -59,10 +66,16 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [emailTouched, setEmailTouched] = useState(false)
+  const [referralActive, setReferralActive] = useState(false)
 
   useEffect(() => {
     const intent = parsePlanIntentFromSearchParams(searchParams)
     if (intent) writeCheckoutPlanIntent(intent)
+  }, [searchParams])
+
+  useEffect(() => {
+    persistReferralFromSearchParams(searchParams)
+    setReferralActive(Boolean(referralCodeForAuth(searchParams)))
   }, [searchParams])
 
   useEffect(() => {
@@ -95,7 +108,10 @@ export default function RegisterPage() {
     try {
       setLoading(true)
       setError(null)
-      await register(email.trim(), password)
+      const refCode = referralCodeForAuth(searchParams)
+      await register(email.trim(), password, {
+        ...(refCode ? { referralCode: refCode } : {}),
+      })
       router.replace(
         postAuthPath(new URLSearchParams(window.location.search))
       )
@@ -120,7 +136,11 @@ export default function RegisterPage() {
           accessTokenLen: accessToken.length,
         })
       }
-      await api.post("/auth/google", { accessToken })
+      const refCode = referralCodeForAuth(searchParams)
+      await api.post("/auth/google", {
+        accessToken,
+        ...(refCode ? { referralCode: refCode } : {}),
+      })
       const next = await refreshUser({ silent: true })
       if (!next) {
         throw new ApiError(
@@ -138,6 +158,8 @@ export default function RegisterPage() {
       setLoading(false)
     }
   }
+
+  const referralFromUrlOnly = Boolean(normalizeReferralParam(searchParams.get("ref")))
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center px-4 py-12 sm:px-6">
@@ -159,6 +181,16 @@ export default function RegisterPage() {
               Join NovaPulseAI — credits, tools, and your creator library in one place.
             </p>
           </div>
+
+          {(referralFromUrlOnly || referralActive) && (
+            <div
+              className="mb-6 rounded-xl border border-purple-500/25 bg-purple-500/[0.08] px-4 py-3 text-sm leading-relaxed text-purple-50/95"
+              role="status"
+            >
+              You&apos;re creating an account through a referral link. Attribution applies to this new
+              account only and is recorded at signup.
+            </div>
+          )}
 
           {error && (
             <div

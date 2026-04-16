@@ -78,6 +78,14 @@ enum AuditAction {
   PASSWORD_RESET
   STRIPE_EVENT_PROCESSED
   GENERATION_CREATED
+  REFERRAL_COMMISSION_RECORDED
+}
+
+enum ReferralCommissionStatus {
+  PENDING
+  APPROVED
+  PAID
+  VOID
 }
 
 enum ContentPackStatus {
@@ -186,6 +194,15 @@ model User {
 
   totalGenerations Int @default(0)
 
+  /// Uppercase A–Z / 2–9 style code for referral links (lazy-assigned on first affiliate page load if null).
+  referralCode String? @unique
+  referredByUserId String?
+  referredBy       User?   @relation("UserReferralTree", fields: [referredByUserId], references: [id], onDelete: SetNull)
+  referredUsers    User[]  @relation("UserReferralTree")
+
+  referralEarnings ReferralCommission[] @relation("ReferralCommissionReferrer")
+  referralAsBuyer  ReferralCommission[] @relation("ReferralCommissionReferee")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -206,6 +223,41 @@ model User {
 
   @@unique([email, provider])
   @@index([email])
+  @@index([referredByUserId])
+}
+
+///////////////////////////////////////////////////////
+// REFERRALS / AFFILIATE
+///////////////////////////////////////////////////////
+
+model ReferralCommission {
+  id String @id @default(cuid())
+
+  referrerUserId String
+  referrer       User   @relation("ReferralCommissionReferrer", fields: [referrerUserId], references: [id], onDelete: Cascade)
+
+  refereeUserId String
+  referee       User   @relation("ReferralCommissionReferee", fields: [refereeUserId], references: [id], onDelete: Cascade)
+
+  stripeInvoiceId String @unique
+  stripeEventId   String?
+
+  currency String @default("gbp")
+  invoiceAmountMinor Int
+  commissionRateBps  Int @default(500)
+  commissionAmountMinor Int
+
+  plan Plan?
+
+  status ReferralCommissionStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([referrerUserId])
+  @@index([refereeUserId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 ///////////////////////////////////////////////////////

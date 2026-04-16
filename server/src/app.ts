@@ -29,6 +29,7 @@ import workspacesRoutes from "./modules/workspaces/workspaces.routes"
 import brandVoicesRoutes from "./modules/brand-voices/brand-voices.routes"
 import contentPacksRoutes from "./modules/content-packs/content-packs.routes"
 import settingsRoutes from "./modules/settings/settings.routes"
+import referralRoutes from "./modules/referrals/referral.routes"
 import { prisma } from "./lib/prisma"
 import { createCorsOptions } from "./lib/cors-allowlist"
 import { createToolLimiter, globalApiLimiter } from "./middlewares/rate-limits"
@@ -227,6 +228,7 @@ app.get("/readyz", async (_req: Request, res: Response) => {
 app.use("/api/auth", authRoutes)
 app.use("/api/email", emailRoutes)
 app.use("/api/settings", settingsRoutes)
+app.use("/api/referrals", referralRoutes)
 app.use("/api/activity", activityRoutes)
 app.use("/api/workflow", workflowRoutes)
 app.use("/api/workspaces", workspacesRoutes)

@@ -7,6 +7,7 @@ import {
   ChevronDown,
   CreditCard,
   Coins,
+  Gift,
   LogOut,
   Settings,
   Shield,
@@ -166,6 +167,10 @@ export default function UserAccountMenu({
             <Link href="/dashboard/billing" role="menuitem" prefetch className={row} onClick={close}>
               <CreditCard className="h-4 w-4 text-white/40" strokeWidth={1.75} aria-hidden />
               Billing
+            </Link>
+            <Link href="/dashboard/affiliate" role="menuitem" prefetch className={row} onClick={close}>
+              <Gift className="h-4 w-4 text-white/40" strokeWidth={1.75} aria-hidden />
+              Referrals
             </Link>
             <Link href="/pricing" role="menuitem" prefetch className={row} onClick={close}>
               <Sparkles className="h-4 w-4 text-white/40" strokeWidth={1.75} aria-hidden />

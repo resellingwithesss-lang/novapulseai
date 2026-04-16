@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import type { AdsJobRecord } from "@/hooks/useAdsJobPolling"
 import { useAdsJobPolling } from "@/hooks/useAdsJobPolling"
@@ -19,6 +20,7 @@ import AdsDualVariantCompare, {
 } from "./AdsDualVariantCompare"
 import AdsJobLineagePanel from "./AdsJobLineagePanel"
 import AdsJobOperatorReview from "./AdsJobOperatorReview"
+import { buildToolHandoffUrl } from "@/lib/tool-handoff"
 
 /** Matches main ad job worker progress bands (see admin ads page). */
 function stageFromProgressRerender(p: number) {
@@ -113,6 +115,20 @@ function readJobFastPreview(jobRecord: AdsJobRecord | null): boolean {
   return (m as Record<string, unknown>).fastPreview === true
 }
 
+function readOperatorBrief(jobRecord: AdsJobRecord | null): string | null {
+  const m = jobRecord?.metadata
+  if (!m || typeof m !== "object") return null
+  const v = (m as Record<string, unknown>).operatorBrief
+  return typeof v === "string" && v.trim() ? v.trim() : null
+}
+
+function readMetadataSiteUrl(jobRecord: AdsJobRecord | null): string | null {
+  const m = jobRecord?.metadata
+  if (!m || typeof m !== "object") return null
+  const v = (m as Record<string, unknown>).siteUrl
+  return typeof v === "string" && v.trim() ? v.trim() : null
+}
+
 export default function AdsJobReviewPanel({
   jobId,
   jobRecord,
@@ -194,6 +210,22 @@ export default function AdsJobReviewPanel({
     (outputUrlRaw ? normalizeOutputUrl(outputUrlRaw) : null)
 
   const lineage = useMemo(() => readJobLineage(jobRecord), [jobRecord])
+  const operatorBriefText = useMemo(() => readOperatorBrief(jobRecord), [jobRecord])
+  const metaSiteUrl = useMemo(() => readMetadataSiteUrl(jobRecord), [jobRecord])
+  const storyVideoHandoff = useMemo(() => {
+    if (!metaSiteUrl) return null
+    const plat = jobRecord?.platform
+    const platform =
+      plat === "tiktok" || plat === "instagram" || plat === "youtube" ? plat : undefined
+    return buildToolHandoffUrl("/dashboard/tools/story-video-maker", {
+      siteUrl: metaSiteUrl,
+      ...(operatorBriefText
+        ? { videoBrief: operatorBriefText.slice(0, 8000) }
+        : {}),
+      ...(platform ? { platform } : {}),
+      sourceType: "MANUAL",
+    })
+  }, [jobRecord?.platform, metaSiteUrl, operatorBriefText])
   const isFastPreviewJob = useMemo(
     () => readJobFastPreview(jobRecord),
     [jobRecord]
@@ -321,6 +353,30 @@ export default function AdsJobReviewPanel({
           refreshKey={reviewTick}
         />
       )}
+
+      {operatorBriefText ? (
+        <section className="rounded-2xl border border-purple-500/25 bg-purple-500/[0.06] p-5">
+          <h2 className="text-sm font-semibold text-purple-100/95">Operator brief</h2>
+          <p className="mt-2 whitespace-pre-wrap text-sm text-white/75">{operatorBriefText}</p>
+        </section>
+      ) : null}
+
+      {storyVideoHandoff ? (
+        <section className="rounded-2xl border border-white/12 bg-white/[0.04] p-5">
+          <h2 className="text-sm font-semibold text-white/90">Continue in Story Video Maker</h2>
+          <p className="mt-2 text-sm text-white/55">
+            Opens the user-facing Story Video tool with this site URL and the operator brief
+            prefilled when possible. Very long briefs can hit browser URL limits—if the field is
+            empty, paste the brief from the block above.
+          </p>
+          <Link
+            href={storyVideoHandoff}
+            className="mt-3 inline-flex rounded-lg border border-purple-400/35 bg-purple-500/15 px-4 py-2 text-sm font-medium text-purple-100 hover:bg-purple-500/25"
+          >
+            Open Story Video Maker
+          </Link>
+        </section>
+      ) : null}
 
       {lineage?.rerenderOfJobId && (
         <section className="rounded-2xl border border-cyan-500/25 bg-cyan-500/[0.06] p-5">

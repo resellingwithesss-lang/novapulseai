@@ -83,7 +83,11 @@ type AuthContextType = {
   trialHoursLeft: number | null
   trialUrgency: "soft" | "strong" | "critical" | null
   login: (email: string, password: string) => Promise<void>
-  register: (email: string, password: string) => Promise<void>
+  register: (
+    email: string,
+    password: string,
+    options?: { referralCode?: string }
+  ) => Promise<void>
   logout: () => Promise<void>
   refreshUser: (options?: RefreshOptions) => Promise<User | null>
 }
@@ -286,11 +290,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const register = useCallback(
-    async (email: string, password: string) => {
+    async (
+      email: string,
+      password: string,
+      options?: { referralCode?: string }
+    ) => {
       safeSet(() => setStatus("loading"))
 
       try {
-        await api.post("/auth/register", { email, password })
+        await api.post("/auth/register", {
+          email,
+          password,
+          ...(options?.referralCode
+            ? { referralCode: options.referralCode }
+            : {}),
+        })
         const next = await refreshUser({ silent: true, rethrow: true })
         if (!next) {
           throw new ApiError(
