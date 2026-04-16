@@ -3,6 +3,14 @@
 import { useEffect, useRef, useState } from "react"
 import dynamic from "next/dynamic"
 import { useSearchParams } from "next/navigation"
+import {
+  Captions,
+  Clapperboard,
+  Palette,
+  SlidersHorizontal,
+  Sparkles,
+  Upload,
+} from "lucide-react"
 import { api, ApiError } from "@/lib/api"
 import ToolPageShell from "@/components/tools/ToolPageShell"
 import { formatBlockedReason, useEntitlementSnapshot } from "@/hooks/useEntitlementSnapshot"
@@ -103,6 +111,30 @@ const CLIP_STAGE_LABELS: Record<string, string> = {
 export default function ClipperPage() {
   type SubtitleStyle = "clean" | "bold" | "viral" | "minimal"
   type LengthPreset = "15" | "30" | "45" | "60" | "custom"
+  type ClipLayoutPreset =
+    | "clean"
+    | "stream_overlay"
+    | "reaction_style"
+    | "podcast_clip"
+    | "gaming_style"
+  type StreamPlatform = "kick" | "twitch" | "youtube"
+  type CaptionStylePreset =
+    | "clean_minimal"
+    | "bold_viral"
+    | "highlight_words"
+    | "subtitle_style"
+    | "high_contrast"
+  type CaptionColorTheme = "white" | "yellow" | "green" | "purple" | "custom"
+  type LayoutOption = {
+    value: ClipLayoutPreset
+    label: string
+    description: string
+  }
+  type CaptionOption = {
+    value: CaptionStylePreset
+    label: string
+    description: string
+  }
 
   const searchParams = useSearchParams()
   const { entitlement } = useEntitlementSnapshot()
@@ -111,7 +143,13 @@ export default function ClipperPage() {
   const [youtubeUrl, setYoutubeUrl] = useState("")
   const [clips, setClips] = useState(5)
   const [platform, setPlatform] = useState<"tiktok" | "instagram" | "youtube">("tiktok")
-  const [subtitleStyle, setSubtitleStyle] = useState<SubtitleStyle>("clean")
+  const [clipLayoutPreset, setClipLayoutPreset] = useState<ClipLayoutPreset>("clean")
+  const [streamerName, setStreamerName] = useState("")
+  const [streamPlatform, setStreamPlatform] = useState<StreamPlatform>("twitch")
+  const [captionStylePreset, setCaptionStylePreset] = useState<CaptionStylePreset>("clean_minimal")
+  const [captionColorTheme, setCaptionColorTheme] = useState<CaptionColorTheme>("white")
+  const [captionCustomColor, setCaptionCustomColor] = useState("#FFFFFF")
+  const [styleCustomized, setStyleCustomized] = useState(false)
   const [captionMode, setCaptionMode] = useState<"burn" | "srt" | "both">("both")
   const [clipLengthPreset, setClipLengthPreset] = useState<LengthPreset>("30")
   const [customClipLengthSec, setCustomClipLengthSec] = useState(30)
@@ -138,12 +176,123 @@ export default function ClipperPage() {
   const [repeatUsageCount, setRepeatUsageCount] = useState(0)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [packAngleHint, setPackAngleHint] = useState("")
+  const normalizeHex = (value: string) => {
+    const trimmed = value.trim()
+    return /^#[0-9A-Fa-f]{6}$/.test(trimmed) ? trimmed.toUpperCase() : null
+  }
+  const layoutOptions: LayoutOption[] = [
+    {
+      value: "clean",
+      label: "Clean",
+      description: "Pure clip output with no branding overlays.",
+    },
+    {
+      value: "stream_overlay",
+      label: "Creator Stream Overlay",
+      description: "Identity bar treatment for streamer-style packaging.",
+    },
+    {
+      value: "reaction_style",
+      label: "Reaction Focus",
+      description: "Text-forward framing tuned for reaction edits.",
+    },
+    {
+      value: "podcast_clip",
+      label: "Podcast Subtitles",
+      description: "Conversation-friendly layout with subtitle emphasis.",
+    },
+    {
+      value: "gaming_style",
+      label: "Gaming Impact",
+      description: "High-contrast treatment for fast gameplay pacing.",
+    },
+  ]
+
+  const captionOptions: CaptionOption[] = [
+    {
+      value: "clean_minimal",
+      label: "Clean Minimal",
+      description: "Low-noise, lightweight captions for polished edits.",
+    },
+    {
+      value: "bold_viral",
+      label: "Bold Viral",
+      description: "Large punchy words optimized for short-form retention.",
+    },
+    {
+      value: "highlight_words",
+      label: "Highlight Words",
+      description: "Key terms pop to reinforce hooks and payoff moments.",
+    },
+    {
+      value: "subtitle_style",
+      label: "Subtitle Style",
+      description: "Classic subtitle rhythm for long sentence readability.",
+    },
+    {
+      value: "high_contrast",
+      label: "High Contrast",
+      description: "Maximum readability for noisy or low-light footage.",
+    },
+  ]
+
   const clipAccess = entitlement?.featureAccess.clip
   const blockedMessage = formatBlockedReason(
     clipAccess?.blockedReason ?? null,
     clipAccess?.minimumPlan ?? null
   )
   const canGenerateByEntitlement = clipAccess ? clipAccess.allowed : true
+
+  const resolveSubtitleStyle = (): SubtitleStyle => {
+    switch (captionStylePreset) {
+      case "clean_minimal":
+        return "clean"
+      case "bold_viral":
+        return "viral"
+      case "highlight_words":
+        return "bold"
+      case "subtitle_style":
+        return "minimal"
+      case "high_contrast":
+        return "bold"
+      default:
+        return "clean"
+    }
+  }
+
+  const captionStyleHelper = (() => {
+    switch (captionStylePreset) {
+      case "clean_minimal":
+        return "Lightweight lower-third captions with minimal decoration."
+      case "bold_viral":
+        return "Large, punchy captions optimized for short-form thumb-stop moments."
+      case "highlight_words":
+        return "Key words pop with stronger emphasis to improve retention."
+      case "subtitle_style":
+        return "Traditional subtitle treatment with cleaner rhythm."
+      case "high_contrast":
+        return "Maximum readability treatment for noisy or fast visuals."
+      default:
+        return ""
+    }
+  })()
+
+  const layoutHelper = (() => {
+    switch (clipLayoutPreset) {
+      case "clean":
+        return "No extra overlays; pure clip with your caption treatment."
+      case "stream_overlay":
+        return "Adds streamer-style name bar treatment for creator identity."
+      case "reaction_style":
+        return "Optimized for reaction framing with text-forward pacing."
+      case "podcast_clip":
+        return "Centered conversational framing with subtitle-first readability."
+      case "gaming_style":
+        return "High-contrast treatment suited for fast, energetic gameplay edits."
+      default:
+        return ""
+    }
+  })()
 
   useEffect(() => {
     const source = searchParams.get("source")
@@ -175,7 +324,10 @@ export default function ClipperPage() {
       subtitleParam === "viral" ||
       subtitleParam === "minimal"
     ) {
-      setSubtitleStyle(subtitleParam)
+      if (subtitleParam === "clean") setCaptionStylePreset("clean_minimal")
+      if (subtitleParam === "bold") setCaptionStylePreset("highlight_words")
+      if (subtitleParam === "viral") setCaptionStylePreset("bold_viral")
+      if (subtitleParam === "minimal") setCaptionStylePreset("subtitle_style")
     }
     if (context) {
       setRequestContextId(context)
@@ -186,6 +338,25 @@ export default function ClipperPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (styleCustomized) return
+    if (platform === "tiktok") {
+      setClipLayoutPreset("reaction_style")
+      setCaptionStylePreset("bold_viral")
+      setCaptionColorTheme("yellow")
+      return
+    }
+    if (platform === "youtube") {
+      setClipLayoutPreset("podcast_clip")
+      setCaptionStylePreset("subtitle_style")
+      setCaptionColorTheme("white")
+      return
+    }
+    setClipLayoutPreset("clean")
+    setCaptionStylePreset("clean_minimal")
+    setCaptionColorTheme("white")
+  }, [platform, styleCustomized])
 
   useEffect(() => {
     pollAbortRef.current = false
@@ -284,13 +455,30 @@ export default function ClipperPage() {
 
       formData.append("clips", String(clips))
       formData.append("platform", platform)
-      formData.append("subtitleStyle", subtitleStyle)
+      formData.append("subtitleStyle", resolveSubtitleStyle())
       formData.append("clipLengthPreset", clipLengthPreset)
       if (clipLengthPreset === "custom") {
         formData.append("customClipLengthSec", String(customClipLengthSec))
       }
       formData.append("captionsEnabled", captionsEnabled ? "true" : "false")
       formData.append("captionMode", captionsEnabled ? captionMode : "both")
+      formData.append("clipLayoutPreset", clipLayoutPreset)
+      if (clipLayoutPreset === "stream_overlay") {
+        const safeStreamerName = streamerName.trim()
+        if (safeStreamerName) formData.append("streamerName", safeStreamerName)
+        formData.append("streamPlatform", streamPlatform)
+      }
+      formData.append("captionStylePreset", captionStylePreset)
+      formData.append("captionColorTheme", captionColorTheme)
+      if (captionColorTheme === "custom") {
+        const safeHex = normalizeHex(captionCustomColor)
+        if (!safeHex) {
+          setError("Custom caption color must be a valid hex value like #FACC15.")
+          setLoading(false)
+          return
+        }
+        formData.append("captionCustomColor", safeHex)
+      }
 
       const enqueued = await api.post<CreateClipJobResponse>("/clip/create", formData, {
         timeout: 120_000,
@@ -423,11 +611,21 @@ export default function ClipperPage() {
       ctaHref="/dashboard/tools/story-maker"
       ctaLabel="Open Story Maker"
     >
-      <div className="space-y-5 rounded-2xl border border-white/10 bg-[#111827] p-7 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
-        <div>
-          <label className="mb-2 block text-xs uppercase tracking-wide text-white/60">
-            Source
-          </label>
+      <div className="space-y-6">
+        <section className="np-card p-5 md:p-6">
+          <div className="mb-5 flex items-start gap-3">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-2">
+              <Upload className="h-4 w-4 text-white/75" aria-hidden />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold tracking-[-0.01em] text-white/92">
+                Source
+              </h3>
+              <p className="mt-1 text-xs text-white/55">
+                Choose one long-form source. Jobs run server-side and stream status updates here.
+              </p>
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-black/20 p-1">
             <button
               type="button"
@@ -461,7 +659,7 @@ export default function ClipperPage() {
           <p className="mt-2 text-xs text-white/45">
             Only one source is used per run — upload takes priority if both were ever present.
           </p>
-        </div>
+        </section>
 
         {packAngleHint && (
           <div className="rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-4 py-3 text-sm text-white/80">
@@ -475,7 +673,20 @@ export default function ClipperPage() {
           </div>
         )}
 
-        <div>
+        <section className="np-card p-5 md:p-6">
+          <div className="mb-5 flex items-start gap-3">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-2">
+              <SlidersHorizontal className="h-4 w-4 text-white/75" aria-hidden />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold tracking-[-0.01em] text-white/92">
+                Clip Settings
+              </h3>
+              <p className="mt-1 text-xs text-white/55">
+                Control platform target, count, and clip length strategy.
+              </p>
+            </div>
+          </div>
           {sourceMode === "upload" ? (
             <>
               <label className="mb-2 block text-xs uppercase tracking-wide text-white/60">
@@ -508,18 +719,18 @@ export default function ClipperPage() {
               />
             </>
           )}
-        </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-2 block text-xs uppercase tracking-wide text-white/60">
               Target platform
             </label>
             <select
               value={platform}
-              onChange={(e) =>
+              onChange={(e) => {
                 setPlatform(e.target.value as "tiktok" | "instagram" | "youtube")
-              }
+                setStyleCustomized(false)
+              }}
               className="w-full rounded-lg border border-white/15 bg-black/30 p-2.5 text-white"
             >
               <option value="tiktok">TikTok</option>
@@ -529,7 +740,7 @@ export default function ClipperPage() {
           </div>
           <div>
             <label className="mb-2 block text-xs uppercase tracking-wide text-white/60">
-              Clips to generate
+              Number of clips
             </label>
             <input
               type="number"
@@ -541,10 +752,13 @@ export default function ClipperPage() {
               }
               className="w-full rounded-lg border border-white/15 bg-black/30 p-2.5 text-white"
             />
+            <p className="mt-2 text-xs text-white/45">
+              More clips increase processing time and can reduce per-clip selectivity.
+            </p>
           </div>
         </div>
 
-        <div>
+        <div className="mt-4">
           <label className="mb-2 block text-xs uppercase tracking-wide text-white/60">
             Clip length
           </label>
@@ -577,7 +791,108 @@ export default function ClipperPage() {
             segment.
           </p>
         </div>
+        </section>
 
+        <section className="np-card p-5 md:p-6">
+          <div className="mb-5 flex items-start gap-3">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-2">
+              <Palette className="h-4 w-4 text-white/75" aria-hidden />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold tracking-[-0.01em] text-white/92">
+                Visual Style
+              </h3>
+              <p className="mt-1 text-xs text-white/55">
+                Choose how packaged clips should look in the final output style pass.
+              </p>
+            </div>
+          </div>
+          <div>
+            <label className="mb-2 block text-xs uppercase tracking-wide text-white/60">
+              Clip Style
+            </label>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {layoutOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => {
+                    setClipLayoutPreset(opt.value)
+                    setStyleCustomized(true)
+                  }}
+                  className={`rounded-lg border px-3 py-2 text-left transition ${
+                    clipLayoutPreset === opt.value
+                      ? "border-purple-400/50 bg-purple-500/15 text-white"
+                      : "border-white/10 bg-black/25 text-white/80 hover:border-white/20 hover:bg-white/5"
+                  }`}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-wide">
+                    {opt.label}
+                  </p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-white/55">
+                    {opt.description}
+                  </p>
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-white/45">
+              {layoutHelper} Smart defaults follow the selected platform until you customize.
+            </p>
+          </div>
+          {clipLayoutPreset === "stream_overlay" && (
+            <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3 sm:p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-white/60">
+                Stream overlay details
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-xs uppercase tracking-wide text-white/60">
+                    Streamer name
+                  </label>
+                  <input
+                    type="text"
+                    value={streamerName}
+                    onChange={(e) => setStreamerName(e.target.value)}
+                    placeholder="e.g. NovaPulseLive"
+                    className="w-full rounded-lg border border-white/15 bg-black/30 p-2.5 text-white placeholder:text-white/35"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-xs uppercase tracking-wide text-white/60">
+                    Stream platform
+                  </label>
+                  <select
+                    value={streamPlatform}
+                    onChange={(e) => setStreamPlatform(e.target.value as StreamPlatform)}
+                    className="w-full rounded-lg border border-white/15 bg-black/30 p-2.5 text-white"
+                  >
+                    <option value="kick">Kick</option>
+                    <option value="twitch">Twitch</option>
+                    <option value="youtube">YouTube</option>
+                  </select>
+                </div>
+              </div>
+              <p className="mt-3 text-xs text-white/45">
+                Overlay text is stored with the job as packaging intent for future render styling.
+              </p>
+            </div>
+          )}
+        </section>
+
+        <section className="np-card p-5 md:p-6">
+          <div className="mb-5 flex items-start gap-3">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-2">
+              <Captions className="h-4 w-4 text-white/75" aria-hidden />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold tracking-[-0.01em] text-white/92">
+                Captions
+              </h3>
+              <p className="mt-1 text-xs text-white/55">
+                Tune caption style, contrast, and export behavior.
+              </p>
+            </div>
+          </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 p-3">
             <input
@@ -610,20 +925,81 @@ export default function ClipperPage() {
           </label>
         </div>
 
-        <div>
+        <div className="mt-4">
           <label className="mb-2 block text-xs uppercase tracking-wide text-white/60">
-            Caption style (when captions on)
+            Caption style
           </label>
-          <select
-            value={subtitleStyle}
-            onChange={(e) => setSubtitleStyle(e.target.value as SubtitleStyle)}
-            className="w-full rounded-lg border border-white/15 bg-black/30 p-2.5 text-white"
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {captionOptions.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  setCaptionStylePreset(opt.value)
+                  setStyleCustomized(true)
+                }}
+                className={`rounded-lg border px-3 py-2 text-left transition ${
+                  captionStylePreset === opt.value
+                    ? "border-purple-400/50 bg-purple-500/15 text-white"
+                    : "border-white/10 bg-black/25 text-white/80 hover:border-white/20 hover:bg-white/5"
+                }`}
+              >
+                <p className="text-xs font-semibold uppercase tracking-wide">
+                  {opt.label}
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-white/55">
+                  {opt.description}
+                </p>
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-white/45">{captionStyleHelper}</p>
+        </div>
+
+        <div className="mt-4">
+          <label className="mb-2 block text-xs uppercase tracking-wide text-white/60">
+            Caption color theme
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {(["white", "yellow", "green", "purple", "custom"] as CaptionColorTheme[]).map((theme) => (
+              <button
+                key={theme}
+                type="button"
+                onClick={() => {
+                  setCaptionColorTheme(theme)
+                  setStyleCustomized(true)
+                }}
+                className={`rounded-full border px-3 py-1.5 text-xs font-medium capitalize transition ${
+                  captionColorTheme === theme
+                    ? "border-purple-400/45 bg-purple-500/20 text-white"
+                    : "border-white/15 bg-black/20 text-white/75 hover:border-white/25 hover:bg-white/5"
+                }`}
+              >
+                {theme}
+              </button>
+            ))}
+          </div>
+          {captionColorTheme === "custom" && (
+            <div className="mt-2 flex items-center gap-3">
+              <input
+                type="color"
+                value={captionCustomColor}
+                onChange={(e) => {
+                  setCaptionCustomColor(e.target.value)
+                  setStyleCustomized(true)
+                }}
+                className="h-9 w-12 rounded-md border border-white/20 bg-transparent"
+              />
+              <span className="text-xs text-white/55">{captionCustomColor}</span>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setStyleCustomized(false)}
+            className="np-btn np-btn-chip mt-3"
           >
-            <option value="clean">Clean</option>
-            <option value="bold">Bold</option>
-            <option value="viral">Viral</option>
-            <option value="minimal">Minimal</option>
-          </select>
+            Re-apply platform defaults
+          </button>
         </div>
 
         {captionsEnabled && (
@@ -648,7 +1024,80 @@ export default function ClipperPage() {
             </p>
           </div>
         )}
+        </section>
 
+        <section className="np-card-soft p-5 md:p-6">
+          <div className="mb-3 flex items-start gap-3">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-2">
+              <Sparkles className="h-4 w-4 text-white/75" aria-hidden />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold tracking-[-0.01em] text-white/90">
+                Style Preview
+              </h3>
+              <p className="mt-1 text-xs text-white/55">
+                Visual intent preview only — final rendering still uses your selected packaging pipeline.
+              </p>
+            </div>
+          </div>
+          <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black/40 p-4">
+            {clipLayoutPreset === "stream_overlay" && (
+              <div className="mb-3 flex items-center justify-between rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] uppercase tracking-wide text-white/80">
+                <span>{streamerName.trim() || "Streamer Name"}</span>
+                <span className="text-white/60">{streamPlatform.toUpperCase()}</span>
+              </div>
+            )}
+            <div className="h-24 rounded-lg bg-gradient-to-br from-white/10 via-white/5 to-transparent" />
+            <div className="mt-3 space-y-2">
+              <div
+                className="inline-flex rounded px-2 py-1 text-xs font-semibold"
+                style={{
+                  color:
+                    captionColorTheme === "custom"
+                      ? captionCustomColor
+                      : captionColorTheme === "yellow"
+                        ? "#FDE047"
+                        : captionColorTheme === "green"
+                          ? "#86EFAC"
+                          : captionColorTheme === "purple"
+                            ? "#C4B5FD"
+                            : "#FFFFFF",
+                  background:
+                    captionStylePreset === "clean_minimal"
+                      ? "transparent"
+                      : "rgba(0,0,0,0.45)",
+                }}
+              >
+                {captionStylePreset.replace("_", " ").replace(/\b\w/g, (m) => m.toUpperCase())}
+              </div>
+              <p className="text-xs text-white/55">
+                Layout: {layoutOptions.find((opt) => opt.value === clipLayoutPreset)?.label ?? clipLayoutPreset}
+                {" · "}
+                Caption style: {captionOptions.find((opt) => opt.value === captionStylePreset)?.label ?? captionStylePreset}
+                {" · "}
+                Theme: {captionColorTheme === "custom" ? "Custom" : captionColorTheme}
+              </p>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-white/45">
+            Preview is a style summary, not a rendered frame. Final output still depends on source content and job pipeline.
+          </p>
+        </section>
+
+        <section className="np-card p-5 md:p-6">
+          <div className="mb-4 flex items-start gap-3">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-2">
+              <Clapperboard className="h-4 w-4 text-white/75" aria-hidden />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold tracking-[-0.01em] text-white/92">
+                Output
+              </h3>
+              <p className="mt-1 text-xs text-white/55">
+                Start the job and monitor each stage while clips are packaged on the server.
+              </p>
+            </div>
+          </div>
         <button
           type="button"
           onClick={() => void generate()}
@@ -709,6 +1158,7 @@ export default function ClipperPage() {
             </div>
           </div>
         )}
+        </section>
       </div>
 
       {results.length > 0 && (

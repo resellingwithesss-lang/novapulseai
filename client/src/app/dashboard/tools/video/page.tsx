@@ -302,7 +302,9 @@ Hashtags:
 ${r.hashtags.join(" ")}
 `).join("\n\n========================\n\n")
 
-    navigator.clipboard.writeText(text)
+    navigator.clipboard.writeText(text).catch(() => {
+      setError("Clipboard access failed. Copy each variation manually.")
+    })
 
   }, [result])
 

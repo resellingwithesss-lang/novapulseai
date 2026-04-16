@@ -130,6 +130,8 @@ export function generationToolHref(type: ActivityGenerationRow["type"]): string 
       return "/dashboard/tools/video"
     case "STORY":
       return "/dashboard/tools/story-maker"
+    case "VIDEO_BLUEPRINT":
+      return "/dashboard/tools/story-video-maker"
     default:
       return "/dashboard/tools/video"
   }
