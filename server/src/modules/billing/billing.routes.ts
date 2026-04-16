@@ -286,7 +286,7 @@ async function checkoutOrChangePlan(req: AuthRequest, res: Response) {
           const classificationResult = classifyPlanChangeRequest({
             currentPlan,
             targetPlan,
-            billing,
+            targetBilling: billing,
             currentStripePriceId: currentItem.price.id,
             subscriptionStatus: user.subscriptionStatus,
           })
@@ -544,7 +544,7 @@ async function checkoutOrChangePlan(req: AuthRequest, res: Response) {
       const reuseClassification = classifyPlanChangeRequest({
         currentPlan,
         targetPlan,
-        billing,
+        targetBilling: billing,
         currentStripePriceId: currentItem.price.id,
         subscriptionStatus: user.subscriptionStatus,
       })
