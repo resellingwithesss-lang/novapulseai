@@ -147,7 +147,48 @@ function extractCandidatePathsFromOutput(text: string): string[] {
   return [...new Set(out)]
 }
 
-function classifyYoutubeDlError(stderr: string, stdout: string): string {
+/** End-user safe copy (no raw stderr). */
+const MSG_YT_BLOCKED_SERVER_SIDE =
+  "This YouTube video is blocked for server-side download right now. Try another public link, upload the video directly, or configure cookies support (YT_DLP_COOKIES) for operator use."
+
+const MSG_YT_JS_RUNTIME_USER =
+  "This YouTube link cannot be downloaded automatically from our servers right now. Upload the video file for the most reliable result."
+
+type YoutubeDlClassifyCtx = {
+  cookiesConfigured: boolean
+}
+
+function logYoutubeDlOperatorHints(
+  userMessage: string,
+  stderr: string,
+  ctx: YoutubeDlClassifyCtx
+): void {
+  const t = `${stderr}`.toLowerCase()
+  if (
+    /not a bot|bot check|sign in to confirm|cookies|authentication|login required|use --cookies/i.test(
+      t
+    ) ||
+    userMessage === MSG_YT_BLOCKED_SERVER_SIDE
+  ) {
+    log.warn("youtube_dl_operator_workflow", {
+      cookiesConfigured: ctx.cookiesConfigured,
+      hint:
+        "Operator: Netscape-format cookies.txt → set YT_DLP_COOKIES to its path on the API host and redeploy. Datacenter IPs are often challenged; uploading the source file is the reliable path for creators.",
+    })
+  }
+  if (/no supported javascript runtime|javascript runtime|\bejs\b|formats may be missing/i.test(t)) {
+    log.warn("youtube_dl_operator_js_runtime", {
+      hint: "Operator: container sets YT_DLP_JS_RUNTIMES (Deno + Node) for yt-dlp EJS. Override env if needed. See https://github.com/yt-dlp/yt-dlp/wiki/EJS",
+      cookiesConfigured: ctx.cookiesConfigured,
+    })
+  }
+}
+
+function classifyYoutubeDlError(
+  stderr: string,
+  stdout: string,
+  ctx: YoutubeDlClassifyCtx
+): string {
   const text = `${stderr}\n${stdout}`.toLowerCase()
 
   if (/no such option:\s*--no-newline|no such option:.*newline/i.test(text)) {
@@ -156,12 +197,24 @@ function classifyYoutubeDlError(stderr: string, stdout: string): string {
   if (/no such option:/i.test(text)) {
     return "Server misconfiguration: an invalid yt-dlp option was passed. Check server logs for the exact flag and redeploy."
   }
-  if (/sign in to confirm you.?re not a bot|not a bot|bot check/i.test(text)) {
-    return "YouTube blocked automated access (bot check). Try again later, set YT_DLP_COOKIES, or upload the video file."
+
+  const botOrHumanCheck =
+    /sign in to confirm you.?re not a bot|not a bot|confirm you.?re not a bot|bot check|are you a human/i.test(
+      text
+    )
+  const cookiesRequired =
+    /use --cookies|cookies.*required|this video requires.*cookie|authentication.*cookie|login.*cookie/i.test(
+      text
+    )
+
+  if (botOrHumanCheck || cookiesRequired) {
+    return MSG_YT_BLOCKED_SERVER_SIDE
   }
-  if (/no supported javascript runtime|javascript runtime|ejs\b|formats may be missing/i.test(text)) {
-    return "YouTube extraction is degraded on this server (JavaScript runtime / EJS). Update yt-dlp or install a JS runtime per yt-dlp docs, or upload the file."
+
+  if (/no supported javascript runtime|javascript runtime|\bejs\b|formats may be missing/i.test(text)) {
+    return MSG_YT_JS_RUNTIME_USER
   }
+
   if (/private video|members only|is private|privacy status/i.test(text)) {
     return "Private video: this link is not publicly accessible. Upload the file instead or use a public URL."
   }
@@ -419,6 +472,13 @@ function buildFlags(
     fragmentRetries: 3,
     noColor: true,
     noProgress: true,
+    /**
+     * yt-dlp YouTube EJS / player scripts (see yt-dlp wiki/EJS).
+     * Docker image sets YT_DLP_JS_RUNTIMES (Deno + Node). Override per environment if needed.
+     */
+    jsRuntimes:
+      process.env.YT_DLP_JS_RUNTIMES?.trim() ||
+      "deno:/usr/local/bin/deno,node:/usr/local/bin/node",
   }
 
   if (cookiesPath) {
@@ -479,6 +539,15 @@ export const downloadYoutubeVideo = async (url: string): Promise<string> => {
   const cookiesPath = resolveCookiesPath()
   const ytDlp = createYtDlp(bin)
 
+  if (cookiesPath) {
+    log.info("youtube_dl_cookies_configured", { path: cookiesPath })
+  } else {
+    log.info("youtube_dl_cookies_not_configured", {
+      operatorNote:
+        "YT_DLP_COOKIES is not set. YouTube may return bot checks or limited formats; operators can mount a Netscape cookies.txt and set this env on the API service.",
+    })
+  }
+
   let lastStderr = ""
   let lastStdout = ""
   let lastCommand = ""
@@ -517,6 +586,7 @@ export const downloadYoutubeVideo = async (url: string): Promise<string> => {
         }
       })(),
       cookies: Boolean(cookiesPath),
+      jsRuntimes: String(flags.jsRuntimes ?? ""),
     })
 
     try {
@@ -638,9 +708,11 @@ export const downloadYoutubeVideo = async (url: string): Promise<string> => {
     }
   }
 
+  const classifyCtx: YoutubeDlClassifyCtx = { cookiesConfigured: Boolean(cookiesPath) }
   const friendly = lastProblemWasResolution
     ? "Download completed but output file missing: yt-dlp finished but no valid video file could be confirmed. Check server logs or upload the file."
-    : classifyYoutubeDlError(lastStderr, lastStdout)
+    : classifyYoutubeDlError(lastStderr, lastStdout, classifyCtx)
+  logYoutubeDlOperatorHints(friendly, lastStderr, classifyCtx)
   const devDetail =
     !isProduction && (lastStderr || lastStdout)
       ? `\n\n--- yt-dlp raw (dev) ---\nexit=${lastExitCode ?? "?"}\n${lastCommand}\n\n${lastStderr}\n${lastStdout}`

@@ -6,9 +6,12 @@ import { findRootJobRow, readJobMetadata } from "../ads/ad-job-lineage"
 import { fail, ok } from "../../lib/http"
 import { resolveRequestId } from "../../lib/tool-response"
 import { requireAuth, AuthRequest } from "../auth/auth.middleware"
-import { requireAdmin } from "../auth/admin.middleware"
+import { requireAdmin, requireSuperAdmin } from "../auth/admin.middleware"
+import { setAuthTokenCookie, setImpRestoreCookie } from "../auth/http-cookies"
+import { signImpersonationJwt } from "../auth/jwt-signing"
 import { requireCsrfForCookieAuth } from "../../middlewares/csrf-protect"
 import {
+  AuditAction,
   Plan,
   Prisma,
   Role,
@@ -1203,5 +1206,81 @@ router.patch("/referrals/commissions/:id", async (req, res) => {
     return fail(res, 500, "Failed to update commission")
   }
 })
+
+const impersonationStartSchema = z.object({
+  userId: z.string().uuid(),
+})
+
+router.post(
+  "/impersonation/start",
+  requireSuperAdmin,
+  async (req: AuthRequest, res: Response) => {
+    const parsed = impersonationStartSchema.safeParse(req.body ?? {})
+    if (!parsed.success) {
+      return fail(res, 400, "Invalid request", { issues: parsed.error.flatten() })
+    }
+
+    const backup =
+      typeof req.cookies?.token === "string" ? req.cookies.token.trim() : ""
+    if (!backup) {
+      return fail(
+        res,
+        400,
+        "Cookie session required for preview — open the app in this browser (not API-only / Bearer-only clients)."
+      )
+    }
+
+    const target = await prisma.user.findUnique({
+      where: { id: parsed.data.userId },
+    })
+    if (!target || target.deletedAt) {
+      return fail(res, 404, "User not found")
+    }
+    if (target.banned) {
+      return fail(res, 403, "Cannot preview banned accounts")
+    }
+    if (target.role === Role.SUPER_ADMIN) {
+      return fail(res, 403, "Cannot preview super admin accounts")
+    }
+    if (target.id === req.user!.id) {
+      return fail(res, 400, "Already signed in as this account")
+    }
+
+    const impersonatorId = req.user!.id
+    const token = signImpersonationJwt({
+      userId: target.id,
+      role: target.role,
+      tokenVersion: target.tokenVersion,
+      impersonatorId,
+    })
+
+    setImpRestoreCookie(res, backup)
+    setAuthTokenCookie(res, token)
+
+    const requestId = resolveRequestId(req)
+
+    try {
+      await prisma.auditLog.create({
+        data: {
+          userId: impersonatorId,
+          action: AuditAction.ADMIN_IMPERSONATION_START,
+          metadata: {
+            targetUserId: target.id,
+            targetEmail: target.email,
+            impersonatorId,
+          },
+          requestId,
+        },
+      })
+    } catch (err) {
+      console.error("ADMIN_IMPERSONATION_START audit:", err)
+    }
+
+    return ok(res, {
+      previewUserId: target.id,
+      previewEmail: target.email,
+    })
+  }
+)
 
 export default router

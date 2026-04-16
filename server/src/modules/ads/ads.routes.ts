@@ -22,6 +22,14 @@ import {
 
 import { generateAdScriptsPerformancePack, generateVoiceover } from "./ads.service"
 import {
+  resolveStudioCreativeMode,
+  resolveVideoPackaging,
+  STUDIO_CREATIVE_MODE_ENUM,
+  VIDEO_PACKAGING_ENUM,
+  type VideoPackagingPresetId,
+} from "./pipeline/ad.studio-modes"
+import { generateSilentVoiceTrack } from "./voice/voiceover.generator"
+import {
   analyzeWebsite,
   analysisToSiteIngestion,
   type WebsiteAnalysis,
@@ -166,6 +174,18 @@ const generateSchema = z.object({
   previewMode: z.enum(["fast"]).optional(),
   /** Operator / internal brief — stored on job metadata for traceability (does not replace site analysis). */
   operatorBrief: z.string().trim().max(4000).optional(),
+  /** Ad Studio creative mode — drives LLM directive + variant ordering + default packaging. */
+  studioCreativeMode: z.enum(STUDIO_CREATIVE_MODE_ENUM).optional(),
+  /** Override caption / lower-third packaging (otherwise studio default or story_cinematic). */
+  videoPackaging: z.enum(VIDEO_PACKAGING_ENUM).optional(),
+  /** ai_openai_tts = real OpenAI speech; silent_music_only = music bed only (no VO). */
+  voiceMode: z.enum(["ai_openai_tts", "silent_music_only"]).optional().default("ai_openai_tts"),
+  /** Optional 6-char hex without # — accent for streamer / highlight caption styles. */
+  captionAccentHex: z
+    .string()
+    .trim()
+    .regex(/^[0-9A-Fa-f]{6}$/)
+    .optional(),
 })
 
 type GenerateBody = z.infer<typeof generateSchema>
@@ -275,6 +295,9 @@ async function executeSingleVariantRender(params: {
   platform: GenerateBody["platform"]
   ultra: boolean
   voice: NonNullable<GenerateBody["voice"]>
+  voiceMode?: "ai_openai_tts" | "silent_music_only"
+  videoPackaging?: VideoPackagingPresetId
+  captionAccentHex?: string
   script: AdScript
   analysis: WebsiteAnalysis
   ingestion: AdSiteIngestion
@@ -307,6 +330,9 @@ async function executeSingleVariantRender(params: {
     onProgress,
     fastPreview = false,
   } = params
+  const voiceMode = params.voiceMode ?? "ai_openai_tts"
+  const videoPackaging = params.videoPackaging ?? "story_cinematic"
+  const captionAccentHex = params.captionAccentHex
 
   const npaiProduct = detectNovaPulseAIProduct(ingestion)
   const npaiDemoLoginJob = npaiProduct && novaPulseAIDemoLoginConfigured()
@@ -334,11 +360,15 @@ async function executeSingleVariantRender(params: {
 
   onProgress?.(5)
   const tVoice = Date.now()
-  console.log(renderLog, "stage=voiceover", JSON.stringify({ phase: "start", ts: new Date().toISOString() }))
-  const voicePath = await generateVoiceover(narration, voice)
+  const voiceStage = voiceMode === "silent_music_only" ? "silent_voice_track" : "voiceover"
+  console.log(renderLog, `stage=${voiceStage}`, JSON.stringify({ phase: "start", ts: new Date().toISOString() }))
+  const voicePath =
+    voiceMode === "silent_music_only"
+      ? await generateSilentVoiceTrack(renderDuration)
+      : await generateVoiceover(narration, voice)
   console.log(
     renderLog,
-    "stage=voiceover",
+    `stage=${voiceStage}`,
     JSON.stringify({ phase: "end", durationMs: Date.now() - tVoice, ts: new Date().toISOString() })
   )
   onProgress?.(15)
@@ -468,6 +498,8 @@ async function executeSingleVariantRender(params: {
         watermarkText: analysis.brandName || BRAND_NAME,
         outputFileName: `render-${requestId}-${sfx}.mp4`,
         overlayStyle: creativeMode === "ugc_social" ? "ugc_social" : undefined,
+        captionPackaging: videoPackaging,
+        ...(captionAccentHex ? { captionAccentHex } : {}),
         ...(npaiProduct && creativeMode !== "ugc_social"
           ? { hookOverlayStartSec: 0.45, hookOverlayEndSec: 2.45 }
           : {}),
@@ -634,6 +666,9 @@ async function runAdRenderPipelineFromScript(params: {
   platform: GenerateBody["platform"]
   ultra: boolean
   voice: NonNullable<GenerateBody["voice"]>
+  voiceMode?: "ai_openai_tts" | "silent_music_only"
+  videoPackaging?: VideoPackagingPresetId
+  captionAccentHex?: string
   script: AdScript
   analysis: WebsiteAnalysis
   ingestion: AdSiteIngestion
@@ -674,6 +709,9 @@ async function runAdRenderPipelineFromScript(params: {
     platform,
     ultra,
     voice,
+    voiceMode: params.voiceMode,
+    videoPackaging: params.videoPackaging,
+    captionAccentHex: params.captionAccentHex,
     script,
     analysis,
     ingestion,
@@ -890,7 +928,15 @@ async function runAdGenerationJob(params: {
   editingStyle: NonNullable<GenerateBody["editingStyle"]>
   ultra: boolean
   voice: NonNullable<GenerateBody["voice"]>
-  creativeMode: NonNullable<GenerateBody["creativeMode"]>
+  /** Resolved pipeline mode (may differ from UI when a studio preset overrides). */
+  effectiveCreativeMode: NonNullable<GenerateBody["creativeMode"]>
+  studioPack?: {
+    studioCreativeDirective?: string
+    variantPreference?: string[]
+  }
+  videoPackaging: VideoPackagingPresetId
+  voiceMode: "ai_openai_tts" | "silent_music_only"
+  captionAccentHex?: string
   renderTopVariants: 1 | 2
   fastPreview: boolean
 }): Promise<void> {
@@ -933,8 +979,9 @@ async function runAdGenerationJob(params: {
       params.duration,
       params.platform,
       ingestion,
-      params.creativeMode,
-      { requestId: params.requestId, jobDbId: params.jobDbId }
+      params.effectiveCreativeMode,
+      { requestId: params.requestId, jobDbId: params.jobDbId },
+      params.studioPack
     )
 
     await updateJob(params.jobDbId, { progress: 29 })
@@ -953,11 +1000,14 @@ async function runAdGenerationJob(params: {
         platform: params.platform,
         ultra: params.ultra,
         voice: params.voice,
+        voiceMode: params.voiceMode,
+        videoPackaging: params.videoPackaging,
+        captionAccentHex: params.captionAccentHex,
         script,
         analysis,
         ingestion,
         startedAt,
-        creativeMode: params.creativeMode,
+        creativeMode: params.effectiveCreativeMode,
         fastPreview: params.fastPreview,
       })
     } else {
@@ -975,11 +1025,14 @@ async function runAdGenerationJob(params: {
           platform: params.platform,
           ultra: params.ultra,
           voice: params.voice,
+          voiceMode: params.voiceMode,
+          videoPackaging: params.videoPackaging,
+          captionAccentHex: params.captionAccentHex,
           script,
           analysis,
           ingestion,
           startedAt,
-          creativeMode: params.creativeMode,
+          creativeMode: params.effectiveCreativeMode,
           fastPreview: params.fastPreview,
         })
       } else {
@@ -1020,10 +1073,13 @@ async function runAdGenerationJob(params: {
             platform: params.platform,
             ultra: params.ultra,
             voice: params.voice,
+            voiceMode: params.voiceMode,
+            videoPackaging: params.videoPackaging,
+            captionAccentHex: params.captionAccentHex,
             script: scriptFor,
             analysis,
             ingestion,
-            creativeMode: params.creativeMode,
+            creativeMode: params.effectiveCreativeMode,
             fileSuffix: suffix,
             fastPreview: params.fastPreview,
             onProgress: p => {
@@ -1147,6 +1203,9 @@ async function runAdRerenderFromVariantJob(params: {
   platform: GenerateBody["platform"]
   ultra: boolean
   voice: NonNullable<GenerateBody["voice"]>
+  voiceMode?: "ai_openai_tts" | "silent_music_only"
+  videoPackaging?: VideoPackagingPresetId
+  captionAccentHex?: string
   sourceScript: AdScript
   variantPayload: Record<string, unknown>
   creativeMode: NonNullable<GenerateBody["creativeMode"]>
@@ -1199,6 +1258,9 @@ async function runAdRerenderFromVariantJob(params: {
       platform: params.platform,
       ultra: params.ultra,
       voice: params.voice,
+      voiceMode: params.voiceMode,
+      videoPackaging: params.videoPackaging,
+      captionAccentHex: params.captionAccentHex,
       script: merged,
       analysis,
       ingestion,
@@ -1364,6 +1426,16 @@ router.post(
     const renderTop = resolveRenderTopVariants(data.renderTopVariants)
     const fastPreview = resolveAdFastPreview(data)
 
+    const studioResolution = resolveStudioCreativeMode(
+      data.studioCreativeMode,
+      data.creativeMode ?? "cinematic"
+    )
+    const videoPackaging = resolveVideoPackaging(
+      data.videoPackaging,
+      studioResolution.defaultVideoPackaging
+    )
+    const voiceMode = data.voiceMode ?? "ai_openai_tts"
+
     const job = await adJobCreateWithWorkspaceFallback({
       userId: req.user.id,
       jobId,
@@ -1379,7 +1451,13 @@ router.post(
         editingStyle: data.editingStyle ?? "premium",
         ultra: data.ultra ?? false,
         voice: data.voice ?? "alloy",
-        creativeMode: data.creativeMode ?? "cinematic",
+        creativeMode: studioResolution.effectiveCreativeMode,
+        ...(data.studioCreativeMode
+          ? { studioCreativeModeId: data.studioCreativeMode }
+          : {}),
+        videoPackaging,
+        voiceMode,
+        ...(data.captionAccentHex ? { captionAccentHex: data.captionAccentHex } : {}),
         renderTopVariants: renderTop,
         ...(fastPreview ? { fastPreview: true } : {}),
         ...(data.operatorBrief && data.operatorBrief.length > 0
@@ -1417,7 +1495,14 @@ router.post(
           editingStyle: data.editingStyle ?? "premium",
           ultra: data.ultra ?? false,
           voice: data.voice ?? "alloy",
-          creativeMode: data.creativeMode ?? "cinematic",
+          effectiveCreativeMode: studioResolution.effectiveCreativeMode,
+          studioPack: {
+            studioCreativeDirective: studioResolution.studioCreativeDirective,
+            variantPreference: studioResolution.variantPreference,
+          },
+          videoPackaging,
+          voiceMode,
+          captionAccentHex: data.captionAccentHex,
           renderTopVariants: renderTop,
           fastPreview,
         })
@@ -1679,12 +1764,30 @@ router.post(
     const fastPreview =
       envAdFastPreviewEnabled() || parsed.data.previewMode === "fast"
 
+    const videoPackaging = resolveVideoPackaging(
+      typeof metaPrev.videoPackaging === "string" ? metaPrev.videoPackaging : undefined,
+      "story_cinematic"
+    )
+    const voiceMode =
+      metaPrev.voiceMode === "silent_music_only" || metaPrev.voiceMode === "ai_openai_tts"
+        ? metaPrev.voiceMode
+        : "ai_openai_tts"
+
     const metadata: PersistedAdJobMetadata = {
       siteUrl: siteUrlResult.siteUrl,
       editingStyle: metaPrev.editingStyle ?? "premium",
       ultra,
       voice,
       creativeMode: metaPrev.creativeMode ?? "cinematic",
+      ...(metaPrev.studioCreativeModeId
+        ? { studioCreativeModeId: metaPrev.studioCreativeModeId }
+        : {}),
+      videoPackaging,
+      voiceMode,
+      ...(metaPrev.captionAccentHex
+        ? { captionAccentHex: metaPrev.captionAccentHex }
+        : {}),
+      ...(metaPrev.operatorBrief ? { operatorBrief: metaPrev.operatorBrief } : {}),
       rerenderOfJobId: source.jobId,
       sourceJobId: source.jobId,
       sourceVariantId: parsed.data.variantId,
@@ -1737,6 +1840,9 @@ router.post(
           platform,
           ultra,
           voice,
+          voiceMode,
+          videoPackaging,
+          captionAccentHex: metaPrev.captionAccentHex,
           sourceScript,
           variantPayload,
           creativeMode: metaPrev.creativeMode ?? "cinematic",

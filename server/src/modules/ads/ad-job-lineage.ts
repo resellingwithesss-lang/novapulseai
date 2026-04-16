@@ -20,6 +20,14 @@ export type PersistedAdJobMetadata = {
   fastPreview?: boolean
   /** Optional operator notes from Admin Ad Studio / API (audit + handoff). */
   operatorBrief?: string
+  /** Ad Studio high-level creative mode (drives LLM + variant order). */
+  studioCreativeModeId?: string
+  /** Final ffmpeg caption / overlay packaging preset. */
+  videoPackaging?: string
+  /** Optional #RRGGBB without hash — caption accent (e.g. streamer / brand hint). */
+  captionAccentHex?: string
+  /** ai_openai_tts = real OpenAI speech; silent_music_only = no VO, music bed only. */
+  voiceMode?: "ai_openai_tts" | "silent_music_only"
   /** How many top-scored variants to render (1 default). */
   renderTopVariants?: 1 | 2
   /** Completed (or failed) renders when `renderTopVariants` > 1. Primary `outputUrl` stays rank 1. */

@@ -50,6 +50,8 @@ export interface StructuredScriptGenOptions {
   variantTemperatureBump?: number
   /** Drives prompt + platform notes; default cinematic. */
   creativeMode?: AdCreativeMode
+  /** Ad Studio creative mode — injected after variant blocks; must not override site-truth rules. */
+  studioCreativeDirective?: string
 }
 
 const structuredSchema = z.object({
@@ -238,12 +240,20 @@ function buildUserPrompt(
     ? `User-selected tone: ${tone}. This variant also applies: ${gen.toneModifier}. Blend them — do not ignore the user tone.`
     : `Tone: ${tone}`
 
+  const studioBlock =
+    gen.studioCreativeDirective?.trim() &&
+    `AD STUDIO CREATIVE MODE (mandatory — shapes pacing, hook, and CTA style; still obey SITE FACTS and variant rules below):
+${gen.studioCreativeDirective.trim()}
+`
+
   return `You write high-converting paid social scripts (performance creative), not generic brand poetry.
 
 ${platformGuide}
 Total video length target: ~${durationSeconds} seconds (voice will be recorded to fit; keep total spoken content appropriate).
 
 ${toneBlend}
+
+${studioBlock || ""}
 
 ${hookPatternBlock(gen.hookPattern, ingestion)}
 
@@ -300,6 +310,7 @@ const DEFAULT_GEN: StructuredScriptGenOptions = {
   narrativeMode: "classic",
   toneModifier: "",
   creativeMode: "cinematic",
+  studioCreativeDirective: undefined,
 }
 
 export async function generateStructuredAdScript(
@@ -317,6 +328,8 @@ export async function generateStructuredAdScript(
     emphasis: genOptions?.emphasis ?? DEFAULT_GEN.emphasis,
     narrativeMode: genOptions?.narrativeMode ?? DEFAULT_GEN.narrativeMode,
     toneModifier: genOptions?.toneModifier ?? DEFAULT_GEN.toneModifier,
+    studioCreativeDirective:
+      genOptions?.studioCreativeDirective ?? DEFAULT_GEN.studioCreativeDirective,
     creativeMode: genOptions?.creativeMode ?? DEFAULT_GEN.creativeMode,
   }
   const prompt = buildUserPrompt(ingestion, tone, durationSeconds, platform, gen)

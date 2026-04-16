@@ -257,6 +257,21 @@ export async function runClipJob(jobId: string): Promise<void> {
       jobId,
       message,
     })
+
+    if (
+      job.params.source === "youtube" &&
+      /youtube|blocked|cookie|bot|javascript runtime|upload the video|server-side download/i.test(
+        message
+      )
+    ) {
+      log.info("clip_job_youtube_operator_hint", {
+        jobId,
+        requestId,
+        messagePreview: message.slice(0, 240),
+        operatorNote:
+          "YouTube from servers: set YT_DLP_COOKIES (Netscape cookies.txt) for operator-only workflows; creators should upload the MP4 for guaranteed processing; many links are blocked or challenged in datacenter environments.",
+      })
+    }
   } finally {
     if (cleanupPath) {
       await unlink(cleanupPath).catch(() => {})

@@ -2,7 +2,6 @@
 import { Router, type Response } from "express"
 import rateLimit from "express-rate-limit"
 import bcrypt from "bcryptjs"
-import jwt from "jsonwebtoken"
 import { OAuth2Client } from "google-auth-library"
 import { z } from "zod"
 import { prisma } from "../../lib/prisma"
@@ -14,6 +13,13 @@ import { staffFloorPlan } from "../../lib/staff-plan"
 import { requireAuth, AuthRequest } from "./auth.middleware"
 import { requireCsrfForCookieAuth } from "../../middlewares/csrf-protect"
 import {
+  clearAuthTokenCookie,
+  clearImpRestoreCookie,
+  setAuthTokenCookie,
+} from "./http-cookies"
+import { signSessionJwt } from "./jwt-signing"
+import {
+  AuditAction,
   AuthProvider,
   Plan,
   Prisma,
@@ -111,54 +117,6 @@ const changePasswordSchema = z.object({
 
 function normalizeEmail(email: string) {
   return email.toLowerCase().trim()
-}
-
-function signToken(user: {
-  id: string
-  role: string
-  tokenVersion: number
-}) {
-  return jwt.sign(
-    {
-      sub: user.id,
-      role: user.role,
-      tokenVersion: user.tokenVersion,
-    },
-    JWT_SECRET!,
-    {
-      expiresIn: "7d",
-      algorithm: "HS256",
-    }
-  )
-}
-
-function cookieSameSite(): "lax" | "strict" | "none" {
-  const raw = process.env.AUTH_COOKIE_SAMESITE?.trim().toLowerCase()
-  if (raw === "none" || raw === "strict") return raw
-  return "lax"
-}
-
-function setCookie(res: any, token: string) {
-  const sameSite = cookieSameSite()
-  const secure = isProduction || sameSite === "none"
-  res.cookie("token", token, {
-    httpOnly: true,
-    secure,
-    sameSite,
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    path: "/",
-  })
-}
-
-function clearCookie(res: any) {
-  const sameSite = cookieSameSite()
-  const secure = isProduction || sameSite === "none"
-  res.clearCookie("token", {
-    httpOnly: true,
-    secure,
-    sameSite,
-    path: "/",
-  })
 }
 
 function isUniqueConstraintError(err: unknown): boolean {
@@ -381,9 +339,9 @@ router.post("/register", credentialLimiter, async (req, res) => {
       log.warn("welcome_email_enqueue_failed", serializeErr(err))
     })
 
-    const token = signToken(user)
+    const token = signSessionJwt(user)
 
-    setCookie(res, token)
+    setAuthTokenCookie(res, token)
 
     return ok(res, {
       user: safeUser(user),
@@ -438,9 +396,9 @@ router.post("/login", credentialLimiter, async (req, res) => {
       data: { lastLoginAt: new Date() },
     })
 
-    const token = signToken(updated)
+    const token = signSessionJwt(updated)
 
-    setCookie(res, token)
+    setAuthTokenCookie(res, token)
 
     return ok(res, {
       user: safeUser(updated),
@@ -646,9 +604,9 @@ router.post("/google", credentialLimiter, async (req, res) => {
       data: { lastLoginAt: new Date() },
     })
 
-    const token = signToken(updated)
+    const token = signSessionJwt(updated)
 
-    setCookie(res, token)
+    setAuthTokenCookie(res, token)
 
     if (debugGoogle) {
       // eslint-disable-next-line no-console
@@ -715,12 +673,47 @@ LOGOUT
 ===================================================== */
 
 router.post("/logout", requireAuth, requireCsrfForCookieAuth, async (req: AuthRequest, res) => {
+  if (req.impersonation) {
+    const backup =
+      typeof req.cookies?.imp_restore === "string" ? req.cookies.imp_restore.trim() : ""
+    const previewedUserId = req.user!.id
+    const impersonatorId = req.impersonation.impersonatorId
+    if (backup) {
+      clearImpRestoreCookie(res)
+      setAuthTokenCookie(res, backup)
+      try {
+        await prisma.auditLog.create({
+          data: {
+            userId: impersonatorId,
+            action: AuditAction.ADMIN_IMPERSONATION_END,
+            metadata: {
+              previewedUserId,
+              impersonatorId,
+              via: "logout",
+            },
+            requestId: typeof req.requestId === "string" ? req.requestId : undefined,
+          },
+        })
+      } catch (err) {
+        log.error("impersonation_end_audit", { err: serializeErr(err) })
+      }
+      return ok(res, { endedPreview: true })
+    }
+    clearImpRestoreCookie(res)
+    clearAuthTokenCookie(res)
+    return ok(res, {
+      endedPreview: true,
+      message:
+        "Preview session cleared but operator restore cookie was missing; sign in again as super admin if needed.",
+    })
+  }
+
   await prisma.user.update({
     where: { id: req.user!.id },
     data: { tokenVersion: { increment: 1 } },
   })
 
-  clearCookie(res)
+  clearAuthTokenCookie(res)
 
   return ok(res)
 })
@@ -735,15 +728,71 @@ router.get("/me", requireAuth, async (req: AuthRequest, res) => {
   })
 
   if (!user || user.deletedAt) {
-    clearCookie(res)
+    clearAuthTokenCookie(res)
 
     return fail(res, 401, "Unauthorized")
   }
 
+  let impersonation: { impersonator: { id: string; email: string } } | null = null
+  if (req.impersonation) {
+    const actor = await prisma.user.findUnique({
+      where: { id: req.impersonation.impersonatorId },
+      select: { id: true, email: true, deletedAt: true },
+    })
+    if (actor && !actor.deletedAt) {
+      impersonation = { impersonator: { id: actor.id, email: actor.email } }
+    }
+  }
+
   return ok(res, {
     user: safeUser(user),
+    impersonation,
   })
 })
+
+router.post(
+  "/impersonation/exit",
+  requireAuth,
+  requireCsrfForCookieAuth,
+  async (req: AuthRequest, res: Response) => {
+    if (!req.impersonation) {
+      return fail(res, 400, "Not in preview mode")
+    }
+    const backup =
+      typeof req.cookies?.imp_restore === "string" ? req.cookies.imp_restore.trim() : ""
+    if (!backup) {
+      return fail(
+        res,
+        400,
+        "Restore session missing. Sign in again as super admin, or use the same browser that started preview."
+      )
+    }
+    const previewedUserId = req.user!.id
+    const impersonatorId = req.impersonation.impersonatorId
+
+    clearImpRestoreCookie(res)
+    setAuthTokenCookie(res, backup)
+
+    try {
+      await prisma.auditLog.create({
+        data: {
+          userId: impersonatorId,
+          action: AuditAction.ADMIN_IMPERSONATION_END,
+          metadata: {
+            previewedUserId,
+            impersonatorId,
+            via: "exit_endpoint",
+          },
+          requestId: typeof req.requestId === "string" ? req.requestId : undefined,
+        },
+      })
+    } catch (err) {
+      log.error("impersonation_end_audit", { err: serializeErr(err) })
+    }
+
+    return ok(res, { restored: true })
+  }
+)
 
 /* =====================================================
 CHANGE PASSWORD (local accounts only)
@@ -785,7 +834,7 @@ router.post("/change-password", requireAuth, requireCsrfForCookieAuth, async (re
     },
   })
 
-  clearCookie(res)
+  clearAuthTokenCookie(res)
   return ok(res, { message: "Password updated. Sign in again with your new password." })
 })
 

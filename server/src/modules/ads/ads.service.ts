@@ -226,7 +226,8 @@ export async function generateAdScript(
   preset?: AdVariantPreset,
   variantIndex = 0,
   creativeMode: AdCreativeMode = "cinematic",
-  scriptGenLog?: AdScriptGenLogContext
+  scriptGenLog?: AdScriptGenLogContext,
+  studioCreativeDirective?: string
 ): Promise<GeneratedScript> {
   const genOpts = preset
     ? {
@@ -236,8 +237,16 @@ export async function generateAdScript(
         toneModifier: preset.toneModifier,
         variantTemperatureBump: variantIndex * 0.035,
         creativeMode,
+        ...(studioCreativeDirective?.trim()
+          ? { studioCreativeDirective: studioCreativeDirective.trim() }
+          : {}),
       }
-    : { creativeMode }
+    : {
+        creativeMode,
+        ...(studioCreativeDirective?.trim()
+          ? { studioCreativeDirective: studioCreativeDirective.trim() }
+          : {}),
+      }
 
   const structured = await generateStructuredAdScript(
     ingestion,
@@ -297,7 +306,11 @@ export async function generateAdScriptsPerformancePack(
   platform: string,
   ingestion: AdSiteIngestion,
   creativeMode: AdCreativeMode = "cinematic",
-  scriptGenLog?: AdScriptGenLogContext
+  scriptGenLog?: AdScriptGenLogContext,
+  packOptions?: {
+    studioCreativeDirective?: string
+    variantPreference?: string[]
+  }
 ): Promise<{
   primary: GeneratedScript
   variants: Array<{
@@ -314,7 +327,7 @@ export async function generateAdScriptsPerformancePack(
   }>
 }> {
   const count = defaultVariantCount()
-  const presets = getAdVariantPresets(count, creativeMode)
+  const presets = getAdVariantPresets(count, creativeMode, packOptions?.variantPreference)
   const generated: Array<{ preset: AdVariantPreset; script: GeneratedScript }> = []
   for (let i = 0; i < presets.length; i++) {
     const preset = presets[i]!
@@ -328,7 +341,8 @@ export async function generateAdScriptsPerformancePack(
         preset,
         i,
         creativeMode,
-        scriptGenLog
+        scriptGenLog,
+        packOptions?.studioCreativeDirective
       )
       generated.push({ preset, script })
     } catch (error) {

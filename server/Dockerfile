@@ -46,12 +46,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   openssl \
   ca-certificates \
   curl \
+  unzip \
   chromium \
   ffmpeg \
   python3 \
   python-is-python3 \
   && rm -rf /var/lib/apt/lists/* \
   && set -eux \
+  && export DENO_INSTALL=/usr/local \
+  && curl -fsSL https://deno.land/install.sh | sh \
+  && chmod +x /usr/local/bin/deno \
+  && deno --version \
   && arch="$(echo "${TARGETARCH}" | tr '[:upper:]' '[:lower:]')" \
   && case "$arch" in \
        arm64|aarch64) ytdlp_asset="yt-dlp_linux_aarch64" ;; \
@@ -66,6 +71,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV NODE_ENV=production
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+# yt-dlp EJS / YouTube player extraction: prefer Deno then Node (see YT_DLP_JS_RUNTIMES override).
+ENV YT_DLP_JS_RUNTIMES=deno:/usr/local/bin/deno,node:/usr/local/bin/node
 
 COPY --from=build /app /app
 

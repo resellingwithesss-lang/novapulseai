@@ -3,6 +3,7 @@ import fs from "fs"
 import path from "path"
 import os from "os"
 import crypto from "crypto"
+import type { VideoPackagingPresetId } from "./pipeline/ad.studio-modes"
 
 export type Platform = "tiktok" | "instagram" | "youtube"
 export type Quality = "standard" | "high" | "ultra"
@@ -30,6 +31,10 @@ export interface RenderOptions {
   hookOverlayEndSec?: number
   /** Faster libx264 preset + standard CRF for dev preview runs. */
   fastPreview?: boolean
+  /** Caption card + typography packaging (premium presets). */
+  captionPackaging?: VideoPackagingPresetId
+  /** Optional 6-char hex without # — accent for highlight packaging. */
+  captionAccentHex?: string
 }
 
 const GENERATED_DIR = path.resolve("generated")
@@ -95,12 +100,20 @@ function createConcatList(clips: string[]): string {
 
 function splitCaption(text: string): string {
   const words = clean(text).split(" ").filter(Boolean)
-  if (words.length <= 3) return words.join(" ")
-  if (words.length <= 6) {
+  if (words.length === 0) return ""
+  if (words.length <= 5) return words.join(" ")
+  if (words.length <= 12) {
     const mid = Math.ceil(words.length / 2)
     return `${words.slice(0, mid).join(" ")}\n${words.slice(mid).join(" ")}`
   }
-  return `${words.slice(0, 3).join(" ")}\n${words.slice(3, 6).join(" ")}`
+  const lines = 3
+  const chunk = Math.ceil(words.length / lines)
+  const out: string[] = []
+  for (let i = 0; i < lines; i++) {
+    const slice = words.slice(i * chunk, (i + 1) * chunk)
+    if (slice.length) out.push(slice.join(" "))
+  }
+  return out.join("\n")
 }
 
 function getPreset(platform: Platform = "youtube"): { width: number; height: number; fps: number } {
@@ -124,21 +137,119 @@ function buildBaseFilters(width: number, height: number, fps: number): string[] 
     `fps=${fps}`,
     "setsar=1",
     "format=yuv420p",
-    "eq=contrast=1.08:saturation=1.12:brightness=0.02",
-    "unsharp=5:5:0.4:5:5:0.0"
+    "eq=contrast=1.05:saturation=1.06:brightness=0.01",
+    "unsharp=5:5:0.35:5:5:0.0",
   ]
 }
 
-function buildCaptionFilters(captions: Caption[], width: number, height: number): string[] {
+function hexToDrawboxColor(hexRaw: string | undefined, fallback: string): string {
+  const hex = (hexRaw || fallback).replace(/[^0-9A-Fa-f]/g, "").slice(0, 6).padEnd(6, "0")
+  return `0x${hex.toUpperCase()}`
+}
+
+function buildCaptionFilters(
+  captions: Caption[],
+  width: number,
+  height: number,
+  packaging: VideoPackagingPresetId = "story_cinematic",
+  accentHex?: string
+): string[] {
   const filters: string[] = []
   const isVertical = height > width
   const isSquare = Math.abs(height - width) < 24
   const safeBottom = isVertical ? 88 : isSquare ? 72 : 64
-  const boxW = Math.min(width - (isVertical ? 96 : 100), Math.floor(width * (isSquare ? 0.82 : 0.78)))
-  const boxH = isVertical ? 168 : isSquare ? 140 : 118
-  const fontSize = isVertical ? 68 : isSquare ? 52 : 46
-  const boxY = height - boxH - safeBottom
-  const textY = boxY + Math.floor(boxH * 0.22)
+  let boxW = Math.min(width - (isVertical ? 96 : 100), Math.floor(width * (isSquare ? 0.82 : 0.78)))
+  let boxH = isVertical ? 168 : isSquare ? 140 : 118
+  let fontSize = isVertical ? 68 : isSquare ? 52 : 46
+  let boxY = height - boxH - safeBottom
+  let textY = boxY + Math.floor(boxH * 0.22)
+  let boxAlpha = 0.46
+  let lineSpacing = 12
+  let borderW = 4
+  let fontColor = "white"
+  let borderColor = "black"
+  let shadowX = 3
+  let shadowY = 3
+  let shadowColor = "black@0.52"
+
+  switch (packaging) {
+    case "bold_viral":
+      fontSize = Math.round(fontSize * 1.05)
+      boxAlpha = 0.5
+      borderW = 5
+      lineSpacing = 10
+      shadowX = 4
+      shadowY = 4
+      shadowColor = "black@0.62"
+      break
+    case "clean_ugc":
+      fontSize = Math.round(fontSize * 0.93)
+      boxAlpha = 0.34
+      borderW = 3
+      lineSpacing = 12
+      shadowX = 2
+      shadowY = 2
+      shadowColor = "black@0.42"
+      break
+    case "luxury_minimal":
+      fontSize = Math.round(fontSize * 0.9)
+      boxAlpha = 0.26
+      borderW = 2
+      lineSpacing = 18
+      fontColor = "0xF4F4F5"
+      shadowX = 2
+      shadowY = 2
+      shadowColor = "black@0.32"
+      break
+    case "podcast_premium":
+      boxH = Math.round(boxH * 0.85)
+      boxY = Math.floor(height * 0.58)
+      textY = boxY + Math.floor(boxH * 0.2)
+      boxAlpha = 0.38
+      borderW = 3
+      shadowX = 3
+      shadowY = 3
+      shadowColor = "black@0.48"
+      break
+    case "streamer_energy": {
+      boxAlpha = 0.4
+      borderW = 4
+      lineSpacing = 11
+      fontSize = Math.round(fontSize * 1.01)
+      borderColor = hexToDrawboxColor(accentHex, "A78BFA")
+      shadowX = 3
+      shadowY = 3
+      shadowColor = "black@0.55"
+      break
+    }
+    case "product_demo":
+      boxAlpha = 0.44
+      borderW = 4
+      fontSize = Math.round(fontSize * 0.99)
+      shadowX = 3
+      shadowY = 3
+      shadowColor = "black@0.5"
+      break
+    case "story_cinematic":
+    default:
+      break
+  }
+
+  const boxColor = `black@${boxAlpha}`
+
+  const captionFontOpt = (() => {
+    const raw = process.env.AD_CAPTION_FONTFILE?.trim()
+    if (!raw) return ""
+    try {
+      const p = path.resolve(raw)
+      if (fs.existsSync(p)) {
+        return `fontfile='${escapeFilterPath(p)}':`
+      }
+    } catch {
+      /* ignore */
+    }
+    return ""
+  })()
 
   for (const caption of captions) {
     const text = splitCaption(caption.text)
@@ -151,21 +262,28 @@ function buildCaptionFilters(captions: Caption[], width: number, height: number)
     const textFile = writeTextAsset(text, "caption")
     const escaped = escapeFilterPath(textFile)
 
-    filters.push(`drawbox=x=(iw-${boxW})/2:y=${boxY}:w=${boxW}:h=${boxH}:color=black@0.46:t=fill:enable='between(t,${start},${end})'`)
+    filters.push(
+      `drawbox=x=(iw-${boxW})/2:y=${boxY}:w=${boxW}:h=${boxH}:color=${boxColor}:t=fill:enable='between(t,${start},${end})'`
+    )
+
+    const drawBorder = packaging === "luxury_minimal" ? "2" : String(borderW)
 
     filters.push([
-      `drawtext=textfile='${escaped}'`,
+      `drawtext=${captionFontOpt}textfile='${escaped}'`,
       "reload=0",
-      "fontcolor=white",
+      `fontcolor=${fontColor}`,
       `fontsize=${fontSize}`,
-      "line_spacing=12",
-      "borderw=5",
-      "bordercolor=black",
+      `line_spacing=${lineSpacing}`,
+      `borderw=${drawBorder}`,
+      `bordercolor=${borderColor}`,
+      `shadowcolor=${shadowColor}`,
+      `shadowx=${shadowX}`,
+      `shadowy=${shadowY}`,
       "text_align=center",
       "x=(w-text_w)/2",
       `y=${textY}`,
-      `alpha='if(lt(t,${start}+0.15),(t-${start})/0.15,if(lt(t,${end}-0.15),1,(${end}-t)/0.15))'`,
-      `enable='between(t,${start},${end})'`
+      `alpha='if(lt(t,${start}+0.12),(t-${start})/0.12,if(lt(t,${end}-0.12),1,(${end}-t)/0.12))'`,
+      `enable='between(t,${start},${end})'`,
     ].join(":"))
   }
 
@@ -178,7 +296,8 @@ function buildOverlayFilter(
   start: number,
   end: number,
   fontSize: number,
-  y: number
+  y: number,
+  role: "hook" | "cta" | "watermark" = "hook"
 ): string | null {
   const cleaned = clean(text)
   if (!cleaned) return null
@@ -189,17 +308,41 @@ function buildOverlayFilter(
   const safeEnd = roundTime(end)
   if (safeEnd <= safeStart) return null
 
+  const borderw = role === "watermark" ? 2 : role === "cta" ? 4 : 5
+  const shadowx = role === "watermark" ? 1 : 3
+  const shadowy = role === "watermark" ? 1 : 3
+  const shadowcolor = role === "watermark" ? "black@0.4" : "black@0.55"
+  const fadeIn = role === "watermark" ? 0.5 : 0.28
+  const fadeOut = role === "watermark" ? 0.5 : 0.28
+
+  const captionFontOpt = (() => {
+    const raw = process.env.AD_CAPTION_FONTFILE?.trim()
+    if (!raw) return ""
+    try {
+      const p = path.resolve(raw)
+      if (fs.existsSync(p)) {
+        return `fontfile='${escapeFilterPath(p)}':`
+      }
+    } catch {
+      /* ignore */
+    }
+    return ""
+  })()
+
   return [
-    `drawtext=textfile='${escaped}'`,
+    `drawtext=${captionFontOpt}textfile='${escaped}'`,
     "reload=0",
     "fontcolor=white",
     `fontsize=${fontSize}`,
-    "borderw=6",
+    `borderw=${borderw}`,
     "bordercolor=black",
+    `shadowcolor=${shadowcolor}`,
+    `shadowx=${shadowx}`,
+    `shadowy=${shadowy}`,
     "x=(w-text_w)/2",
     `y=${y}`,
-    `alpha='if(lt(t,${safeStart}+0.35),(t-${safeStart})/0.35,if(lt(t,${safeEnd}-0.35),1,(${safeEnd}-t)/0.35))'`,
-    `enable='between(t,${safeStart},${safeEnd})'`
+    `alpha='if(lt(t,${safeStart}+${fadeIn}),(t-${safeStart})/${fadeIn},if(lt(t,${safeEnd}-${fadeOut}),1,(${safeEnd}-t)/${fadeOut}))'`,
+    `enable='between(t,${safeStart},${safeEnd})'`,
   ].join(":")
 }
 
@@ -241,7 +384,13 @@ export async function renderVideo(opts: RenderOptions): Promise<string> {
 
       const filters: string[] = [
         ...buildBaseFilters(width, height, fps),
-        ...buildCaptionFilters(opts.captions || [], width, height)
+        ...buildCaptionFilters(
+          opts.captions || [],
+          width,
+          height,
+          opts.captionPackaging ?? "story_cinematic",
+          opts.captionAccentHex
+        )
       ]
 
       const topY = height > width ? 112 : Math.abs(height - width) < 24 ? 96 : 84
@@ -253,15 +402,23 @@ export async function renderVideo(opts: RenderOptions): Promise<string> {
 
       const hookStart = opts.hookOverlayStartSec ?? (ugc ? 0.45 : 0.6)
       const hookEnd = opts.hookOverlayEndSec ?? (ugc ? 2.65 : 3.8)
-      const hookFilter = buildOverlayFilter(opts.hook, "hook", hookStart, hookEnd, hookFont, topY)
+      const hookFilter = buildOverlayFilter(opts.hook, "hook", hookStart, hookEnd, hookFont, topY, "hook")
       if (hookFilter) filters.push(hookFilter)
 
       const ctaStart = Math.max(0, totalDuration - (ugc ? 2.15 : 2.6))
-      const ctaFilter = buildOverlayFilter(opts.cta, "cta", ctaStart, totalDuration, ctaFont, topY)
+      const ctaFilter = buildOverlayFilter(opts.cta, "cta", ctaStart, totalDuration, ctaFont, topY, "cta")
       if (ctaFilter) filters.push(ctaFilter)
 
       if (opts.watermarkText) {
-        const mark = buildOverlayFilter(opts.watermarkText, "wm", 0, totalDuration, 26, height - 46)
+        const mark = buildOverlayFilter(
+          opts.watermarkText,
+          "wm",
+          0,
+          totalDuration,
+          Math.max(18, Math.min(34, Math.round(height * 0.022))),
+          height - Math.round(height * 0.04),
+          "watermark"
+        )
         if (mark) filters.push(mark)
       }
 

@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express"
 import jwt, { JwtPayload as DefaultJwtPayload } from "jsonwebtoken"
 import { prisma } from "../../lib/prisma"
-import { User } from "@prisma/client"
+import { Role, User } from "@prisma/client"
 import { log } from "../../lib/logger"
 
 const MAX_JWT_CHARS = 12_000
@@ -14,11 +14,15 @@ function extractBearerToken(header: string | undefined): string | null {
 
 export interface AuthRequest extends Request {
   user?: User
+  /** Present when the session JWT was issued for SUPER_ADMIN preview-as-user. */
+  impersonation?: { impersonatorId: string }
 }
 
 interface JwtPayload extends DefaultJwtPayload {
   sub?: string
   tokenVersion?: number
+  imp?: string
+  typ?: string
 }
 
 function requestIdFrom(req: Request): string | undefined {
@@ -49,6 +53,7 @@ function forbidden(res: Response, req: Request, message: string) {
 function isValidJwtPayload(payload: unknown): payload is JwtPayload {
   if (!payload || typeof payload !== "object") return false
   const p = payload as JwtPayload
+  if (p.typ === "imp_restore") return false
   return typeof p.sub === "string" && typeof p.tokenVersion === "number"
 }
 
@@ -109,6 +114,24 @@ export async function requireAuth(
     if (user.banned) return forbidden(res, req, "Account banned")
     if (user.tokenVersion !== decoded.tokenVersion)
       return unauthorized(res, req, "Session expired")
+
+    const impRaw = typeof decoded.imp === "string" ? decoded.imp.trim() : ""
+    if (impRaw) {
+      const actor = await prisma.user.findUnique({
+        where: { id: impRaw },
+        select: { id: true, role: true, banned: true, deletedAt: true, tokenVersion: true },
+      })
+      if (
+        !actor ||
+        actor.deletedAt ||
+        actor.banned ||
+        actor.role !== Role.SUPER_ADMIN ||
+        actor.tokenVersion === undefined
+      ) {
+        return unauthorized(res, req, "Invalid impersonation session")
+      }
+      req.impersonation = { impersonatorId: actor.id }
+    }
 
     req.user = user
     return next()

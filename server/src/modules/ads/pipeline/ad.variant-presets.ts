@@ -116,10 +116,22 @@ export const UGC_AD_VARIANT_PRESETS: AdVariantPreset[] = [
 
 export function getAdVariantPresets(
   count: number,
-  mode: AdCreativeMode = "cinematic"
+  mode: AdCreativeMode = "cinematic",
+  /** Prefer these preset ids first (e.g. Ad Studio mode), then fill from pool. */
+  variantPreference?: string[]
 ): AdVariantPreset[] {
   const n = Math.max(2, Math.min(4, count))
-  const pool = mode === "ugc_social" ? UGC_AD_VARIANT_PRESETS : AD_VARIANT_PRESETS
+  const base = mode === "ugc_social" ? UGC_AD_VARIANT_PRESETS : AD_VARIANT_PRESETS
+  const pool = [...base]
+  if (variantPreference?.length) {
+    const preferred: AdVariantPreset[] = []
+    for (const id of variantPreference) {
+      const found = pool.find(p => p.id === id)
+      if (found) preferred.push(found)
+    }
+    const rest = pool.filter(p => !preferred.some(q => q.id === p.id))
+    pool.splice(0, pool.length, ...preferred, ...rest)
+  }
   return pool.slice(0, n)
 }
 
