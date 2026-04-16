@@ -19,15 +19,17 @@ type YtDlpExec = {
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { create: createYtDlp, args: ytDlpArgs } = require("yt-dlp-exec") as YtDlpExec
 
+const CHROME_LIKE_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+const isProduction = process.env.NODE_ENV === "production"
+
 /** Prefer system/binary installs; avoid relying on yt-dlp-exec postinstall (fragile in CI/Docker). */
 function resolveYtDlpBinary(): string {
   const env = process.env.YT_DLP_PATH?.trim()
   if (env && existsSync(env)) return env
 
-  const candidates = [
-    "/usr/local/bin/yt-dlp",
-    "/usr/bin/yt-dlp",
-  ]
+  const candidates = ["/usr/local/bin/yt-dlp", "/usr/bin/yt-dlp"]
   for (const p of candidates) {
     if (existsSync(p)) return p
   }
@@ -49,39 +51,44 @@ function resolveFfmpegDir(): string | undefined {
   return undefined
 }
 
+function resolveCookiesPath(): string | undefined {
+  const raw = process.env.YT_DLP_COOKIES?.trim()
+  if (!raw) return undefined
+  if (!existsSync(raw)) {
+    log.warn("youtube_dl_cookies_missing", { path: raw })
+    return undefined
+  }
+  return raw
+}
+
+/** User-facing categories for the clip UI / API. */
 function classifyYoutubeDlError(stderr: string, stdout: string): string {
   const text = `${stderr}\n${stdout}`.toLowerCase()
 
-  if (/private video|members only|privacy/i.test(text)) {
-    return "This YouTube video is private or members-only. Use a public link or upload the file instead."
-  }
-  if (/video unavailable|removed for violating|no longer available|deleted video/i.test(text)) {
-    return "This YouTube video is unavailable or was removed."
-  }
-  if (/copyright|blocked it in your country|not made this video available|uploader has not made/i.test(text)) {
-    return "This video is blocked or restricted (copyright, region, or uploader settings)."
-  }
-  if (/sign in to confirm your age|age.restricted|inappropriate for some users/i.test(text)) {
-    return "This video is age-restricted or requires sign-in; it cannot be downloaded by the server."
+  if (/private video|members only|is private|privacy status/i.test(text)) {
+    return "Private video: this link is not publicly accessible. Upload the file instead or use a public URL."
   }
   if (
-    /requested format is not available|no video formats found|no formats found|nothing to download/i.test(
+    /not available in your country|blocked in your country|from your location|blackout|geo.?restricted|only available in\b/i.test(
       text
     )
   ) {
-    return "No compatible video format was found for this link. It may be a live stream, premium-only, or temporarily unavailable."
+    return "Region blocked: YouTube is not serving this video to our server's region. Try uploading the file, or set YT_DLP_COOKIES if you have a valid export."
   }
-  if (/live event will begin|premieres in|is live/i.test(text)) {
-    return "Live or upcoming premieres cannot be downloaded as a file. Try again after the VOD is published."
+  if (
+    /sign in to confirm your age|age.restricted|inappropriate for some users|confirm your age/i.test(text)
+  ) {
+    return "Age restricted: this video requires a signed-in viewer. Server downloads cannot satisfy age verification; try YT_DLP_COOKIES or upload the file."
   }
-  if (/ffmpeg|ffprobe|merging/i.test(text) && /not found|no such file|error/i.test(text)) {
-    return "Video processing failed (ffmpeg). Please try again or contact support if this persists."
-  }
-  if (/http error 403|403: forbidden|blocked/i.test(text)) {
-    return "YouTube blocked this download request. Try again later or upload the video file instead."
+  if (
+    /video unavailable|removed for violating|no longer available|deleted video|this video does not exist|unavailable/i.test(
+      text
+    )
+  ) {
+    return "Unavailable: this video was removed, is offline, or the ID is invalid."
   }
 
-  return "Could not download this YouTube video. Check the link and try again, or upload the file directly."
+  return "Download failed: YouTube did not return a file we could save. Try again later, another link, or upload the source video."
 }
 
 async function pickOutputFile(tmpRoot: string, id: string): Promise<string> {
@@ -104,25 +111,49 @@ async function pickOutputFile(tmpRoot: string, id: string): Promise<string> {
   return path.join(tmpRoot, candidates[0])
 }
 
+type AttemptSpec = {
+  name: string
+  format: string
+  mergeMp4: boolean
+  forceIpv4: boolean
+}
+
 function buildFlags(
   outputTemplate: string,
-  format: string,
-  ffmpegLocation?: string
+  spec: AttemptSpec,
+  ffmpegDir: string | undefined,
+  cookiesPath: string | undefined
 ): Record<string, unknown> {
   const flags: Record<string, unknown> = {
-    format,
-    mergeOutputFormat: "mp4",
+    format: spec.format,
     output: outputTemplate,
     noPlaylist: true,
+    noCheckCertificate: true,
+    geoBypass: true,
+    geoBypassCountry: "US",
+    userAgent: CHROME_LIKE_UA,
     retries: 3,
     fragmentRetries: 3,
     noColor: true,
     noProgress: true,
     newline: false,
   }
-  if (ffmpegLocation) {
-    flags.ffmpegLocation = ffmpegLocation
+
+  if (cookiesPath) {
+    flags.cookies = cookiesPath
   }
+
+  if (spec.forceIpv4) {
+    flags.forceIpv4 = true
+  }
+
+  if (spec.mergeMp4) {
+    flags.mergeOutputFormat = "mp4"
+    if (ffmpegDir) {
+      flags.ffmpegLocation = ffmpegDir
+    }
+  }
+
   return flags
 }
 
@@ -142,6 +173,13 @@ function getExecaProps(err: unknown): {
   }
 }
 
+const ATTEMPTS: AttemptSpec[] = [
+  { name: "bv_ba_merge", format: "bv*+ba/b", mergeMp4: true, forceIpv4: false },
+  { name: "best_merge", format: "best", mergeMp4: true, forceIpv4: false },
+  { name: "best_no_merge", format: "best", mergeMp4: false, forceIpv4: false },
+  { name: "best_no_merge_ipv4", format: "best", mergeMp4: false, forceIpv4: true },
+]
+
 export const downloadYoutubeVideo = async (url: string): Promise<string> => {
   const tmpRoot = path.join(process.cwd(), "tmp")
   await mkdir(tmpRoot, { recursive: true })
@@ -151,75 +189,76 @@ export const downloadYoutubeVideo = async (url: string): Promise<string> => {
 
   const bin = resolveYtDlpBinary()
   const ffmpegDir = resolveFfmpegDir()
+  const cookiesPath = resolveCookiesPath()
   const ytDlp = createYtDlp(bin)
 
-  const primaryFlags = buildFlags(
-    outputTemplate,
-    "bestvideo*+bestaudio/bestvideo+bestaudio/best",
-    ffmpegDir
-  )
-  const fallbackFlags = buildFlags(outputTemplate, "best", ffmpegDir)
+  let lastStderr = ""
+  let lastStdout = ""
+  let lastCommand = ""
+  let lastExitCode: number | undefined
 
-  const cmdPrimary = [bin, ...ytDlpArgs(url, primaryFlags)]
-  log.info("youtube_dl_command", {
-    binary: bin,
-    argv: cmdPrimary,
-    urlHost: (() => {
-      try {
-        return new URL(url).hostname
-      } catch {
-        return "invalid_url"
-      }
-    })(),
-  })
+  for (let i = 0; i < ATTEMPTS.length; i++) {
+    const spec = ATTEMPTS[i]
+    const attemptNum = i + 1
+    const flags = buildFlags(outputTemplate, spec, ffmpegDir, cookiesPath)
+    const argv = [bin, ...ytDlpArgs(url, flags)]
 
-  const run = async (flags: Record<string, unknown>, label: "primary" | "fallback") => {
-    const cmd = [bin, ...ytDlpArgs(url, flags)]
-    log.info("youtube_dl_attempt", { label, argv: cmd })
+    log.info("youtube_dl_attempt_start", {
+      attempt: attemptNum,
+      total: ATTEMPTS.length,
+      strategy: spec.name,
+      argv,
+      urlHost: (() => {
+        try {
+          return new URL(url).hostname
+        } catch {
+          return "invalid_url"
+        }
+      })(),
+      cookies: Boolean(cookiesPath),
+    })
+
     try {
       await ytDlp.exec(url, flags, {
-        maxBuffer: 32 * 1024 * 1024,
+        maxBuffer: 64 * 1024 * 1024,
         all: true,
       })
+      log.info("youtube_dl_attempt_ok", {
+        attempt: attemptNum,
+        strategy: spec.name,
+      })
+      return await pickOutputFile(tmpRoot, id)
     } catch (err: unknown) {
       const { stderr, stdout, command, exitCode } = getExecaProps(err)
-      log.error("youtube_dl_process_failed", {
-        label,
+      lastStderr = stderr ?? ""
+      lastStdout = stdout ?? ""
+      lastCommand = command ?? argv.join(" ")
+      lastExitCode = exitCode
+
+      log.error("youtube_dl_attempt_failed", {
+        attempt: attemptNum,
+        total: ATTEMPTS.length,
+        strategy: spec.name,
         exitCode,
-        command: command ?? cmd.join(" "),
-        stderr: stderr?.slice(0, 12_000) ?? null,
-        stdout: stdout?.slice(0, 4000) ?? null,
+        command: lastCommand,
+        stderr: lastStderr,
+        stdout: lastStdout,
         ...serializeErr(err),
       })
-      throw err
     }
   }
 
-  try {
-    try {
-      await run(primaryFlags, "primary")
-    } catch (first: unknown) {
-      const { stderr = "", stdout = "" } = getExecaProps(first)
-      const combined = `${stderr}\n${stdout}`
-      const retry =
-        /requested format is not available|no video formats found|unable to download video|format not available/i.test(
-          combined
-        )
-      if (!retry) throw first
-      log.warn("youtube_dl_format_fallback", {
-        hint: "primary format selection failed; retrying with -f best",
-      })
-      await run(fallbackFlags, "fallback")
-    }
+  const friendly = classifyYoutubeDlError(lastStderr, lastStdout)
+  const devDetail =
+    !isProduction && (lastStderr || lastStdout)
+      ? `\n\n--- yt-dlp raw (dev) ---\nexit=${lastExitCode ?? "?"}\n${lastCommand}\n\n${lastStderr}\n${lastStdout}`
+      : ""
 
-    return await pickOutputFile(tmpRoot, id)
-  } catch (err: unknown) {
-    const { stderr = "", stdout = "" } = getExecaProps(err)
-    const friendly = classifyYoutubeDlError(stderr, stdout)
-    log.error("youtube_dl_failed", {
-      userMessage: friendly,
-      ...serializeErr(err),
-    })
-    throw new Error(friendly)
-  }
+  log.error("youtube_dl_exhausted_retries", {
+    userMessage: friendly,
+    exitCode: lastExitCode,
+    attempts: ATTEMPTS.length,
+  })
+
+  throw new Error(friendly + devDetail)
 }
