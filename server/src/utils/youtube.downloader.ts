@@ -380,7 +380,6 @@ function buildFlags(
     fragmentRetries: 3,
     noColor: true,
     noProgress: true,
-    newline: false,
   }
 
   if (cookiesPath) {
