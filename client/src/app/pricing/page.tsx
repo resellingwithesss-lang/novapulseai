@@ -402,15 +402,15 @@ export default function PricingPage() {
     <main className="relative min-h-screen overflow-hidden">
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-[#0b0f19]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_90%_60%_at_50%_-10%,rgba(124,58,237,0.22),transparent_50%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_25%,rgba(139,92,246,0.18),transparent_45%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_88%_30%,rgba(236,72,153,0.12),transparent_42%)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(to_bottom,transparent_0%,rgba(0,0,0,0.35)_100%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_100%_64%_at_50%_-12%,rgba(124,58,237,0.16),transparent_58%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_22%,rgba(139,92,246,0.11),transparent_48%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_88%_28%,rgba(236,72,153,0.08),transparent_44%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(to_bottom,transparent_0%,rgba(0,0,0,0.24)_100%)]" />
       </div>
 
-      <section className="mx-auto max-w-7xl px-6 pb-32 pt-20 sm:pt-28 lg:pt-32">
+      <section className="np-container pb-24 pt-16 sm:pt-20 lg:pt-24">
         <div className="mx-auto max-w-3xl text-center">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/38">
+          <p className="np-eyebrow tracking-[0.22em] text-white/45">
             Pricing
           </p>
           <h1 className="mt-3 text-4xl font-semibold leading-[1.08] tracking-tight text-white sm:text-5xl lg:text-[3.35rem]">
@@ -420,7 +420,7 @@ export default function PricingPage() {
             </span>
           </h1>
 
-          <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-white/52 sm:mt-5 sm:text-lg">
+          <p className="np-text-body mx-auto mt-4 max-w-2xl sm:mt-5 sm:text-lg">
             Start free, graduate to Starter for automation,{" "}
             <span className="text-white/72">choose Pro when you need scripts + Story Maker</span>,{" "}
             or Elite when you’re driving Story Video Maker at scale.
@@ -439,8 +439,8 @@ export default function PricingPage() {
                   onClick={() => setBilling(type)}
                   className={`min-w-[7.5rem] rounded-full px-6 py-2.5 text-sm font-medium transition ${
                     billing === type
-                      ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-md shadow-violet-950/40"
-                      : "text-white/50 hover:text-white/85"
+                      ? "bg-gradient-to-r from-violet-600/92 to-fuchsia-600/88 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_10px_24px_-16px_rgba(139,92,246,0.9)]"
+                      : "text-white/58 hover:text-white/85"
                   }`}
                 >
                   {type === "monthly" ? "Monthly" : "Yearly"}
@@ -450,7 +450,7 @@ export default function PricingPage() {
           </div>
 
           {!loadingSub && pricingTierLabel && (
-            <p className="mt-5 text-sm text-white/38">
+            <p className="np-text-muted mt-5 text-sm">
               Current plan ·{" "}
               <span className="text-white/55">{planDisplayName(pricingTierLabel)}</span>
             </p>
@@ -465,7 +465,7 @@ export default function PricingPage() {
             </p>
           )}
           {checkoutError && <p className="mt-3 text-sm text-red-300/95">{checkoutError}</p>}
-          <p className="mx-auto mt-4 max-w-2xl text-xs leading-relaxed text-white/38">
+          <p className="np-text-fine mx-auto mt-4 max-w-2xl">
             Free includes {SHARED_PLAN_CONFIG.FREE.credits} credits and Video Script only. Paid plans bill
             securely through Stripe; cancel or change anytime from Billing.
             {PRO_TRIAL_ENABLED ? (
@@ -480,28 +480,28 @@ export default function PricingPage() {
           </p>
         </div>
 
-        <div className="mx-auto mt-14 max-w-3xl rounded-2xl border border-white/[0.08] bg-white/[0.03] px-5 py-4 text-center sm:px-6 sm:text-left">
+        <div className="mx-auto mt-12 max-w-3xl rounded-2xl border border-white/[0.06] bg-white/[0.02] px-6 py-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] sm:text-left">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-200/75">
             How credits work
           </p>
-          <p className="mt-2 text-sm leading-relaxed text-white/50">{CREDITS_GUIDE}</p>
+          <p className="mt-2 text-sm leading-relaxed text-white/56">{CREDITS_GUIDE}</p>
         </div>
 
         <div className="mx-auto mt-12 max-w-3xl">
-          <div className="rounded-[1.25rem] bg-gradient-to-b from-cyan-400/22 via-sky-500/12 to-transparent p-px shadow-[0_20px_50px_-24px_rgba(34,211,238,0.2)]">
-            <div className="flex flex-col gap-5 rounded-[1.2rem] border border-white/[0.07] bg-[#0b0f19]/88 px-6 py-6 backdrop-blur-xl transition motion-safe:hover:border-cyan-400/20 sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:px-8 sm:py-7">
+          <div className="rounded-[1.25rem] bg-gradient-to-b from-cyan-300/18 via-sky-400/8 to-transparent p-px shadow-[0_20px_50px_-30px_rgba(34,211,238,0.2)]">
+            <div className="flex flex-col gap-5 rounded-[1.2rem] border border-white/[0.06] bg-[#0b0f19]/88 px-6 py-6 backdrop-blur-xl transition sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:px-8 sm:py-7">
               <div className="text-center sm:text-left">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-200/85">
                   Free
                 </p>
-                <p className="mt-2 text-sm leading-relaxed text-white/58">
+                <p className="mt-2 text-sm leading-relaxed text-white/62">
                   {SHARED_PLAN_CONFIG.FREE.credits} credits to prove value · Video Script Engine · No
                   card · Same upgrade path as paid tiers
                 </p>
               </div>
               <a
                 href="/register"
-                className="inline-flex shrink-0 items-center justify-center rounded-full border border-cyan-400/40 bg-cyan-500/[0.12] px-6 py-2.5 text-sm font-semibold text-cyan-50 transition hover:border-cyan-300/55 hover:bg-cyan-500/[0.2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0f19]"
+              className="np-btn np-btn-secondary inline-flex shrink-0 text-cyan-50 hover:border-cyan-200/48 hover:bg-cyan-500/[0.18] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0f19]"
               >
                 Start free
               </a>
@@ -509,7 +509,7 @@ export default function PricingPage() {
           </div>
         </div>
 
-        <div className="mt-14 grid items-end gap-8 md:grid-cols-3 md:gap-6 lg:gap-7">
+        <div className="mt-12 grid items-end gap-6 md:grid-cols-3 md:gap-5 lg:gap-6">
           {(Object.keys(PLAN_DISPLAY_CONFIG) as PaidTier[]).map((plan) => {
             const config = PLAN_DISPLAY_CONFIG[plan]
             const price =
@@ -539,7 +539,7 @@ export default function PricingPage() {
           })}
         </div>
 
-        <div className="mx-auto mt-16 max-w-4xl border-t border-white/[0.07] pt-12">
+        <div className="mx-auto mt-16 max-w-4xl border-t border-white/[0.055] pt-12">
           <div className="grid gap-6 text-center sm:grid-cols-3 sm:text-left">
             <div>
               <p className="text-sm font-medium text-white/80">Secure billing</p>

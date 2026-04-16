@@ -75,15 +75,15 @@ export default function DashboardNextAction({
   }
 
   return (
-    <section className="rounded-2xl border border-white/[0.08] bg-gradient-to-br from-purple-600/10 via-[#0a0d18]/85 to-pink-600/6 p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ring-1 ring-inset ring-white/[0.03]">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-purple-200/72">
+    <section className="np-card-strong p-6 md:p-7">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-purple-200/75">
         Recommended next
       </p>
       <h2 className="mt-2 text-lg font-semibold tracking-[-0.015em] text-white/[0.97]">{title}</h2>
-      <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/50">{sub}</p>
+      <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/58">{sub}</p>
       <Link
         href={href}
-        className="mt-4 inline-flex items-center justify-center rounded-full border border-white/[0.14] bg-white/[0.06] px-5 py-2.5 text-sm font-semibold tracking-[-0.01em] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] outline-none transition-[background-color,border-color] duration-200 ease-out hover:border-white/22 hover:bg-white/[0.1] focus-visible:ring-2 focus-visible:ring-purple-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0f19] active:bg-white/[0.08]"
+        className="np-btn np-btn-secondary mt-4 text-sm outline-none hover:shadow-[0_10px_24px_-14px_rgba(255,255,255,0.3)] focus-visible:ring-2 focus-visible:ring-purple-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0f19] active:bg-white/[0.08]"
       >
         Continue →
       </Link>

@@ -73,26 +73,26 @@ export default function PricingPlanCard({
   const isPrimaryCta = ctaVariant === "primary"
 
   const frameClass = highlight
-    ? "bg-gradient-to-b from-violet-400/45 via-fuchsia-500/30 to-violet-600/15 p-px shadow-[0_0_80px_-12px_rgba(139,92,246,0.65)] ring-1 ring-white/[0.08]"
-    : "bg-gradient-to-b from-white/[0.14] to-white/[0.04] p-px shadow-[0_20px_50px_-28px_rgba(0,0,0,0.85)]"
+    ? "bg-gradient-to-b from-violet-300/32 via-fuchsia-400/16 to-transparent p-px shadow-[0_26px_56px_-28px_rgba(139,92,246,0.5)] ring-1 ring-violet-300/22"
+    : "bg-gradient-to-b from-white/[0.1] to-white/[0.035] p-px shadow-[0_18px_40px_-30px_rgba(0,0,0,0.8)]"
 
   const innerClass = highlight
-    ? "shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)] lg:scale-[1.03] lg:z-10"
-    : "hover:border-white/[0.12]"
+    ? "shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)] lg:z-10"
+    : "hover:border-white/[0.1]"
 
   const badgeClass = highlight
-    ? "border-white/20 bg-gradient-to-r from-violet-500 via-fuchsia-500 to-pink-500 px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-white shadow-lg shadow-violet-950/50"
+    ? "border-violet-300/30 bg-gradient-to-r from-violet-500/75 via-fuchsia-500/72 to-pink-500/75 px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-white shadow-[0_10px_28px_rgba(76,29,149,0.35)]"
     : title === "ELITE"
-      ? "border-amber-400/30 bg-gradient-to-r from-amber-500/90 to-orange-600/90 px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-white shadow-lg shadow-amber-950/30"
-      : "border-white/12 bg-gradient-to-r from-slate-600/90 to-slate-700/90 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/95"
+      ? "border-amber-300/35 bg-gradient-to-r from-amber-500/75 to-orange-500/75 px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-white shadow-[0_8px_22px_rgba(120,53,15,0.3)]"
+      : "border-white/12 bg-white/[0.08] px-4 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/88"
 
   const pillClass = highlight
     ? "border-emerald-400/35 bg-emerald-500/15 text-emerald-100/95"
     : "border-white/12 bg-white/[0.06] text-white/70"
 
   const ctaClass = isPrimaryCta
-    ? "bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-600 text-white shadow-[0_14px_44px_-10px_rgba(139,92,246,0.75)] hover:shadow-[0_18px_48px_-8px_rgba(217,70,239,0.55)] hover:brightness-[1.03] active:brightness-[0.98]"
-    : "border border-white/[0.14] bg-white/[0.06] text-white hover:border-violet-400/35 hover:bg-violet-500/[0.12] hover:text-white"
+    ? "bg-gradient-to-r from-violet-600/95 via-fuchsia-600/90 to-pink-600/88 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_12px_36px_-16px_rgba(168,85,247,0.85)] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_16px_40px_-14px_rgba(192,132,252,0.75)]"
+    : "border border-white/[0.12] bg-white/[0.045] text-white/92 hover:border-white/[0.2] hover:bg-white/[0.08]"
 
   const groups =
     featureGroups && featureGroups.length > 0
@@ -106,7 +106,7 @@ export default function PricingPlanCard({
       } ${frameClass} hover:shadow-[0_24px_60px_-20px_rgba(0,0,0,0.5)]`}
     >
       <div
-        className={`relative flex h-full flex-col rounded-[1.3rem] border border-white/[0.07] bg-[#0a0d16]/92 px-7 pb-8 pt-9 backdrop-blur-2xl transition duration-300 ease-out motion-safe:hover:-translate-y-0.5 ${innerClass}`}
+      className={`relative flex h-full flex-col rounded-[1.25rem] border border-white/[0.06] bg-[#0a0d16]/90 px-7 pb-8 pt-9 backdrop-blur-xl transition duration-300 ease-out motion-safe:hover:-translate-y-0.5 ${innerClass}`}
       >
         {topBadge && (
           <div
@@ -134,33 +134,33 @@ export default function PricingPlanCard({
             {audience}
           </p>
         ) : null}
-        <p className="mt-2.5 text-sm leading-relaxed text-white/50">{subtitle}</p>
+        <p className="mt-2.5 text-sm leading-relaxed text-white/58">{subtitle}</p>
 
-        <div className="mt-8 border-t border-white/[0.07] pt-7">
+        <div className="mt-8 border-t border-white/[0.055] pt-7">
           <div className="flex flex-wrap items-baseline gap-1.5">
             <span className="text-[2.65rem] font-semibold leading-none tabular-nums tracking-tight text-white sm:text-5xl">
               {formatPlanPrice(price)}
             </span>
           </div>
-          <p className="mt-2 text-sm text-white/48">
+          <p className="mt-2 text-sm text-white/56">
             {billing === "monthly" ? "per month, billed monthly" : "per year, billed annually"}
           </p>
           <p className="mt-3 text-sm font-semibold text-violet-200/90">{creditsLine}</p>
           {creditsExplainer ? (
-            <p className="mt-2 text-xs leading-relaxed text-white/42">{creditsExplainer}</p>
+            <p className="mt-2 text-xs leading-relaxed text-white/48">{creditsExplainer}</p>
           ) : null}
         </div>
 
         <div className="mt-8 flex flex-1 flex-col gap-6">
           {groups.map((group) => (
             <div key={group.heading}>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/38">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/46">
                 {group.heading}
               </p>
-              <ul className="mt-3 space-y-2.5 text-sm leading-snug text-white/72">
+              <ul className="mt-3 space-y-2.5 text-sm leading-snug text-white/78">
                 {group.items.map((item) => (
                   <li key={`${group.heading}-${item}`} className="flex gap-3">
-                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-violet-500/30 bg-violet-500/[0.12]">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-violet-400/24 bg-violet-500/[0.09]">
                       <Check className="h-3 w-3 text-violet-200" strokeWidth={2.5} aria-hidden />
                     </span>
                     <span>{item}</span>
@@ -171,7 +171,7 @@ export default function PricingPlanCard({
           ))}
         </div>
 
-        <div className="mt-6 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3.5 py-2.5 text-[11px] leading-relaxed text-white/48">
+        <div className="mt-6 rounded-xl border border-white/[0.05] bg-white/[0.02] px-3.5 py-2.5 text-[11px] leading-relaxed text-white/52">
           Secure checkout with Stripe. Change or cancel your subscription anytime from Billing.
         </div>
 
@@ -179,7 +179,7 @@ export default function PricingPlanCard({
           type="button"
           onClick={onClick}
           disabled={loading || current}
-          className={`mt-6 flex h-12 w-full items-center justify-center rounded-full text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-violet-400/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0d16] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none ${ctaClass}`}
+          className={`np-btn mt-6 flex h-12 w-full text-sm outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0d16] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none ${ctaClass}`}
         >
           {current ? "Your current plan" : loading ? "Opening checkout…" : buttonText}
         </button>

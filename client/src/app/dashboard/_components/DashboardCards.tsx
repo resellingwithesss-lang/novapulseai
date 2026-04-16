@@ -12,8 +12,8 @@ export function MetricCard({
   value: string | number
 }) {
   return (
-    <div className="np-card p-6 transition-[border-color,box-shadow,background-color] duration-200 ease-out hover:border-purple-400/18 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.055),0_8px_36px_rgba(0,0,0,0.16),0_0_40px_rgba(124,58,237,0.045)]">
-      <div className="text-xs font-medium uppercase tracking-[0.08em] text-white/40">
+    <div className="np-card-soft p-6 transition-[border-color,box-shadow,background-color] duration-200 ease-out hover:border-white/[0.09] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_14px_28px_rgba(0,0,0,0.2)]">
+      <div className="text-xs font-medium uppercase tracking-[0.08em] text-white/46">
         {title}
       </div>
 
@@ -34,10 +34,10 @@ export function ToolCard({
   return (
     <Link
       href={href}
-      className="group block rounded-3xl outline-none focus-visible:ring-2 focus-visible:ring-purple-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0f19]"
+      className="group block rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-purple-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0f19]"
     >
-      <div className="np-card cursor-pointer p-6 transition-[border-color,box-shadow] duration-200 ease-out group-hover:border-purple-400/18 group-hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.055),0_8px_36px_rgba(0,0,0,0.16),0_0_40px_rgba(124,58,237,0.045)]">
-        <div className="font-medium tracking-[-0.015em] text-white/[0.97]">{title}</div>
+      <div className="np-card-soft cursor-pointer p-5 transition-[border-color,box-shadow,transform] duration-200 ease-out group-hover:border-white/[0.1] group-hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.045),0_16px_28px_rgba(0,0,0,0.24)] group-hover:-translate-y-[1px]">
+        <div className="font-medium tracking-[-0.015em] text-white/[0.95]">{title}</div>
       </div>
     </Link>
   )
