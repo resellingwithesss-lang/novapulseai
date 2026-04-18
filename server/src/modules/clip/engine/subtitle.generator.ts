@@ -2,6 +2,7 @@ import { spawn } from "child_process"
 import { createReadStream, promises as fs } from "fs"
 import path from "path"
 import ffmpeg from "fluent-ffmpeg"
+import { getFfmpegBinaryPath } from "../../../lib/ffmpeg-binaries"
 import type {
   ClipCaptionMode,
   ClipPlatform,
@@ -232,16 +233,31 @@ function youtubeLinesToSegments(
 
 async function runFfmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn("ffmpeg", ["-hide_banner", "-loglevel", "error", ...args], {
-      shell: false,
-      windowsHide: true,
-      stdio: ["ignore", "ignore", "pipe"],
-    })
+    const ffmpegBin = getFfmpegBinaryPath()
+    const child = spawn(
+      ffmpegBin,
+      ["-hide_banner", "-loglevel", "error", ...args],
+      {
+        shell: false,
+        windowsHide: true,
+        stdio: ["ignore", "ignore", "pipe"],
+      }
+    )
     let err = ""
     child.stderr?.on("data", (c: Buffer) => {
       err += c.toString("utf8")
     })
-    child.on("error", reject)
+    child.on("error", (spawnErr: NodeJS.ErrnoException) => {
+      if (spawnErr.code === "ENOENT") {
+        reject(
+          new Error(
+            `ffmpeg binary not found at "${ffmpegBin}". Install ffmpeg or set FFMPEG_PATH.`
+          )
+        )
+        return
+      }
+      reject(spawnErr)
+    })
     child.on("close", (code) => {
       if (code === 0) resolve()
       else reject(new Error(err.trim().slice(0, 400) || `ffmpeg_exit_${code}`))

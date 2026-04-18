@@ -201,7 +201,8 @@ export const generateClips = async (
   })
 
   const outputs: ClipResult[] = []
-  const partial = take < req.clips
+  let fullyFailedCount = 0
+  const lastClipFailures: string[] = []
   const n = selected.length
 
   for (let i = 0; i < selected.length; i++) {
@@ -212,6 +213,7 @@ export const generateClips = async (
     const rawOutput = path.join(clipsDir, rawFileName)
     const finalOutput = path.join(clipsDir, finalFileName)
 
+    try {
     await r({
       kind: "trimming",
       fraction: n > 0 ? i / n : 1,
@@ -356,6 +358,38 @@ export const generateClips = async (
       captionNote,
       subtitlePublicPath,
     })
+    } catch (perClipErr) {
+      // A single clip failing should NOT lose the clips we already rendered.
+      // Log, clean up half-written files, and carry on. If every clip fails
+      // we throw a descriptive error AFTER the loop.
+      fullyFailedCount += 1
+      const summary =
+        perClipErr instanceof Error ? perClipErr.message : String(perClipErr)
+      if (lastClipFailures.length < 3) {
+        lastClipFailures.push(`clip ${i + 1}: ${summary}`)
+      }
+      console.warn("CLIP_STAGE_WARN", {
+        requestId,
+        stage: "per_clip",
+        status: "skipped_after_error",
+        clipIndex: i,
+        clipTotal: n,
+        errorSummary: summary,
+      })
+      await unlink(rawOutput).catch(() => {})
+      await unlink(finalOutput).catch(() => {})
+    }
+  }
+
+  if (outputs.length === 0) {
+    // Every selected moment failed to render. Preserve the most informative
+    // failure text for the user; do not claim success with zero clips.
+    throw new ClipInputError(
+      lastClipFailures.length > 0
+        ? `Could not produce any clips from this video. First failures: ${lastClipFailures.join(" | ")}`
+        : "Could not produce any clips from this video.",
+      500
+    )
   }
 
   await r({
@@ -364,12 +398,17 @@ export const generateClips = async (
     message: "Packaging results…",
   })
 
+  // `partial` is true when either (a) fewer strong moments were available than
+  // requested, or (b) some per-clip renders were skipped after errors.
+  const partial = outputs.length < req.clips
+
   console.info("CLIP_STAGE", {
     requestId,
     stage: "pipeline",
     status: "success",
     requestedClips: req.clips,
     generatedClips: outputs.length,
+    skippedClipFailures: fullyFailedCount,
     partial,
     durationMs: Date.now() - startedAt,
   })

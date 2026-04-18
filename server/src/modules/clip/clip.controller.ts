@@ -16,6 +16,10 @@ import type { ClipJobRecord } from "./clip.job.types"
 import { loadJob, saveJob, toPublicJobView } from "./clip.job.store"
 import { createJobId, scheduleClipJob } from "./clip.job.processor"
 import { validateUploadedVideoMagicBytes } from "./clip.upload-validate"
+import {
+  validateYoutubeUrl,
+  youtubeUrlRejectionMessage,
+} from "../../lib/youtube-url"
 
 interface MulterRequest extends Request, AuthRequest {
   file?: Express.Multer.File
@@ -63,14 +67,24 @@ const clipRequestSchema = z
   .object({
     youtubeUrl: z.preprocess(
       emptyToUndefined,
+      // Single step: validate, surface a reason-specific message, and emit the
+      // normalized absolute URL (scheme prepended when missing) so the job
+      // store, yt-dlp, and the SSRF guard in `downloadYoutubeVideo` always see
+      // a well-formed value. Allowlist + message strings live in
+      // `server/src/lib/youtube-url.ts` (source of truth).
       z
         .string()
-        .url()
-        .refine(
-          (value) =>
-            /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//i.test(value),
-          "YouTube URL must be from youtube.com or youtu.be"
-        )
+        .transform((v, ctx) => {
+          const result = validateYoutubeUrl(v)
+          if (!result.ok) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: youtubeUrlRejectionMessage(result),
+            })
+            return z.NEVER
+          }
+          return result.url
+        })
         .optional()
     ),
     clips: z.coerce.number().int().min(1).max(20).default(5),

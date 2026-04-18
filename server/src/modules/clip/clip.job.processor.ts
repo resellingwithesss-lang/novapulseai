@@ -1,9 +1,14 @@
+import { existsSync } from "fs"
 import { unlink } from "fs/promises"
 import path from "path"
 import { YoutubeTranscript } from "youtube-transcript"
 import { v4 as uuidv4 } from "uuid"
 import pLimit from "p-limit"
-import { downloadYoutubeVideo } from "../../utils/youtube.downloader"
+import {
+  cleanupYoutubeDownload,
+  downloadYoutubeVideo,
+} from "../../utils/youtube.downloader"
+import { assertFfmpegAvailable } from "../../lib/ffmpeg-binaries"
 import {
   ClipInputError,
   generateClips,
@@ -122,12 +127,49 @@ async function patchJob(
   return job
 }
 
+/**
+ * Statuses a job can have when `runClipJob` starts. `queued` is the normal
+ * entry point; the rest are recovery entry points (the process crashed or was
+ * redeployed mid-job and the job record is still on disk).
+ */
+const RUNNABLE_CLIP_JOB_STATUSES = new Set<ClipJobRecord["status"]>([
+  "queued",
+  "ingesting",
+  "analyzing",
+  "selecting_moments",
+  "trimming",
+  "captioning",
+  "finalizing",
+])
+
 export async function runClipJob(jobId: string): Promise<void> {
   await pruneStaleJobs()
 
   let job = await loadJob(jobId)
-  if (!job || job.status !== "queued") {
+  if (!job || !RUNNABLE_CLIP_JOB_STATUSES.has(job.status)) {
     return
+  }
+  const isResumed = job.status !== "queued"
+  if (isResumed) {
+    log.info("clip_job_resuming", {
+      jobId,
+      requestId: job.requestId,
+      previousStatus: job.status,
+      hadSourceVideoPath: Boolean(job.sourceVideoPath),
+    })
+    // Temp dirs (both the YouTube download and the uploaded-source dir) do not
+    // survive container restarts on most deploys. If the recorded source file
+    // is gone, clear it so either (a) the YouTube re-download path takes over,
+    // or (b) the upload path fails fast below with a clear message.
+    if (job.sourceVideoPath && !existsSync(job.sourceVideoPath)) {
+      log.warn("clip_job_resume_source_missing", {
+        jobId,
+        requestId: job.requestId,
+        missingPath: job.sourceVideoPath,
+        source: job.params.source,
+      })
+      delete job.sourceVideoPath
+    }
   }
 
   job.status = "ingesting"
@@ -135,18 +177,43 @@ export async function runClipJob(jobId: string): Promise<void> {
   job.progress = 3
   job.message =
     job.params.source === "youtube"
-      ? "Downloading from YouTube…"
-      : "Preparing uploaded source…"
+      ? isResumed
+        ? "Resuming: re-downloading from YouTube…"
+        : "Downloading from YouTube…"
+      : isResumed
+        ? "Resuming: re-checking uploaded source…"
+        : "Preparing uploaded source…"
   await saveJob(job)
 
   const requestId = job.requestId
   let videoPath: string | null = job.sourceVideoPath ?? null
-  let cleanupPath: string | null = videoPath
+  /**
+   * True whenever this run owns a YouTube temp dir and is responsible for its
+   * cleanup at exit — either because we just downloaded it, or because we
+   * resumed a youtube job whose prior temp dir still exists. In both cases
+   * `cleanupYoutubeDownload` is safe to call (it prefix-guards the path).
+   */
+  let ownsYoutubeTempDir = job.params.source === "youtube" && Boolean(videoPath)
+  /** For uploaded sources: the file the processor is responsible for deleting. */
+  let uploadedSourceToDelete: string | null =
+    job.params.source === "upload" ? videoPath : null
 
   try {
+    // Fail fast with an operator-actionable error if ffmpeg is clearly absent.
+    // Cheaper than discovering ENOENT mid-pipeline after a YouTube download
+    // already succeeded.
+    try {
+      assertFfmpegAvailable()
+    } catch (ffErr) {
+      throw new ClipInputError(
+        ffErr instanceof Error ? ffErr.message : "ffmpeg is not available on this host.",
+        500
+      )
+    }
+
     if (!videoPath && job.params.source === "youtube" && job.params.youtubeUrl) {
       videoPath = await downloadYoutubeVideo(job.params.youtubeUrl)
-      cleanupPath = videoPath
+      ownsYoutubeTempDir = true
       await patchJob(jobId, (j) => {
         j.sourceVideoPath = videoPath!
         j.progress = 12
@@ -155,7 +222,12 @@ export async function runClipJob(jobId: string): Promise<void> {
     }
 
     if (!videoPath) {
-      throw new ClipInputError("No video source available for this job.", 400)
+      throw new ClipInputError(
+        job.params.source === "upload"
+          ? "Uploaded source file is no longer available (likely cleared by a restart). Please re-upload."
+          : "No video source available for this job.",
+        400
+      )
     }
 
     let youtubeTranscript: YoutubeTranscriptLine[] | null = null
@@ -165,11 +237,29 @@ export async function runClipJob(jobId: string): Promise<void> {
       job.params.youtubeUrl
     ) {
       try {
-        youtubeTranscript = await YoutubeTranscript.fetchTranscript(
+        const raw = await YoutubeTranscript.fetchTranscript(
           job.params.youtubeUrl
         )
-      } catch {
+        // youtube-transcript may return non-array on unexpected response shapes;
+        // guard so downstream subtitle code doesn't explode on `.map`.
+        youtubeTranscript = Array.isArray(raw) && raw.length > 0 ? raw : null
+        if (youtubeTranscript == null) {
+          log.info("clip_job_youtube_transcript_empty", {
+            jobId,
+            requestId,
+            rawType: Array.isArray(raw) ? "empty_array" : typeof raw,
+          })
+        }
+      } catch (err) {
         youtubeTranscript = null
+        // Not fatal — the pipeline falls back to whisper. Log so operators can
+        // spot systemic transcript failures instead of diagnosing by user
+        // reports of missing captions.
+        log.warn("clip_job_youtube_transcript_failed", {
+          jobId,
+          requestId,
+          ...serializeErr(err),
+        })
       }
     }
 
@@ -273,8 +363,16 @@ export async function runClipJob(jobId: string): Promise<void> {
       })
     }
   } finally {
-    if (cleanupPath) {
-      await unlink(cleanupPath).catch(() => {})
+    // For YouTube downloads: remove the ENTIRE `tmp/yt_job_<id>/` directory,
+    // not just the `.mp4` — fragments, .part files, thumbnails, nfo, and
+    // subtitle sidecars all live in that dir and were previously leaked on
+    // every successful job. `cleanupYoutubeDownload` guards against touching
+    // anything outside the expected prefix.
+    if (ownsYoutubeTempDir && videoPath) {
+      await cleanupYoutubeDownload(videoPath)
+    }
+    if (uploadedSourceToDelete) {
+      await unlink(uploadedSourceToDelete).catch(() => {})
     }
   }
 }

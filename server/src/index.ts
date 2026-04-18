@@ -17,6 +17,7 @@ import { assertApiDatabaseReady } from "./lib/prisma-schema-health";
 import { validateServerEnvironment } from "./lib/validate-server-env";
 import { log, serializeErr } from "./lib/logger";
 import { logYoutubeIngestStartupDiagnostics } from "./utils/youtube-ingest-prerequisites";
+import { configureFluentFfmpeg } from "./lib/ffmpeg-binaries";
 import { startEmailQueueWorker } from "./lib/email-outbound";
 import { recoverPendingClipJobs } from "./modules/clip/clip.job.processor";
 
@@ -26,6 +27,10 @@ import { recoverPendingClipJobs } from "./modules/clip/clip.job.processor";
 
 validateServerEnvironment();
 logYoutubeIngestStartupDiagnostics();
+// Point fluent-ffmpeg (ads + clip) at a resolved binary BEFORE any route
+// loads a module that uses it. Also emits the resolution source so operators
+// can confirm at deploy time that the container has ffmpeg where expected.
+configureFluentFfmpeg();
 
 /* =====================================================
    PATHS

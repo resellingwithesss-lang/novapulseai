@@ -3,6 +3,7 @@ import { existsSync, statSync } from "fs"
 import { mkdir, readdir, rm } from "fs/promises"
 import path from "path"
 import { log, serializeErr } from "../lib/logger"
+import { assertPublicHttpUrl } from "../lib/url-guard"
 import {
   resolveFfmpegBinDir,
   resolveYtDlpBinaryPath,
@@ -38,6 +39,37 @@ function debugYoutubeFilePick(phase: string, fields: Record<string, unknown>): v
     phase,
     ...fields,
   })
+}
+
+/**
+ * Directory name prefix for the isolated per-download temp dirs that
+ * `downloadYoutubeVideo` creates under `tmp/`. Kept as a module-level constant
+ * so `cleanupYoutubeDownload` can refuse to touch anything outside that shape.
+ */
+const YT_JOB_DIR_PREFIX = "yt_job_"
+
+/**
+ * Remove the isolated `tmp/yt_job_<id>/` directory that `downloadYoutubeVideo`
+ * created for a given download. Pass the video path returned by the
+ * downloader. The helper only removes directories that match the expected
+ * prefix and are inside `<cwd>/tmp/`; anything else is silently ignored so
+ * callers can use it unconditionally without risk of deleting uploaded
+ * sources or other tmp contents. Safe to call when the directory is already
+ * gone.
+ */
+export async function cleanupYoutubeDownload(videoPath: string): Promise<void> {
+  try {
+    if (!videoPath) return
+    const jobDir = path.dirname(path.resolve(videoPath))
+    const base = path.basename(jobDir)
+    if (!base.startsWith(YT_JOB_DIR_PREFIX)) return
+    const tmpRoot = path.resolve(path.join(process.cwd(), "tmp"))
+    const rel = path.relative(tmpRoot, jobDir)
+    if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return
+    await rm(jobDir, { recursive: true, force: true })
+  } catch {
+    /* best-effort cleanup; never let this mask the real error */
+  }
 }
 
 const VIDEO_EXTENSIONS = new Set([
@@ -536,11 +568,21 @@ const ATTEMPTS: AttemptSpec[] = [
 ]
 
 export const downloadYoutubeVideo = async (url: string): Promise<string> => {
+  // Defense in depth: the clip controller's Zod schema already restricts
+  // `youtubeUrl` to youtube.com / youtu.be hostnames, but this function is
+  // exported and trusts its caller. Re-validate the URL with the shared
+  // SSRF guard so literal private IPs, embedded credentials, oversized input,
+  // and non-http(s) schemes cannot reach yt-dlp even if a future call site
+  // bypasses the regex or a persisted job record is tampered with. DNS
+  // resolution is intentionally NOT done here — the upstream hostname
+  // allowlist already bounds the target set to youtube.
+  assertPublicHttpUrl(url, { allowLoopback: false })
+
   const tmpRoot = path.join(process.cwd(), "tmp")
   await mkdir(tmpRoot, { recursive: true })
 
   const id = `youtube_${Date.now()}_${randomBytes(4).toString("hex")}`
-  const jobDir = path.resolve(tmpRoot, `yt_job_${id}`)
+  const jobDir = path.resolve(tmpRoot, `${YT_JOB_DIR_PREFIX}${id}`)
   await rm(jobDir, { recursive: true, force: true }).catch(() => {})
   await mkdir(jobDir, { recursive: true })
 
@@ -745,6 +787,11 @@ export const downloadYoutubeVideo = async (url: string): Promise<string> => {
     lastJobDir: jobDir,
     lastProblemWasResolution,
   })
+
+  // Remove the job dir on total failure. The success path keeps it alive so
+  // the caller can read the downloaded file; success-case cleanup happens in
+  // the caller (`runClipJob` finally) via `cleanupYoutubeDownload`.
+  await rm(jobDir, { recursive: true, force: true }).catch(() => {})
 
   throw new Error(friendly + devDetail)
 }

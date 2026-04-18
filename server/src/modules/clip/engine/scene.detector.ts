@@ -1,5 +1,6 @@
 import ffmpeg from "fluent-ffmpeg"
 import { spawn } from "child_process"
+import { getFfprobeBinaryPath } from "../../../lib/ffmpeg-binaries"
 import type { ClipCandidate, ClipPlatform } from "../types/clip.types"
 
 const DEFAULT_MIN_DURATION = 10
@@ -121,7 +122,8 @@ const getKeyframeTimestamps = (videoPath: string): Promise<number[]> => {
   ]
 
   return new Promise((resolve, reject) => {
-    const child = spawn("ffprobe", args, {
+    const ffprobeBin = getFfprobeBinaryPath()
+    const child = spawn(ffprobeBin, args, {
       shell: false,
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
@@ -137,7 +139,17 @@ const getKeyframeTimestamps = (videoPath: string): Promise<number[]> => {
       stderr += chunk.toString("utf8")
     })
 
-    child.on("error", (error) => {
+    child.on("error", (error: NodeJS.ErrnoException) => {
+      // Translate ENOENT into an operator-actionable message so users don't
+      // see a raw "spawn ffprobe ENOENT" in job errors.
+      if (error.code === "ENOENT") {
+        reject(
+          new Error(
+            `ffprobe binary not found at "${ffprobeBin}". Install ffmpeg (which ships ffprobe) or set FFPROBE_PATH.`
+          )
+        )
+        return
+      }
       reject(error)
     })
 

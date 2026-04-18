@@ -1,4 +1,5 @@
 import { spawn } from "child_process"
+import { getFfmpegBinaryPath } from "../../../lib/ffmpeg-binaries"
 import { PLATFORM_PRESETS } from "../types/clip.types"
 import type { ClipPlatform } from "../types/clip.types"
 
@@ -79,7 +80,8 @@ export const generateClip = async (
   ]
 
   return new Promise((resolve, reject) => {
-    const child = spawn("ffmpeg", args, {
+    const ffmpegBin = getFfmpegBinaryPath()
+    const child = spawn(ffmpegBin, args, {
       shell: false,
       windowsHide: true,
       stdio: ["ignore", "ignore", "pipe"],
@@ -95,8 +97,11 @@ export const generateClip = async (
       }
     })
 
-    child.on("error", (err) => {
-      const errorSummary = err.message || "ffmpeg_spawn_error"
+    child.on("error", (err: NodeJS.ErrnoException) => {
+      const enoent = err.code === "ENOENT"
+      const errorSummary = enoent
+        ? `ffmpeg binary not found at "${ffmpegBin}". Install ffmpeg or set FFMPEG_PATH.`
+        : err.message || "ffmpeg_spawn_error"
       console.error("CLIP_STAGE_FAIL", {
         requestId,
         stage: "clip",
@@ -106,7 +111,7 @@ export const generateClip = async (
         errorSummary,
         durationMs: Date.now() - startedAt,
       })
-      reject(err)
+      reject(enoent ? new Error(errorSummary) : err)
     })
 
     child.on("close", (code, signal) => {
