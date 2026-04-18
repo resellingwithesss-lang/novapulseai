@@ -7,6 +7,7 @@
 ===================================================== */
 
 :root {
+  color-scheme: dark;
   --np-bg: #0b0f19;
   --np-surface: rgba(255, 255, 255, 0.04);
   --np-border: rgba(255, 255, 255, 0.08);
@@ -118,6 +119,76 @@ select {
   background: var(--np-surface);
   backdrop-filter: blur(20px);
   border: 1px solid var(--np-border);
+}
+
+/* =====================================================
+   NATIVE SELECT / DROPDOWNS (dark theme, all states)
+   Use class "np-select" on every <select>. Optional: np-select--sm for dense rows.
+===================================================== */
+
+@layer components {
+  .np-select {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    appearance: auto;
+    -webkit-appearance: menulist;
+    border-radius: 1rem;
+    border: 1px solid rgba(148, 163, 184, 0.38) !important;
+    background-color: #0f172a !important;
+    background-image: none;
+    color: #f1f5f9 !important;
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+    line-height: 1.45;
+    min-height: 2.75rem;
+    box-shadow:
+      0 4px 22px -10px rgba(0, 0, 0, 0.6),
+      inset 0 1px 0 rgba(255, 255, 255, 0.045);
+    color-scheme: dark;
+  }
+
+  .np-select:hover:not(:disabled) {
+    border-color: rgba(186, 170, 255, 0.42) !important;
+    background-color: rgb(17 24 39) !important;
+  }
+
+  .np-select:focus-visible {
+    outline: none !important;
+    border-color: rgba(167, 139, 250, 0.58) !important;
+    box-shadow:
+      0 4px 22px -10px rgba(0, 0, 0, 0.6),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 0 0 3px rgba(124, 58, 237, 0.32);
+  }
+
+  .np-select:disabled {
+    opacity: 0.55 !important;
+    cursor: not-allowed;
+  }
+
+  .np-select--sm {
+    font-size: 0.8125rem !important;
+    line-height: 1.4 !important;
+    min-height: 2.4rem !important;
+    padding: 0.45rem 0.75rem !important;
+    border-radius: 0.625rem !important;
+  }
+
+  .np-select--xs {
+    font-size: 0.75rem !important;
+    line-height: 1.35 !important;
+    min-height: 2.15rem !important;
+    padding: 0.35rem 0.6rem !important;
+    border-radius: 0.5rem !important;
+  }
+
+  select.np-select option,
+  select.np-select optgroup {
+    background-color: #0f172a !important;
+    color: #f1f5f9 !important;
+  }
 }
 
 /* =====================================================

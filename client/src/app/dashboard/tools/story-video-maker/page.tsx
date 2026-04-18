@@ -13,6 +13,13 @@ import { incrementToolUsage, pushOutputHistory, recordEmailReadyEvent } from "@/
 import UpgradeModal from "@/components/growth/UpgradeModal"
 import { toAbsoluteMediaUrl } from "@/lib/mediaOrigin"
 import CreatorWorkflowSelectors from "@/components/workflow/CreatorWorkflowSelectors"
+import PackagingPresetPicker from "@/components/ad-studio/PackagingPresetPicker"
+import {
+  ADS_TTS_VOICE_OPTIONS,
+  STUDIO_CREATIVE_MODE_OPTIONS,
+  STUDIO_QUICK_PICK_MODE_IDS,
+  VIDEO_PACKAGING_PRESETS,
+} from "@/lib/ad-studio-presets"
 
 const AdsResultPanel = dynamic(
   () => import("@/app/admin/ads/_components/AdsResultPanel"),
@@ -57,6 +64,10 @@ export default function StoryVideoMakerPage() {
   )
   const [renderTopVariants, setRenderTopVariants] = useState<1 | 2>(1)
   const [voice, setVoice] = useState<AdsVoice>("alloy")
+  const [voiceMode, setVoiceMode] = useState<"ai_openai_tts" | "silent_music_only">("ai_openai_tts")
+  const [studioCreativeMode, setStudioCreativeMode] = useState("")
+  const [videoPackaging, setVideoPackaging] = useState("")
+  const [captionAccentHex, setCaptionAccentHex] = useState("")
   const [repeatUsageCount, setRepeatUsageCount] = useState(0)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [workspaceId, setWorkspaceId] = useState("")
@@ -154,6 +165,7 @@ export default function StoryVideoMakerPage() {
       polling.resetForNewRun()
       polling.clearOutput()
 
+      const accent = captionAccentHex.trim()
       const response = await api.post<GenerateResponse>(
         "/ads/generate",
         {
@@ -166,6 +178,10 @@ export default function StoryVideoMakerPage() {
           creativeMode,
           renderTopVariants,
           voice,
+          voiceMode,
+          ...(studioCreativeMode.trim() ? { studioCreativeMode: studioCreativeMode.trim() } : {}),
+          ...(videoPackaging.trim() ? { videoPackaging: videoPackaging.trim() } : {}),
+          ...(accent && /^[0-9A-Fa-f]{6}$/.test(accent) ? { captionAccentHex: accent } : {}),
           ...(workspaceId ? { workspaceId } : {}),
           ...(sourceContentPackId ? { sourceContentPackId } : {}),
           ...(sourceGenerationId ? { sourceGenerationId } : {}),
@@ -223,8 +239,8 @@ export default function StoryVideoMakerPage() {
     <ToolPageShell
       toolId="story-video-maker"
       title="Story Video Generator"
-      subtitle="Generate platform-ready ad videos from your website in one guided flow."
-      guidance="Best results come from pages with clear headline, offer, and CTA sections."
+      subtitle="Turn a live site into a platform-native ad cut — creative steering, honest caption packaging, and real TTS or music-only sound."
+      guidance="Strong pages have a clear headline, proof, and CTA. Jobs kicked off from Ad Studio use the same pipeline — expand Look, captions & sound when you want packaging, accent, and VO dialed in before you generate."
       statusLabel={blockedMessage ?? (polling.state.loading ? "Rendering in progress" : "Ready to generate")}
       statusTone={blockedMessage || polling.state.loading ? "warning" : "success"}
       ctaHref="/dashboard/tools/story-maker"
@@ -261,7 +277,7 @@ export default function StoryVideoMakerPage() {
               value={siteUrl}
               onChange={(e) => setSiteUrl(e.target.value)}
               disabled={polling.state.loading}
-              className="w-full rounded-lg border border-white/15 bg-black/30 p-3"
+              className="np-select w-full"
             />
           </div>
 
@@ -271,7 +287,7 @@ export default function StoryVideoMakerPage() {
               value={tone}
               onChange={(e) => setTone(e.target.value)}
               disabled={polling.state.loading}
-              className="w-full rounded-lg border border-white/15 bg-black/30 p-3"
+              className="np-select w-full"
             >
               <option value="cinematic">Cinematic</option>
               <option value="emotional">Emotional</option>
@@ -286,7 +302,7 @@ export default function StoryVideoMakerPage() {
               value={platform}
               onChange={(e) => setPlatform(e.target.value)}
               disabled={polling.state.loading}
-              className="w-full rounded-lg border border-white/15 bg-black/30 p-3"
+              className="np-select w-full"
             >
               <option value="tiktok">TikTok (9:16)</option>
               <option value="instagram">Instagram (1:1)</option>
@@ -300,7 +316,7 @@ export default function StoryVideoMakerPage() {
               value={duration}
               onChange={(e) => setDuration(Number(e.target.value))}
               disabled={polling.state.loading}
-              className="w-full rounded-lg border border-white/15 bg-black/30 p-3"
+              className="np-select w-full"
             >
               <option value={15}>15 seconds</option>
               <option value={30}>30 seconds</option>
@@ -315,13 +331,13 @@ export default function StoryVideoMakerPage() {
               value={editingStyle}
               onChange={(e) => setEditingStyle(e.target.value)}
               disabled={polling.state.loading}
-              className="w-full rounded-lg border border-white/15 bg-black/30 p-3"
+              className="np-select w-full"
             >
-              <option value="premium">Premium</option>
-              <option value="auto">Auto</option>
-              <option value="website">Website Demo</option>
-              <option value="desk">Desk Setup</option>
-              <option value="aggressive">Viral Fast</option>
+              <option value="premium">Premium cinematic</option>
+              <option value="auto">Smart auto (balanced)</option>
+              <option value="website">Website walkthrough</option>
+              <option value="desk">Desk / creator setup</option>
+              <option value="aggressive">Fast viral cut</option>
             </select>
           </div>
         </div>
@@ -333,7 +349,7 @@ export default function StoryVideoMakerPage() {
             disabled={polling.state.loading}
             onChange={() => setUltra((prev) => !prev)}
           />
-          Enable ultra quality render
+          Higher-quality encode (recommended when not using admin fast preview)
         </label>
 
         <div className="mt-5 grid gap-4 md:grid-cols-2">
@@ -347,7 +363,7 @@ export default function StoryVideoMakerPage() {
                 setCreativeMode(e.target.value as "cinematic" | "ugc_social")
               }
               disabled={polling.state.loading}
-              className="w-full rounded-lg border border-white/15 bg-black/30 p-3"
+              className="np-select w-full"
             >
               <option value="cinematic">Cinematic (polished commercial)</option>
               <option value="ugc_social">UGC / native short-form</option>
@@ -363,33 +379,163 @@ export default function StoryVideoMakerPage() {
                 setRenderTopVariants(Number(e.target.value) as 1 | 2)
               }
               disabled={polling.state.loading}
-              className="w-full rounded-lg border border-white/15 bg-black/30 p-3"
+              className="np-select w-full"
             >
               <option value={1}>Top 1 variant</option>
               <option value={2}>Top 2 variants (compare)</option>
             </select>
           </div>
-          <div className="md:col-span-2">
-            <label className="mb-2 block text-xs uppercase tracking-wide text-white/60">
-              Voice
-            </label>
-            <select
-              value={voice}
-              onChange={(e) => setVoice(e.target.value as AdsVoice)}
-              disabled={polling.state.loading}
-              className="w-full rounded-lg border border-white/15 bg-black/30 p-3"
-            >
-              <option value="alloy">Alloy</option>
-              <option value="ash">Ash</option>
-              <option value="ballad">Ballad</option>
-              <option value="coral">Coral</option>
-              <option value="echo">Echo</option>
-              <option value="sage">Sage</option>
-              <option value="shimmer">Shimmer</option>
-              <option value="verse">Verse</option>
-            </select>
-          </div>
         </div>
+
+        <details className="group mt-5 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 open:bg-white/[0.04]">
+          <summary className="cursor-pointer list-none text-sm font-medium text-white/75 outline-none marker:content-none [&::-webkit-details-marker]:hidden">
+            <span className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">
+              <span>Look, captions &amp; sound</span>
+              <span className="text-xs font-normal text-white/40">Creative preset · packaging · optional accent</span>
+            </span>
+          </summary>
+          <div className="mt-4 space-y-5 border-t border-white/10 pt-4">
+            <div>
+              <label className="mb-2 block text-xs uppercase tracking-wide text-white/60">
+                Ad Studio creative preset
+              </label>
+              <select
+                value={studioCreativeMode}
+                onChange={(e) => setStudioCreativeMode(e.target.value)}
+                disabled={polling.state.loading}
+                className="np-select w-full"
+              >
+                <option value="">Balanced (no preset)</option>
+                {STUDIO_CREATIVE_MODE_OPTIONS.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs leading-relaxed text-white/45">
+                {studioCreativeMode
+                  ? STUDIO_CREATIVE_MODE_OPTIONS.find((o) => o.id === studioCreativeMode)?.hint ??
+                    "Shapes script beats and default packaging on the server."
+                  : "Optional: steers hook energy and default caption packaging when you do not override packaging below."}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {STUDIO_QUICK_PICK_MODE_IDS.map((id) => {
+                  const opt = STUDIO_CREATIVE_MODE_OPTIONS.find((o) => o.id === id)
+                  if (!opt) return null
+                  const active = studioCreativeMode === id
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      disabled={polling.state.loading}
+                      title={opt.hint}
+                      onClick={() => setStudioCreativeMode(active ? "" : id)}
+                      className={`rounded-full border px-3 py-1.5 text-[11px] font-medium transition disabled:opacity-50 ${
+                        active
+                          ? "border-purple-400/50 bg-purple-500/20 text-white"
+                          : "border-white/12 bg-black/25 text-white/55 hover:border-white/22 hover:text-white/80"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div>
+              <span className="mb-2 block text-xs uppercase tracking-wide text-white/60">
+                Caption packaging
+              </span>
+              <PackagingPresetPicker
+                value={videoPackaging}
+                onChange={setVideoPackaging}
+                disabled={polling.state.loading}
+                presets={VIDEO_PACKAGING_PRESETS}
+              />
+            </div>
+
+            <label className="block space-y-2">
+              <span className="text-xs uppercase tracking-wide text-white/60">Caption accent (optional hex)</span>
+              <input
+                type="text"
+                value={captionAccentHex}
+                onChange={(e) =>
+                  setCaptionAccentHex(e.target.value.replace(/[^0-9A-Fa-f]/g, "").slice(0, 6))
+                }
+                disabled={polling.state.loading}
+                placeholder="RRGGBB without #"
+                maxLength={6}
+                className="np-select w-full font-mono text-sm"
+              />
+              {captionAccentHex.length === 6 && /^[0-9A-Fa-f]{6}$/.test(captionAccentHex) ? (
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className="h-7 w-7 shrink-0 rounded-full border border-white/15"
+                    style={{ backgroundColor: `#${captionAccentHex}` }}
+                    aria-hidden
+                  />
+                  <span className="text-[11px] text-white/42">
+                    Applied on streamer-style highlights when the renderer uses accent color.
+                  </span>
+                </div>
+              ) : (
+                <p className="text-[11px] text-white/38">Leave blank for default contrast from the packaging preset.</p>
+              )}
+            </label>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <span className="mb-2 block text-xs uppercase tracking-wide text-white/60">Sound</span>
+                <div className="flex rounded-xl border border-white/12 bg-black/25 p-1">
+                  {(
+                    [
+                      { id: "ai_openai_tts" as const, label: "Narration" },
+                      { id: "silent_music_only" as const, label: "Music only" },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      disabled={polling.state.loading}
+                      onClick={() => setVoiceMode(opt.id)}
+                      className={`flex-1 rounded-lg px-2 py-2 text-xs font-medium transition ${
+                        voiceMode === opt.id
+                          ? "bg-white/15 text-white shadow-sm"
+                          : "text-white/50 hover:text-white/78"
+                      } disabled:opacity-50`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-[11px] leading-relaxed text-white/40">
+                  Narration uses OpenAI TTS (synthetic). Music-only skips VO.
+                </p>
+              </div>
+              <div>
+                <label className="mb-2 block text-xs uppercase tracking-wide text-white/60">
+                  TTS voice (narration mode)
+                </label>
+                <select
+                  value={voice}
+                  onChange={(e) => setVoice(e.target.value as AdsVoice)}
+                  disabled={polling.state.loading || voiceMode !== "ai_openai_tts"}
+                  className="np-select w-full"
+                >
+                  {ADS_TTS_VOICE_OPTIONS.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1.5 text-[11px] leading-relaxed text-white/45">
+                  {ADS_TTS_VOICE_OPTIONS.find((v) => v.id === voice)?.character}
+                </p>
+              </div>
+            </div>
+          </div>
+        </details>
 
         <button
           type="button"
@@ -434,7 +580,9 @@ export default function StoryVideoMakerPage() {
         )}
       </div>
 
-      {polling.state.videoUrl && <AdsResultPanel videoUrl={polling.state.videoUrl} />}
+      {polling.state.videoUrl && (
+        <AdsResultPanel videoUrl={polling.state.videoUrl} platform={platform} />
+      )}
       {!polling.state.videoUrl && (
         <ToolResultLayout
           title="Story Video Output"

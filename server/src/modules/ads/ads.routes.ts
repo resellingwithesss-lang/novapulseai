@@ -45,6 +45,10 @@ import { mixAudio } from "./audio.mixer"
 import { renderVideo } from "./ads.renderer"
 import { adJobCreateWithWorkspaceFallback } from "./ad-job.create"
 import { runLimitedBackgroundJob } from "../../lib/background-job"
+import {
+  assertPublicHttpUrl,
+  isLoopbackIngestionAllowed,
+} from "../../lib/url-guard"
 
 const router = Router()
 
@@ -749,17 +753,14 @@ function ensureGeneratedFolder(): void {
 }
 
 function normalizeUrl(input: string): string {
-  const url = new URL(input.trim())
-
-  url.hash = ""
-  url.username = ""
-  url.password = ""
-
-  if (!["http:", "https:"].includes(url.protocol)) {
-    throw new Error("Invalid URL protocol")
-  }
-
-  return url.toString()
+  // Guards the `siteUrl` that feeds Puppeteer `page.goto` downstream. Rejects
+  // IP literals, RFC1918 / loopback / link-local / cloud-metadata targets, and
+  // embedded credentials. Loopback only permitted in local dev when the
+  // operator has opted in via `AD_TREAT_LOCALHOST_AS_NOVAPULSEAI`.
+  return assertPublicHttpUrl(input, {
+    maxLength: MAX_URL_LENGTH,
+    allowLoopback: isLoopbackIngestionAllowed(),
+  })
 }
 
 function buildCaptionsFromScript(

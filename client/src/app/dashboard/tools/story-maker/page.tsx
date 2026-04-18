@@ -312,7 +312,7 @@ export default function StoryMakerPage() {
         <select
           value={format}
           onChange={(e) => setFormat(e.target.value)}
-          className="p-3 rounded-xl bg-[#0f172a] border border-white/10"
+          className="np-select w-full"
         >
           <option>Reddit Confession</option>
           <option>POV Immersive</option>
@@ -324,7 +324,7 @@ export default function StoryMakerPage() {
         <select
           value={ending}
           onChange={(e) => setEnding(e.target.value)}
-          className="p-3 rounded-xl bg-[#0f172a] border border-white/10"
+          className="np-select w-full"
           aria-label="Story ending style"
         >
           <option value="CLIFFHANGER">Ending: Cliffhanger</option>

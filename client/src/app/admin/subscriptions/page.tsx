@@ -134,7 +134,7 @@ export default function SubscriptionsPage() {
         <select
           value={planFilter}
           onChange={(e) => setPlanFilter(e.target.value as typeof planFilter)}
-          className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm"
+          className="np-select np-select--sm w-full"
         >
           <option value="ALL">All Plans</option>
           <option value="FREE">Free</option>
@@ -145,7 +145,7 @@ export default function SubscriptionsPage() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-          className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm"
+          className="np-select np-select--sm w-full"
         >
           <option value="ALL">All Statuses</option>
           <option value="ACTIVE">Active</option>

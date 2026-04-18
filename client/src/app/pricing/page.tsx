@@ -357,7 +357,7 @@ export default function PricingPage() {
         setLoadingPlan(null)
       }
     },
-    [billing, router, status, subscription, user]
+    [billing, refreshUser, router, status, subscription, user]
   )
 
   useEffect(() => {
