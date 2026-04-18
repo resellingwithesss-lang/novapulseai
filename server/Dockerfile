@@ -6,53 +6,77 @@
 #
 # From monorepo root:
 #   docker build -f server/Dockerfile -t novapulseai-api ./server
-# yt-dlp: we install the official release binary (not only Debian's package, which lags YouTube changes).
-# npm's yt-dlp-exec postinstall targets an asset named "yt-dlp" that is not the Linux glibc binary — skip it and use /usr/local/bin/yt-dlp at runtime (see YOUTUBE_DL_SKIP_DOWNLOAD).
+#
+# yt-dlp: we install the official release binary (not Debian's package, which lags
+# YouTube changes). npm's yt-dlp-exec postinstall targets an asset that isn't the
+# Linux glibc standalone binary — skip it and use /usr/local/bin/yt-dlp at runtime
+# (see YOUTUBE_DL_SKIP_DOWNLOAD).
 
+# =========================================================================
+# BUILD STAGE — tsc + prisma generate + prune. No Chromium / ffmpeg needed.
+# =========================================================================
 FROM node:20-bookworm-slim AS build
 WORKDIR /app
 
-# python-is-python3: yt-dlp-exec preinstall runs `bin-version-check-cli python ...` (needs `python` on PATH).
-# python3 + build tools: node-gyp / sharp if a prebuild is missing.
+# Build-only native deps:
+# - python3 + python-is-python3: yt-dlp-exec's preinstall calls
+#   `bin-version-check-cli python ...` and requires `python` on PATH.
+# - make + g++: node-gyp fallback when sharp / native prebuilds are missing.
+# - ca-certificates: HTTPS trust for npm registry + Prisma engine downloads.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  openssl \
   ca-certificates \
-  chromium \
   python3 \
   python-is-python3 \
   make \
   g++ \
   && rm -rf /var/lib/apt/lists/*
 
+# Stop Puppeteer and yt-dlp-exec from pulling their own binaries during
+# `npm ci`. Runtime versions are installed in the runner stage.
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV YOUTUBE_DL_SKIP_DOWNLOAD=true
 
 COPY package.json package-lock.json ./
 COPY prisma ./prisma/
-
-# Avoid broken/mismatched postinstall binary; production uses system yt-dlp (see runner stage).
-ENV YOUTUBE_DL_SKIP_DOWNLOAD=true
 RUN npm ci
 
 COPY . ./
 RUN npx prisma generate && npm run build && npm prune --omit=dev
 
+# =========================================================================
+# RUNNER STAGE — runtime only. Chromium, ffmpeg, yt-dlp, Deno.
+# =========================================================================
 FROM node:20-bookworm-slim AS runner
 WORKDIR /app
 
 ARG TARGETARCH=amd64
 
+# --- Runtime system packages (single layer, single apt-get) ---
+# ffmpeg         : clip + ads pipelines (and ffprobe ships with it)
+# chromium       : Puppeteer (ads capture + analyzer); used via
+#                  PUPPETEER_EXECUTABLE_PATH below
+# ca-certificates: HTTPS trust store for outbound calls
+# curl           : fetches yt-dlp binary + Deno install script below
+# unzip          : required by Deno's install.sh
+# openssl        : Prisma query engine uses libssl (libssl3 ships in the base
+#                  image, but keeping `openssl` here makes the engine's
+#                  OpenSSL detection deterministic across base-image updates)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  openssl \
+  ffmpeg \
+  chromium \
   ca-certificates \
   curl \
   unzip \
-  chromium \
-  ffmpeg \
-  python3 \
-  python-is-python3 \
-  && rm -rf /var/lib/apt/lists/* \
-  && set -eux \
+  openssl \
+  && rm -rf /var/lib/apt/lists/*
+
+# --- Deno + yt-dlp in a SEPARATE layer ---
+# Kept out of the apt layer so a transient download failure (Deno dl-server,
+# GitHub releases CDN) does not invalidate the apt cache on retry. This is
+# the most common cause of "apt-get install failed" on Railway rebuilds:
+# a later step in the same RUN fails, the whole layer is re-run next time,
+# and the failure now appears at apt because that's the first line.
+RUN set -eux \
   && export DENO_INSTALL=/usr/local \
   && curl -fsSL https://deno.land/install.sh | sh \
   && chmod +x /usr/local/bin/deno \
@@ -65,21 +89,50 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && curl -fsSL "https://github.com/yt-dlp/yt-dlp/releases/latest/download/${ytdlp_asset}" -o /usr/local/bin/yt-dlp \
   && chmod a+rx /usr/local/bin/yt-dlp \
   && /usr/local/bin/yt-dlp --version \
-  && ffmpeg -version | head -n1 \
+  && ffmpeg -version | head -n 1 \
   && ffprobe -version | head -n 1
 
 ENV NODE_ENV=production
+# Puppeteer → system Chromium installed above; never try to download its own.
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-# yt-dlp EJS / YouTube player extraction: prefer Deno then Node (see YT_DLP_JS_RUNTIMES override).
+# yt-dlp EJS / YouTube player extraction: prefer Deno, then Node.
 ENV YT_DLP_JS_RUNTIMES=deno:/usr/local/bin/deno,node:/usr/local/bin/node
-# Optional (Railway / prod): mount Netscape cookies.txt and set YT_DLP_COOKIES to its absolute path — see docs/YOUTUBE_CLIPPER_OPERATORS.md
+# Point the shared ffmpeg-binaries resolver at the apt-installed binary so
+# fluent-ffmpeg + spawn() sites agree on a single path across the server.
+ENV FFMPEG_PATH=/usr/bin/ffmpeg
+ENV FFPROBE_PATH=/usr/bin/ffprobe
+# ---------------------------------------------------------------------------
+# YouTube operator cookies (optional)
+#
+# The image NO LONGER bakes `cookies.txt` at build time. That earlier
+# `COPY cookies.txt /app/cookies.txt` required operators to drop a file into
+# the build context and broke CI / Railway builds when the file was absent
+# (the file is gitignored on purpose).
+#
+# At runtime, yt-dlp only reads cookies when `YT_DLP_COOKIES` points at a
+# real Netscape-format file. Three supported patterns, in order of preference:
+#
+#   1. Mount a file at runtime and set the env var:
+#        docker run -v /secrets/yt-cookies.txt:/run/secrets/yt-cookies.txt:ro \
+#                   -e YT_DLP_COOKIES=/run/secrets/yt-cookies.txt ...
+#      On Railway: attach a volume / secret file at the fixed mount path and
+#      set `YT_DLP_COOKIES` in the service env.
+#
+#   2. Bake at build time via a BuildKit secret (no file ever ends up in an
+#      image layer — prefer this if you must bake):
+#        docker build \
+#          --secret id=ytcookies,src=./cookies.txt \
+#          -t novapulseai-api .
+#      Then add a RUN in a custom overlay stage that reads
+#      `/run/secrets/ytcookies`.
+#
+#   3. No cookies at all: the app still runs. yt-dlp falls back to
+#      cookie-less extraction. YouTube often challenges datacenter IPs in
+#      that mode — see docs/YOUTUBE_CLIPPER_OPERATORS.md for the trade-offs.
+# ---------------------------------------------------------------------------
 
 COPY --from=build /app /app
-# Baked operator cookies: overlay `server/cookies.txt` from the build context at `/app/cookies.txt` (after app tree).
-# File is gitignored — create locally before `docker build` (Netscape format). Git-only CI without this file fails
-# here unless you add an empty placeholder or mount cookies at runtime instead.
-COPY cookies.txt /app/cookies.txt
 
 EXPOSE 5000
 CMD ["sh", "-c", "npx prisma migrate deploy && exec node dist/index.js"]

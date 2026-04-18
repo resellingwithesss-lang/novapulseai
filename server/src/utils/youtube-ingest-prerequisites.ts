@@ -210,7 +210,14 @@ export function logYoutubeIngestStartupDiagnostics(): void {
     hint: cookie.hint,
   })
 
-  /** Baked path from Dockerfile (COPY); never log file contents. */
+  /**
+   * Legacy bake path — the Dockerfile no longer copies `server/cookies.txt`
+   * into `/app/cookies.txt` (that COPY broke builds when the file was absent
+   * from the build context). Some deploys still place a cookies file at
+   * `/app/cookies.txt` via a custom overlay / volume mount, so we continue
+   * to log whether it's present, but the missing case is expected and not
+   * actionable on its own. Never log file contents.
+   */
   const bakedCookiesPath = "/app/cookies.txt"
   let bakedCookiesPresent = false
   try {
@@ -225,13 +232,13 @@ export function logYoutubeIngestStartupDiagnostics(): void {
   if (bakedCookiesPresent) {
     log.info("youtube_operator_baked_cookies_found", {
       message:
-        "Cookies file found at /app/cookies.txt — will be used when YT_DLP_COOKIES is set to that path (file contents never logged).",
+        "Cookies file found at /app/cookies.txt — set YT_DLP_COOKIES=/app/cookies.txt to use it (file contents never logged).",
       path: bakedCookiesPath,
     })
   } else {
     log.info("youtube_operator_baked_cookies_missing", {
       message:
-        "Cookies file missing at /app/cookies.txt — add server/cookies.txt before docker build, or mount a cookies file at runtime.",
+        "No cookies file at /app/cookies.txt (expected on default builds). To supply cookies, mount a Netscape cookies file at any path and set YT_DLP_COOKIES to its absolute path. See docs/YOUTUBE_CLIPPER_OPERATORS.md.",
       path: bakedCookiesPath,
     })
   }
