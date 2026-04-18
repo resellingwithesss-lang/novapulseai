@@ -259,16 +259,44 @@ export function classifyYoutubeDlError(
     /sign in to confirm you.?re not a bot|not a bot|confirm you.?re not a bot|bot check|are you a human/i.test(
       text
     )
-  const cookiesRequired =
-    /use --cookies|cookies.*required|this video requires.*cookie|authentication.*cookie|login.*cookie/i.test(
+
+  // Bot-check wins over any `use --cookies` hint.
+  //
+  // Regression history: modern yt-dlp prints the remediation hint
+  // "Use --cookies-from-browser or --cookies for the authentication" in
+  // essentially every bot-check error message, regardless of whether the
+  // video is actually auth-gated. Previously, `cookiesRequired` matched that
+  // hint via the bare substring `use --cookies` and — because it was checked
+  // BEFORE `botOrHumanCheck` — returned MSG_YT_COOKIES_REQUIRED_NOT_CONFIGURED
+  // for public videos whose only problem was a datacenter-IP bot challenge.
+  // The frontend renders that message as the "YouTube server session"
+  // blocker, so unauth-ingestible videos were reaching the hardest auth UI.
+  // Treat bot-checks as "blocked server-side" (retry-friendly, with cookies
+  // hint) and only promote to the session-required blocker on a genuinely
+  // unambiguous auth-gate signal below.
+  if (botOrHumanCheck) {
+    return MSG_YT_BLOCKED_SERVER_SIDE
+  }
+
+  // Strong auth-gate signals only: yt-dlp explicitly says THIS VIDEO needs a
+  // sign-in / login / auth cookie, not just "here's a flag you could try."
+  //
+  // Intentionally narrow — each alternative below must be a phrase yt-dlp
+  // emits when the target video is genuinely auth-gated (members-only,
+  // payment, account-bound). The previous `authentication.*cookie` /
+  // `login.*cookie` alternatives matched the bare remediation hint
+  // "authentication … pass cookies" and caused the production false-blocker;
+  // both are removed here.
+  const strongAuthRequired =
+    /this video (?:requires|is only available to)\b.*?(?:cookie|sign.?in|login|member)|only available to members|members[- ]only|cookies? (?:are |is )?required|requires (?:authentication|sign.?in|login)/i.test(
       text
     )
 
-  if (cookiesRequired && !ctx.cookiesPassedToYtDlp) {
+  if (strongAuthRequired && !ctx.cookiesPassedToYtDlp) {
     return MSG_YT_COOKIES_REQUIRED_NOT_CONFIGURED
   }
 
-  if (botOrHumanCheck || cookiesRequired) {
+  if (strongAuthRequired) {
     return MSG_YT_BLOCKED_SERVER_SIDE
   }
 
@@ -506,22 +534,57 @@ async function resolveOutputVideoPath(args: {
   return best
 }
 
-type AttemptSpec = {
+export type AttemptSpec = {
   name: string
   format: string
   mergeMp4: boolean
   forceIpv4: boolean
+  /**
+   * yt-dlp `youtube:player_client` value for this attempt. Varying the client
+   * across the ladder is the single highest-ROI change for datacenter-IP
+   * ingest success: YouTube challenges the `web` client aggressively from
+   * Railway / AWS / GCP / Azure IPs in 2025–2026, while `tv` and `mweb` often
+   * succeed on the same videos with no cookies required (YouTube treats them
+   * as embedded-device clients). Supplying a comma-separated list makes
+   * yt-dlp try each client within a single attempt before giving up. The
+   * operator override `YT_DLP_EXTRACTOR_ARGS` still wins when set — see
+   * `resolveExtractorArgsForAttempt`.
+   */
+  playerClient: string
 }
 
-function buildFlags(
+/**
+ * Resolve the `extractorArgs` flag for a given attempt.
+ *
+ * Precedence:
+ *   1. `YT_DLP_EXTRACTOR_ARGS=off|none|0` → disable extractor args entirely
+ *      (operator escape hatch for debugging / testing).
+ *   2. `YT_DLP_EXTRACTOR_ARGS` otherwise → use that literal value for every
+ *      attempt (full operator override — they know what they want).
+ *   3. Default → `youtube:player_client=<spec.playerClient>` so the ladder
+ *      varies player clients automatically.
+ *
+ * Exported for targeted unit tests in
+ * `server/src/tests/clip/youtube-extractor-ladder.test.ts`.
+ */
+export function resolveExtractorArgsForAttempt(spec: AttemptSpec): string | undefined {
+  const extRaw = process.env.YT_DLP_EXTRACTOR_ARGS?.trim()
+  if (extRaw === "off" || extRaw === "none" || extRaw === "0") {
+    return undefined
+  }
+  if (extRaw) {
+    return extRaw
+  }
+  return `youtube:player_client=${spec.playerClient}`
+}
+
+export function buildFlags(
   outputTemplate: string,
   spec: AttemptSpec,
   ffmpegDir: string | undefined,
   cookiesPath: string | undefined
 ): Record<string, unknown> {
-  const extRaw = process.env.YT_DLP_EXTRACTOR_ARGS?.trim()
-  const extractorDisabled = extRaw === "off" || extRaw === "none" || extRaw === "0"
-  const extractorArgs = extractorDisabled ? undefined : extRaw || "youtube:player_client=web"
+  const extractorArgs = resolveExtractorArgsForAttempt(spec)
 
   const flags: Record<string, unknown> = {
     format: spec.format,
@@ -585,19 +648,61 @@ function getExecaProps(err: unknown): {
 }
 
 /**
- * Prefer progressive / capped-merge ladders first (fewer fragile DASH merges than bv*+ba on some titles).
+ * Production ingest ladder (ordered by expected unauthenticated success rate
+ * from datacenter IPs on modern YouTube extractors).
+ *
+ * 1-2. `tv` / `mweb` first with a progressive mp4 preference — YouTube very
+ *      rarely bot-challenges these clients, no nsig / DASH merge is needed,
+ *      and the file comes down in one shot. This is the step that reclaims
+ *      most of the "YouTube server session" false-blocker cases.
+ * 3.   `default` (yt-dlp's internal multi-client stack) with a 1080-capped
+ *      merge — good quality path if the simple progressive attempts were
+ *      refused or returned nothing usable.
+ * 4.   `web` progressive fallback — useful for the minority of videos where
+ *      `tv`/`mweb` don't expose a usable format but `web` does.
+ * 5.   Combined `web,tv,mweb` + forceIpv4 — last-resort broadcast attempt
+ *      with yt-dlp trying all three clients in one run, IPv6 disabled for
+ *      hosts that misroute v6.
+ *
+ * Operators can replace every attempt's client wholesale by setting
+ * `YT_DLP_EXTRACTOR_ARGS`; see `resolveExtractorArgsForAttempt`.
  */
-const ATTEMPTS: AttemptSpec[] = [
+export const ATTEMPTS: AttemptSpec[] = [
   {
-    name: "merged_1080cap",
+    name: "tv_progressive",
+    format: "best[ext=mp4]/best",
+    mergeMp4: false,
+    forceIpv4: false,
+    playerClient: "tv",
+  },
+  {
+    name: "mweb_progressive",
+    format: "best[ext=mp4]/best",
+    mergeMp4: false,
+    forceIpv4: false,
+    playerClient: "mweb",
+  },
+  {
+    name: "default_merged_1080cap",
     format: "bestvideo*[height<=1080]+bestaudio/best[height<=1080]/best",
     mergeMp4: true,
     forceIpv4: false,
+    playerClient: "default",
   },
-  { name: "best_merge", format: "best", mergeMp4: true, forceIpv4: false },
-  { name: "best_nomerge", format: "best", mergeMp4: false, forceIpv4: false },
-  { name: "bv_ba_merge", format: "bv*+ba/b", mergeMp4: true, forceIpv4: false },
-  { name: "best_nomerge_ipv4", format: "best", mergeMp4: false, forceIpv4: true },
+  {
+    name: "web_best_nomerge",
+    format: "best",
+    mergeMp4: false,
+    forceIpv4: false,
+    playerClient: "web",
+  },
+  {
+    name: "combined_best_nomerge_ipv4",
+    format: "best",
+    mergeMp4: false,
+    forceIpv4: true,
+    playerClient: "web,tv,mweb",
+  },
 ]
 
 export const downloadYoutubeVideo = async (url: string): Promise<string> => {
@@ -674,6 +779,7 @@ export const downloadYoutubeVideo = async (url: string): Promise<string> => {
       cookiesPassedToYtDlp: Boolean(cookiesPath),
       cookiesStatus: cookieRes.status,
       extractorArgs: flags.extractorArgs != null ? String(flags.extractorArgs) : "(disabled)",
+      playerClient: spec.playerClient,
       jsRuntimes: String(flags.jsRuntimes ?? ""),
     })
 

@@ -16,7 +16,7 @@
     "smoke:adjob-create": "node -r ts-node/register scripts/smoke-adjob-happy-path.ts",
     "smoke:ads-api:dev": "node -r ts-node/register scripts/dev-smoke-admin-ads-api.ts",
     "test:ads": "node -r ts-node/register --test src/tests/ads/ad-job-create-fallback.test.ts",
-    "test:clip": "node -r ts-node/register --test src/tests/clip/youtube-url.test.ts src/tests/clip/youtube-cleanup.test.ts src/tests/clip/youtube-classify.test.ts src/tests/lib/ffmpeg-binaries.test.ts",
+    "test:clip": "node -r ts-node/register --test src/tests/clip/youtube-url.test.ts src/tests/clip/youtube-cleanup.test.ts src/tests/clip/youtube-classify.test.ts src/tests/clip/youtube-extractor-ladder.test.ts src/tests/lib/ffmpeg-binaries.test.ts",
     "test:monetization": "node -r ts-node/register --test src/tests/monetization/plan-core.test.ts src/tests/monetization/access-safety.test.ts src/tests/monetization/frontend-backend-parity.test.ts src/tests/monetization/stripe-price-resolve.test.ts src/tests/monetization/pro-trial-eligibility.test.ts src/tests/monetization/checkout-body-schema.test.ts src/tests/monetization/stripe-billing-errors.test.ts src/tests/monetization/billing-production-diagnostics.test.ts src/tests/monetization/browser-api-path-contract.test.ts src/tests/monetization/plan-change-classification.test.ts",
     "test:workflow": "node -r ts-node/register --test src/tests/workflow/workflow-limits.test.ts src/tests/workflow/activity-serialization.test.ts src/tests/workflow/source-metadata.test.ts src/tests/workflow/creator-context-brand-voice.test.ts src/tests/workflow/content-pack-schema.test.ts",
     "test:auth": "node -r dotenv/config -r ts-node/register --test src/tests/auth/google-auth-hardening.test.ts",

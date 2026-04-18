@@ -110,9 +110,49 @@ test("bot check with 'formats may be missing' advisory still classifies as block
   )
 })
 
-test("cookies-required without configured cookies classifies as cookies-missing", () => {
+test("bare 'use --cookies' remediation hint WITHOUT a specific auth-gate signal does NOT promote to session-required", () => {
+  // Regression case for the production "YOUTUBE SERVER SESSION" false
+  // blocker. Modern yt-dlp prints this exact hint as part of *every*
+  // bot-check error and in several generic "extraction failed" paths. It is
+  // NOT a definitive statement that the video requires a signed-in session.
+  // Treat it as a generic failure (soft retry UI in the client), not the
+  // hard session-required blocker.
   const stderr =
-    "ERROR: [youtube] dQw4w9WgXcQ: Use --cookies-from-browser or --cookies for the authentication. See  https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp  for how to manually pass cookies."
+    "ERROR: [youtube] dQw4w9WgXcQ: Unable to extract video data. Use --cookies-from-browser or --cookies for the authentication. See  https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp  for how to manually pass cookies."
+  assert.equal(
+    classifyYoutubeDlError(stderr, "", CTX_NO_COOKIES),
+    MSG_YT_GENERIC_FAILURE
+  )
+})
+
+test("bot check + 'use --cookies' remediation hint classifies as blocked, NOT as session-required", () => {
+  // Production regression: stderr combines the bot-check headline and
+  // yt-dlp's remediation hint. The previous classifier checked the cookies
+  // hint first and returned MSG_YT_COOKIES_REQUIRED_NOT_CONFIGURED, which
+  // the frontend maps to the "YouTube server session" blocker. The correct
+  // answer is MSG_YT_BLOCKED_SERVER_SIDE — retry-friendly, with an optional
+  // cookies hint, not a hard auth-gate.
+  const stderr = [
+    "ERROR: [youtube] dQw4w9WgXcQ: Sign in to confirm you're not a bot. Use --cookies-from-browser or --cookies for the authentication.",
+    "    See  https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp  for how to manually pass cookies.",
+  ].join("\n")
+  assert.equal(
+    classifyYoutubeDlError(stderr, "", CTX_NO_COOKIES),
+    MSG_YT_BLOCKED_SERVER_SIDE
+  )
+})
+
+test("members-only video still classifies as session-required (true auth gate)", () => {
+  const stderr =
+    "ERROR: [youtube] dQw4w9WgXcQ: This video is only available to members of this channel. Use --cookies to authenticate."
+  assert.equal(
+    classifyYoutubeDlError(stderr, "", CTX_NO_COOKIES),
+    MSG_YT_COOKIES_REQUIRED_NOT_CONFIGURED
+  )
+})
+
+test("explicit 'cookies required' still classifies as session-required", () => {
+  const stderr = "ERROR: [youtube] dQw4w9WgXcQ: Cookies are required to view this content."
   assert.equal(
     classifyYoutubeDlError(stderr, "", CTX_NO_COOKIES),
     MSG_YT_COOKIES_REQUIRED_NOT_CONFIGURED
