@@ -105,10 +105,16 @@ ENV FFPROBE_PATH=/usr/bin/ffprobe
 # ---------------------------------------------------------------------------
 # YouTube operator cookies (optional)
 #
-# The image NO LONGER bakes `cookies.txt` at build time. That earlier
-# `COPY cookies.txt /app/cookies.txt` required operators to drop a file into
-# the build context and broke CI / Railway builds when the file was absent
-# (the file is gitignored on purpose).
+# The image does NOT bake `cookies.txt` at build time. Two independent
+# mechanisms enforce this so the image is reproducibly cookies-less no
+# matter where it's built:
+#   - `.gitignore` keeps `server/cookies.txt` out of the git tree (so
+#     Railway's git-based build context never sees it).
+#   - `server/.dockerignore` excludes `cookies.txt` from the Docker build
+#     context too (so a local `docker build` also cannot bake it in via
+#     the build-stage `COPY . ./`).
+# This closes the "works on my laptop, fails on Railway" class of cookies
+# wiring bugs. Do not remove either guard.
 #
 # At runtime, yt-dlp only reads cookies when `YT_DLP_COOKIES` points at a
 # real Netscape-format file. Three supported patterns, in order of preference:

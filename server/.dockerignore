@@ -13,3 +13,7 @@ clips
 generated
 .vscode
 .idea
+# Never bake YouTube operator cookies into the image. Must be mounted at
+# runtime via a Railway Volume / Secret File and referenced by
+# YT_DLP_COOKIES. See server/Dockerfile for the supported patterns.
+cookies.txt
