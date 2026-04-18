@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import dynamic from "next/dynamic"
 import { useSearchParams } from "next/navigation"
 import {
@@ -273,39 +273,42 @@ export default function ClipperPage() {
     const trimmed = value.trim()
     return /^#[0-9A-Fa-f]{6}$/.test(trimmed) ? trimmed.toUpperCase() : null
   }
-  const applyClipTypePreset = (preset: ClipTypePreset, customized: boolean) => {
-    setClipTypePreset(preset)
-    setStyleCustomized(customized)
-    switch (preset) {
-      case "viral":
-        setClipLayoutPreset("reaction_style")
-        setCaptionStylePreset("bold_viral")
-        setCaptionColorTheme("yellow")
-        break
-      case "streamer":
-        setClipLayoutPreset("stream_overlay")
-        setCaptionStylePreset("highlight_words")
-        setCaptionColorTheme("purple")
-        break
-      case "talking":
-        setClipLayoutPreset("clean")
-        setCaptionStylePreset("clean_minimal")
-        setCaptionColorTheme("white")
-        break
-      case "podcast":
-        setClipLayoutPreset("podcast_clip")
-        setCaptionStylePreset("subtitle_style")
-        setCaptionColorTheme("green")
-        break
-      case "promo":
-        setClipLayoutPreset("gaming_style")
-        setCaptionStylePreset("bold_viral")
-        setCaptionColorTheme("purple")
-        break
-      default:
-        break
-    }
-  }
+  const applyClipTypePreset = useCallback(
+    (preset: ClipTypePreset, customized: boolean) => {
+      setClipTypePreset(preset)
+      setStyleCustomized(customized)
+      switch (preset) {
+        case "viral":
+          setClipLayoutPreset("reaction_style")
+          setCaptionStylePreset("bold_viral")
+          setCaptionColorTheme("yellow")
+          break
+        case "streamer":
+          setClipLayoutPreset("stream_overlay")
+          setCaptionStylePreset("highlight_words")
+          setCaptionColorTheme("purple")
+          break
+        case "talking":
+          setClipLayoutPreset("clean")
+          setCaptionStylePreset("clean_minimal")
+          setCaptionColorTheme("white")
+          break
+        case "podcast":
+          setClipLayoutPreset("podcast_clip")
+          setCaptionStylePreset("subtitle_style")
+          setCaptionColorTheme("green")
+          break
+        case "promo":
+          setClipLayoutPreset("gaming_style")
+          setCaptionStylePreset("bold_viral")
+          setCaptionColorTheme("purple")
+          break
+        default:
+          break
+      }
+    },
+    []
+  )
   const clipTypeOptions: ClipTypeOption[] = [
     {
       value: "viral",
@@ -507,7 +510,7 @@ export default function ClipperPage() {
       return
     }
     applyClipTypePreset("promo", false)
-  }, [platform, styleCustomized])
+  }, [platform, styleCustomized, applyClipTypePreset])
 
   useEffect(() => {
     pollAbortRef.current = false
@@ -542,11 +545,37 @@ export default function ClipperPage() {
       setValidationHint("")
     } else {
       const normalizedUrl = youtubeUrl.trim()
-      const validYoutubeUrl = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//i.test(
-        normalizedUrl
-      )
+      // Keep in sync with server/src/lib/youtube-url.ts :: YOUTUBE_HOSTS.
+      // A drift test in server/src/tests/clip/youtube-url.test.ts parses this
+      // literal and fails CI if the two sets diverge. The server revalidates
+      // the URL on submit — this copy exists only for immediate in-form UX.
+      const YOUTUBE_HOSTS = new Set([
+        "youtube.com",
+        "www.youtube.com",
+        "m.youtube.com",
+        "music.youtube.com",
+        "youtu.be",
+        "youtube-nocookie.com",
+        "www.youtube-nocookie.com",
+      ])
+      let validYoutubeUrl = false
+      if (normalizedUrl) {
+        try {
+          const withScheme = /^https?:\/\//i.test(normalizedUrl)
+            ? normalizedUrl
+            : `https://${normalizedUrl}`
+          const u = new URL(withScheme)
+          validYoutubeUrl =
+            (u.protocol === "https:" || u.protocol === "http:") &&
+            YOUTUBE_HOSTS.has(u.hostname.toLowerCase())
+        } catch {
+          validYoutubeUrl = false
+        }
+      }
       if (!normalizedUrl || !validYoutubeUrl) {
-        setValidationHint("Use a valid YouTube URL (youtube.com or youtu.be).")
+        setValidationHint(
+          "Use a public YouTube link (youtube.com, youtu.be, or m./music./youtube-nocookie variants)."
+        )
         return false
       }
       setValidationHint("")

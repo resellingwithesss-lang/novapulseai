@@ -4,6 +4,12 @@ import fs from "fs"
 import path from "path"
 import crypto from "crypto"
 import type { AdSiteIngestion } from "./pipeline/types"
+import {
+  assertPublicHttpUrl,
+  assertPublicHostResolves,
+  isLoopbackIngestionAllowed,
+} from "../../lib/url-guard"
+import { installNavigationSsrfGuard } from "../../lib/puppeteer-ssrf-guard"
 
 export interface WebsiteAnalysis {
   siteUrl: string
@@ -95,10 +101,14 @@ function normalize(url: string) {
 }
 
 function normalizeInput(url: string) {
-  const raw = String(url || "").trim()
-  if (!raw) throw new Error("Missing URL")
-  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
-  return normalize(withProtocol)
+  // SSRF guard on the analyzer entry point. `analyzeWebsite` is invoked from
+  // ads.routes with an already-validated siteUrl, but it is also re-exported
+  // and could be reused by other tooling; keep the guard at this boundary.
+  const safe = assertPublicHttpUrl(url, {
+    allowSchemeless: true,
+    allowLoopback: isLoopbackIngestionAllowed(),
+  })
+  return normalize(safe)
 }
 
 function sameOrigin(a: string, b: string) {
@@ -311,6 +321,17 @@ export async function analyzeWebsite(url: string): Promise<WebsiteAnalysis> {
   ensureDir(OUTPUT_DIR)
   const normalized = normalizeInput(url)
   const origin = new URL(normalized).origin
+
+  // Runtime SSRF choke point: the sync guard above catches literal IPs and
+  // known loopback hostnames, but a hostname like `intranet.corp.example`
+  // that A-records into RFC1918 space only surfaces here. Crawl targets are
+  // constrained to the same origin (`sameOrigin(origin, ...)` in `discover`),
+  // so resolving the origin host once is sufficient for this flow; cross-
+  // origin redirects followed by Chromium are not revalidated by this guard.
+  await assertPublicHostResolves(new URL(normalized).hostname, {
+    allowLoopback: isLoopbackIngestionAllowed(),
+  })
+
   let browser: Browser | null = null
 
   try {
@@ -318,6 +339,17 @@ export async function analyzeWebsite(url: string): Promise<WebsiteAnalysis> {
 
     const page = await browser.newPage()
     await configure(page)
+    // Navigation-time SSRF guard: closes DNS-rebinding TOCTOU and cross-origin
+    // 3xx redirects into private space. Installed before any `page.goto`.
+    await installNavigationSsrfGuard(page, {
+      allowLoopback: isLoopbackIngestionAllowed(),
+      onBlock: ({ url: blockedUrl, reason }) => {
+        console.warn(
+          "[ads:analyzer] navigation blocked by SSRF guard",
+          JSON.stringify({ url: blockedUrl, reason })
+        )
+      },
+    })
 
     const visited = new Set<string>()
     const queue = PRIORITY_ROUTES.map(r => new URL(r, origin).href)

@@ -24,6 +24,12 @@ import {
   isNovaPulseAILoggedIn,
   vfPostLoginAllowedPathKeys,
 } from "./website.novapulseai-login"
+import {
+  assertPublicHttpUrl,
+  assertPublicHttpUrlWithDns,
+  isLoopbackIngestionAllowed,
+} from "../../lib/url-guard"
+import { installNavigationSsrfGuard } from "../../lib/puppeteer-ssrf-guard"
 
 /** Correlates capture logs with an ad job (optional). */
 export type AdsCaptureLogContext = { requestId: string; jobDbId: string }
@@ -439,9 +445,14 @@ function leanNovaPulseAITransformationSegment(seg: InteractiveAdScene): Interact
 }
 
 function normalizeUrl(input: string) {
-  const raw = String(input || "").trim()
-  if (!raw) throw new Error("Missing URL")
-  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
+  // Defense in depth: ads.routes already normalizes the user-supplied siteUrl,
+  // but this module can be invoked with URLs derived from persisted job
+  // metadata. Re-validate before any `page.goto` so operator tooling / older
+  // rows cannot bypass the guard.
+  return assertPublicHttpUrl(input, {
+    allowSchemeless: true,
+    allowLoopback: isLoopbackIngestionAllowed(),
+  })
 }
 
 async function configurePage(page: Page, platform: Platform, fastPreview?: boolean) {
@@ -1005,6 +1016,21 @@ async function captureWebsiteInteractive(
 
     const page = await browser.newPage()
     await configurePage(page, platform, options.fastPreview)
+    // Navigation-time SSRF guard: closes DNS-rebinding TOCTOU and cross-origin
+    // 3xx redirects into private space for every `page.goto` this session
+    // performs. Installed before the first navigation.
+    await installNavigationSsrfGuard(page, {
+      allowLoopback: isLoopbackIngestionAllowed(),
+      onBlock: ({ url: blockedUrl, reason, resourceType }) => {
+        logCapture(options.logContext, {
+          phase: "ssrf_navigation_blocked",
+          mode: "interactive",
+          url: blockedUrl,
+          resourceType,
+          reason,
+        })
+      },
+    })
 
     const totalSegDur =
       segments.reduce((a, s) => a + Math.max(0.05, Number(s.duration) || 2), 0) || 1
@@ -1685,6 +1711,17 @@ export async function captureWebsite(
 ): Promise<CaptureResult> {
   ensureDir(TMP_DIR)
 
+  // Runtime SSRF choke point: resolve the capture host and refuse if it
+  // resolves to private/reserved space. The sync `normalizeUrl` checks that
+  // run downstream only inspect literal IPs, so they cannot see an attacker-
+  // controlled hostname that A-records into 10.0.0.0/8 or ::1. Chromium will
+  // still resolve independently at goto time (see url-guard.ts for the
+  // rebinding caveat) and redirects are not revalidated by this call.
+  await assertPublicHttpUrlWithDns(url, {
+    allowSchemeless: true,
+    allowLoopback: isLoopbackIngestionAllowed(),
+  })
+
   if (options.interactiveSegments?.length) {
     return captureWebsiteInteractive(url, options)
   }
@@ -1728,6 +1765,21 @@ export async function captureWebsite(
 
     const page = await browser.newPage()
     await configurePage(page, platform, options.fastPreview)
+    // Navigation-time SSRF guard: closes DNS-rebinding TOCTOU and cross-origin
+    // 3xx redirects into private space for every `page.goto` this session
+    // performs. Installed before the first navigation.
+    await installNavigationSsrfGuard(page, {
+      allowLoopback: isLoopbackIngestionAllowed(),
+      onBlock: ({ url: blockedUrl, reason, resourceType }) => {
+        logCapture(options.logContext, {
+          phase: "ssrf_navigation_blocked",
+          mode: "timeline",
+          url: blockedUrl,
+          resourceType,
+          reason,
+        })
+      },
+    })
 
     let fullTimeline = buildTimeline(normalizeUrl(url), email, password, options.preferredPaths)
     if (novaPulseAISite) {
