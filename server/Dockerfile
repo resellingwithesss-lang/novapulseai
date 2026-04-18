@@ -103,40 +103,30 @@ ENV YT_DLP_JS_RUNTIMES=deno:/usr/local/bin/deno,node:/usr/local/bin/node
 ENV FFMPEG_PATH=/usr/bin/ffmpeg
 ENV FFPROBE_PATH=/usr/bin/ffprobe
 # ---------------------------------------------------------------------------
-# YouTube operator cookies (optional)
+# YouTube operator cookies
 #
-# The image does NOT bake `cookies.txt` at build time. Two independent
-# mechanisms enforce this so the image is reproducibly cookies-less no
-# matter where it's built:
-#   - `.gitignore` keeps `server/cookies.txt` out of the git tree (so
-#     Railway's git-based build context never sees it).
-#   - `server/.dockerignore` excludes `cookies.txt` from the Docker build
-#     context too (so a local `docker build` also cannot bake it in via
-#     the build-stage `COPY . ./`).
-# This closes the "works on my laptop, fails on Railway" class of cookies
-# wiring bugs. Do not remove either guard.
+# !!! TEMPORARY INSECURE PATTERN — active right now !!!
 #
-# At runtime, yt-dlp only reads cookies when `YT_DLP_COOKIES` points at a
-# real Netscape-format file. Three supported patterns, in order of preference:
+# The two lines below bake `server/cookies.txt` into the image at
+# `/data/yt-cookies.txt`. This is a short-term unblock for Railway deploys
+# where we do not have shell access to upload a file onto a Volume / Secret
+# mount. The cookies file contains live YouTube session auth tokens, so any
+# copy of this image or any layer cache is effectively an account credential.
+# MUST be replaced with a runtime mount (Railway Volume or Secret File) once
+# shell / volume provisioning is available. At that point:
+#   - delete the two lines below,
+#   - restore the `cookies.txt` exclusion in `server/.dockerignore`,
+#   - re-add `server/cookies.txt` to `.gitignore`,
+#   - switch `YT_DLP_COOKIES` to the mount path (e.g. `/data/yt-cookies.txt`
+#     still works — just populated from the volume instead of the image).
 #
-#   1. Mount a file at runtime and set the env var:
-#        docker run -v /secrets/yt-cookies.txt:/run/secrets/yt-cookies.txt:ro \
-#                   -e YT_DLP_COOKIES=/run/secrets/yt-cookies.txt ...
-#      On Railway: attach a volume / secret file at the fixed mount path and
-#      set `YT_DLP_COOKIES` in the service env.
-#
-#   2. Bake at build time via a BuildKit secret (no file ever ends up in an
-#      image layer — prefer this if you must bake):
-#        docker build \
-#          --secret id=ytcookies,src=./cookies.txt \
-#          -t novapulseai-api .
-#      Then add a RUN in a custom overlay stage that reads
-#      `/run/secrets/ytcookies`.
-#
-#   3. No cookies at all: the app still runs. yt-dlp falls back to
-#      cookie-less extraction. YouTube often challenges datacenter IPs in
-#      that mode — see docs/YOUTUBE_CLIPPER_OPERATORS.md for the trade-offs.
+# Requires `server/cookies.txt` to be present in the Docker build context,
+# which on Railway means the file must be committed to git (see `.gitignore`
+# note). Build will FAIL if the file is missing — that is intentional for
+# this temporary pattern so a broken cookies wiring surfaces loudly.
 # ---------------------------------------------------------------------------
+COPY cookies.txt /data/yt-cookies.txt
+RUN chmod 600 /data/yt-cookies.txt
 
 COPY --from=build /app /app
 
