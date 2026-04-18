@@ -4,7 +4,12 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { api, LONG_REQUEST_TIMEOUT_MS } from "@/lib/api"
-import { STUDIO_CREATIVE_MODE_OPTIONS, VIDEO_PACKAGING_OPTIONS } from "@/lib/ad-studio-presets"
+import PackagingPresetPicker from "@/components/ad-studio/PackagingPresetPicker"
+import {
+  STUDIO_CREATIVE_MODE_OPTIONS,
+  STUDIO_QUICK_PICK_MODE_IDS,
+  VIDEO_PACKAGING_PRESETS,
+} from "@/lib/ad-studio-presets"
 import { normalizeToolOperation } from "@/lib/tool-operation"
 import { useAdsJobPolling } from "@/hooks/useAdsJobPolling"
 import AdsAdminJobsList from "./_components/AdsAdminJobsList"
@@ -222,9 +227,9 @@ export default function AdsPage() {
         <header className="space-y-2">
           <h1 className="text-4xl font-semibold tracking-tight text-white">AI Ad Studio</h1>
           <p className="text-sm leading-relaxed text-white/55">
-            Drop in a URL, choose a creative direction, generate. Open{" "}
-            <span className="text-white/75">Advanced</span> only when you need capture tuning, a second
-            variant, or handoff notes.
+            Drop in a URL, steer creative + caption packaging, generate. Open{" "}
+            <span className="text-white/75">Advanced</span> for capture tuning, dual variants, fast preview, or
+            operator handoff notes.
           </p>
         </header>
 
@@ -246,7 +251,7 @@ export default function AdsPage() {
               value={studioCreativeMode}
               onChange={e => setStudioCreativeMode(e.target.value)}
               disabled={job.state.loading}
-              className="w-full rounded-xl border border-white/[0.12] bg-white/[0.05] px-4 py-3.5 text-sm text-white"
+              className="np-select w-full"
             >
               <option value="">Balanced · no preset</option>
               {STUDIO_CREATIVE_MODE_OPTIONS.map(opt => (
@@ -256,6 +261,29 @@ export default function AdsPage() {
               ))}
             </select>
             <p className="text-xs leading-relaxed text-white/45">{studioHint}</p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              {STUDIO_QUICK_PICK_MODE_IDS.map(id => {
+                const opt = STUDIO_CREATIVE_MODE_OPTIONS.find(o => o.id === id)
+                if (!opt) return null
+                const active = studioCreativeMode === id
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    disabled={job.state.loading}
+                    onClick={() => setStudioCreativeMode(active ? "" : id)}
+                    className={`rounded-full border px-3 py-1.5 text-[11px] font-medium transition disabled:opacity-50 ${
+                      active
+                        ? "border-purple-400/50 bg-purple-500/20 text-white shadow-sm"
+                        : "border-white/12 bg-white/[0.04] text-white/55 hover:border-white/22 hover:text-white/80"
+                    }`}
+                    title={opt.hint}
+                  >
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
           <div className="grid gap-6 sm:grid-cols-2">
@@ -285,8 +313,9 @@ export default function AdsPage() {
                   </button>
                 ))}
               </div>
-              <p className="text-[11px] text-white/38">
-                Narration uses OpenAI TTS. Music-only skips voiceover.
+              <p className="text-[11px] leading-relaxed text-white/38">
+                Narration is <span className="text-white/55">synthetic speech</span> (OpenAI TTS) — not voice cloning
+                or a human recording. Music-only removes VO while keeping the score bed.
               </p>
             </div>
 
@@ -327,7 +356,7 @@ export default function AdsPage() {
               value={tone}
               onChange={e => setTone(e.target.value)}
               disabled={job.state.loading}
-              className="rounded-xl border border-white/[0.12] bg-white/[0.05] px-3 py-3 text-sm text-white"
+              className="np-select w-full"
               title="Overall read tone"
             >
               <option value="clean">Clean</option>
@@ -340,7 +369,7 @@ export default function AdsPage() {
               value={platform}
               onChange={e => setPlatform(e.target.value)}
               disabled={job.state.loading}
-              className="rounded-xl border border-white/[0.12] bg-white/[0.05] px-3 py-3 text-sm text-white"
+              className="np-select w-full"
             >
               <option value="tiktok">TikTok</option>
               <option value="instagram">Instagram</option>
@@ -351,7 +380,7 @@ export default function AdsPage() {
               value={duration}
               onChange={e => setDuration(Number(e.target.value))}
               disabled={job.state.loading}
-              className="rounded-xl border border-white/[0.12] bg-white/[0.05] px-3 py-3 text-sm text-white"
+              className="np-select w-full"
             >
               <option value={15}>15s</option>
               <option value={30}>30s</option>
@@ -405,7 +434,7 @@ export default function AdsPage() {
                   value={editingStyle}
                   onChange={e => setEditingStyle(e.target.value)}
                   disabled={job.state.loading}
-                  className="w-full rounded-xl border border-white/[0.12] bg-white/[0.05] px-4 py-3 text-sm"
+                  className="np-select w-full"
                 >
                   <option value="auto">Smart auto</option>
                   <option value="website">Website demo</option>
@@ -423,7 +452,7 @@ export default function AdsPage() {
                   value={renderTopVariants === 2 ? "2" : "1"}
                   onChange={e => setRenderTopVariants(e.target.value === "2" ? 2 : 1)}
                   disabled={job.state.loading}
-                  className="w-full rounded-xl border border-white/[0.12] bg-white/[0.05] px-4 py-3 text-sm"
+                  className="np-select w-full"
                 >
                   <option value="1">Winner only</option>
                   <option value="2">Winner + runner-up (compare)</option>
@@ -451,24 +480,17 @@ export default function AdsPage() {
                 </span>
               </label>
 
-              <label className="block space-y-2">
+              <div className="space-y-2">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/40">
                   Caption packaging override
                 </span>
-                <select
+                <PackagingPresetPicker
                   value={videoPackaging}
-                  onChange={e => setVideoPackaging(e.target.value)}
+                  onChange={setVideoPackaging}
                   disabled={job.state.loading}
-                  className="w-full rounded-xl border border-white/[0.12] bg-white/[0.05] px-4 py-3 text-sm"
-                >
-                  <option value="">Use preset default</option>
-                  {VIDEO_PACKAGING_OPTIONS.map(opt => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  presets={VIDEO_PACKAGING_PRESETS}
+                />
+              </div>
 
               <label className="block space-y-2">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/40">
@@ -485,6 +507,23 @@ export default function AdsPage() {
                   maxLength={6}
                   className="w-full rounded-xl border border-white/[0.12] bg-black/30 px-4 py-3 font-mono text-sm placeholder:text-white/35"
                 />
+                {captionAccentHex.length === 6 && /^[0-9A-Fa-f]{6}$/.test(captionAccentHex) ? (
+                  <div className="flex items-center gap-2.5 pt-1">
+                    <span
+                      className="h-8 w-8 shrink-0 rounded-full border border-white/15 shadow-inner"
+                      style={{ backgroundColor: `#${captionAccentHex}` }}
+                      aria-hidden
+                    />
+                    <span className="text-[11px] leading-relaxed text-white/42">
+                      Streamer-style presets use this accent for keyword highlights when the renderer applies accent
+                      color.
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-[11px] leading-relaxed text-white/38">
+                    Six hex characters, no #. Leave blank for renderer default contrast.
+                  </p>
+                )}
               </label>
             </div>
           </details>

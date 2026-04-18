@@ -97,7 +97,7 @@ export default function AdsAdminJobsList({
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-lg border border-white/15 bg-black/25 px-3 py-2 text-xs text-white"
+          className="np-select np-select--xs w-full"
         >
           <option value="all">All statuses</option>
           <option value="queued">Queued</option>
@@ -118,7 +118,7 @@ export default function AdsAdminJobsList({
         <select
           value={outputFilter}
           onChange={(e) => setOutputFilter(e.target.value)}
-          className="rounded-lg border border-white/15 bg-black/25 px-3 py-2 text-xs text-white"
+          className="np-select np-select--xs w-full"
         >
           <option value="all">Output: all</option>
           <option value="true">Output: ready</option>

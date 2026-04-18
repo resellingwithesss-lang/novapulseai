@@ -67,7 +67,7 @@ export default function CreatorOnboardingBanner({
           <select
             value={creatorType}
             onChange={(e) => setCreatorType(e.target.value)}
-            className="mt-1.5 w-full rounded-xl border border-white/[0.1] bg-black/40 px-3 py-2.5 text-sm text-white outline-none focus:ring-2 focus:ring-purple-400/45 focus:ring-offset-2 focus:ring-offset-[#0b0f19]"
+            className="np-select mt-1.5 w-full"
           >
             <option value="">Select…</option>
             <option value="solo">Solo creator</option>
@@ -81,7 +81,7 @@ export default function CreatorOnboardingBanner({
           <select
             value={platform}
             onChange={(e) => setPlatform(e.target.value)}
-            className="mt-1.5 w-full rounded-xl border border-white/[0.1] bg-black/40 px-3 py-2.5 text-sm text-white outline-none focus:ring-2 focus:ring-purple-400/45 focus:ring-offset-2 focus:ring-offset-[#0b0f19]"
+            className="np-select mt-1.5 w-full"
           >
             <option value="">Select…</option>
             <option value="tiktok">TikTok</option>
@@ -95,7 +95,7 @@ export default function CreatorOnboardingBanner({
           <select
             value={goal}
             onChange={(e) => setGoal(e.target.value)}
-            className="mt-1.5 w-full rounded-xl border border-white/[0.1] bg-black/40 px-3 py-2.5 text-sm text-white outline-none focus:ring-2 focus:ring-purple-400/45 focus:ring-offset-2 focus:ring-offset-[#0b0f19]"
+            className="np-select mt-1.5 w-full"
           >
             <option value="">Select…</option>
             <option value="growth">Audience growth</option>

@@ -561,7 +561,7 @@ export default function BrandVoicesPage() {
                   <select
                     value={workspaceId}
                     onChange={(e) => setWorkspaceId(e.target.value)}
-                    className={`${fieldClass} text-white`}
+                    className="np-select mt-1.5 w-full"
                   >
                     <option value="">Global — use across all workspaces</option>
                     {workspaces.map((w) => (

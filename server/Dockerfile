@@ -73,8 +73,13 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 # yt-dlp EJS / YouTube player extraction: prefer Deno then Node (see YT_DLP_JS_RUNTIMES override).
 ENV YT_DLP_JS_RUNTIMES=deno:/usr/local/bin/deno,node:/usr/local/bin/node
+# Optional (Railway / prod): mount Netscape cookies.txt and set YT_DLP_COOKIES to its absolute path — see docs/YOUTUBE_CLIPPER_OPERATORS.md
 
 COPY --from=build /app /app
+# Baked operator cookies: overlay `server/cookies.txt` from the build context at `/app/cookies.txt` (after app tree).
+# File is gitignored — create locally before `docker build` (Netscape format). Git-only CI without this file fails
+# here unless you add an empty placeholder or mount cookies at runtime instead.
+COPY cookies.txt /app/cookies.txt
 
 EXPOSE 5000
 CMD ["sh", "-c", "npx prisma migrate deploy && exec node dist/index.js"]

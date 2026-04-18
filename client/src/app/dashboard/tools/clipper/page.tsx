@@ -7,6 +7,7 @@ import {
   Captions,
   Clapperboard,
   Palette,
+  ShieldAlert,
   Sparkles,
   Upload,
 } from "lucide-react"
@@ -93,6 +94,90 @@ type ClipJobPollResponse = {
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms))
+}
+
+/** Safer UI copy for YouTube ingest failures (never show raw stderr or env var names). */
+const CLIP_UI_YOUTUBE_BLOCKED =
+  "YouTube is blocking automated download from our servers for this link. Upload the video file, try another public URL, or ask your workspace operator to enable a signed-in YouTube session for this deployment."
+
+const CLIP_UI_YOUTUBE_COOKIES_UNCONFIGURED =
+  "This link needs a signed-in YouTube session on our servers, and that is not configured on this deployment yet. Upload the video file for a guaranteed path, or ask your operator to add a valid browser cookies export."
+
+const CLIP_UI_YOUTUBE_COOKIES_BAD =
+  "The server-side YouTube session file is missing, expired, or invalid. Ask your operator to refresh the browser cookies export, or upload the video file."
+
+const CLIP_UI_YOUTUBE_JS =
+  "This YouTube link cannot be processed automatically in our cloud environment. Upload the video file directly for the most dependable run."
+
+function clipperErrorIsYoutubeCookiesIssueCategory(message: string): boolean {
+  if (!message) return false
+  return message === CLIP_UI_YOUTUBE_COOKIES_BAD || message === CLIP_UI_YOUTUBE_COOKIES_UNCONFIGURED
+}
+
+function clipperErrorIsYoutubeBlockedCategory(message: string): boolean {
+  if (!message) return false
+  if (message === CLIP_UI_YOUTUBE_BLOCKED) return true
+  const t = message.toLowerCase()
+  return (
+    t.includes("blocked for server-side") ||
+    t.includes("not a bot") ||
+    t.includes("download failed: youtube did not return") ||
+    t.includes("configure server-side youtube cookies")
+  )
+}
+
+function clipperErrorIsYoutubeJsCategory(message: string): boolean {
+  if (!message) return false
+  if (message === CLIP_UI_YOUTUBE_JS) return true
+  const t = message.toLowerCase()
+  return (
+    t.includes("javascript runtime") ||
+    t.includes("cannot be downloaded automatically from our servers") ||
+    t.includes("cannot be processed automatically")
+  )
+}
+
+function clipperErrorIsYoutubePremiumFailure(message: string): boolean {
+  return (
+    clipperErrorIsYoutubeJsCategory(message) ||
+    clipperErrorIsYoutubeBlockedCategory(message) ||
+    clipperErrorIsYoutubeCookiesIssueCategory(message)
+  )
+}
+
+function formatClipperJobErrorForUi(raw: string, sourceWasYoutube: boolean): string {
+  if (!sourceWasYoutube) return raw
+  const t = raw.toLowerCase()
+  if (
+    t.includes("cookies file is present but invalid") ||
+    t.includes("invalid, empty, or expired") ||
+    t.includes("session file is missing, expired, or invalid")
+  ) {
+    return CLIP_UI_YOUTUBE_COOKIES_BAD
+  }
+  if (t.includes("no valid cookies file is configured")) {
+    return CLIP_UI_YOUTUBE_COOKIES_UNCONFIGURED
+  }
+  if (
+    t.includes("javascript runtime") ||
+    t.includes("cannot be downloaded automatically from our servers") ||
+    t.includes("cannot be processed automatically")
+  ) {
+    return CLIP_UI_YOUTUBE_JS
+  }
+  if (
+    t.includes("blocked for server-side") ||
+    t.includes("not a bot") ||
+    t.includes("youtube blocked") ||
+    t.includes("download failed: youtube did not return") ||
+    t.includes("configure server-side youtube cookies")
+  ) {
+    return CLIP_UI_YOUTUBE_BLOCKED
+  }
+  if (t.includes("use --cookies") || (t.includes("authentication") && t.includes("cookie"))) {
+    return CLIP_UI_YOUTUBE_COOKIES_UNCONFIGURED
+  }
+  return raw
 }
 
 const CLIP_STAGE_LABELS: Record<string, string> = {
@@ -661,7 +746,9 @@ export default function ClipperPage() {
       } else if (apiError?.status === 408) {
         setError("Status request timed out. Your job may still be running — wait and use Retry.")
       } else {
-        setError(msg || "Clip job failed.")
+        setError(
+          formatClipperJobErrorForUi(msg || "Clip job failed.", sourceMode === "youtube")
+        )
       }
     } finally {
       setLoading(false)
@@ -674,7 +761,7 @@ export default function ClipperPage() {
       toolId="clipper"
       title="Clipper Engine"
       subtitle="Automation pipeline: ingest a long-form source, detect strong moments, trim to your target length, timestamp every export, and align captions — then hand off to the rest of NovaPulseAI."
-      guidance="Jobs run asynchronously on the server (no long browser hang). You will see live stages: ingest → analyze → trim → captions → finalize. Upload files up to 512MB or paste a public YouTube URL."
+      guidance="Jobs run asynchronously on the server (no long browser hang). You will see live stages: ingest → analyze → trim → captions → finalize. Direct upload up to 512MB is the most reliable source; public YouTube URLs work best when your deployment uses an operator-configured signed-in session (see operator docs) — otherwise upload if a link fails."
       statusLabel={
         blockedMessage ||
         (loading ? `Processing… ${jobProgress > 0 ? `${jobProgress}%` : ""}` : "Ready")
@@ -694,10 +781,15 @@ export default function ClipperPage() {
                 Source
               </h3>
               <p className="mt-1 text-xs text-white/55">
-                Pick one source, then choose the format you want to ship.
+                Upload your file for the most dependable ingest, or paste a public YouTube URL (success rate depends on
+                hosting setup and YouTube bot checks).
               </p>
             </div>
           </div>
+          <p className="mb-3 text-[11px] leading-relaxed text-white/45">
+            Direct upload avoids link-level blocks from YouTube or publishers. YouTube works for many public videos
+            but can fail when verification, sign-in, or bot checks appear for automated server access.
+          </p>
           <div className="grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-black/20 p-1">
             <button
               type="button"
@@ -705,13 +797,20 @@ export default function ClipperPage() {
                 setSourceMode("upload")
                 setValidationHint("")
               }}
-              className={`rounded-lg px-3 py-2 text-sm transition ${
+              className={`relative rounded-lg px-3 py-2.5 text-left text-sm transition ${
                 sourceMode === "upload"
-                  ? "bg-purple-600 text-white"
+                  ? "bg-purple-600 text-white shadow-[0_12px_28px_-18px_rgba(147,51,234,0.85)] ring-1 ring-white/15"
                   : "text-white/70 hover:bg-white/5"
               }`}
             >
-              Upload video
+              <span className="block font-semibold">Upload video</span>
+              <span
+                className={`mt-0.5 block text-[10px] font-medium uppercase tracking-wide ${
+                  sourceMode === "upload" ? "text-white/80" : "text-emerald-300/90"
+                }`}
+              >
+                Most reliable
+              </span>
             </button>
             <button
               type="button"
@@ -719,13 +818,20 @@ export default function ClipperPage() {
                 setSourceMode("youtube")
                 setValidationHint("")
               }}
-              className={`rounded-lg px-3 py-2 text-sm transition ${
+              className={`rounded-lg px-3 py-2.5 text-left text-sm transition ${
                 sourceMode === "youtube"
-                  ? "bg-purple-600 text-white"
+                  ? "bg-purple-600 text-white shadow-[0_12px_28px_-18px_rgba(147,51,234,0.85)] ring-1 ring-white/15"
                   : "text-white/70 hover:bg-white/5"
               }`}
             >
-              YouTube link
+              <span className="block font-semibold">YouTube link</span>
+              <span
+                className={`mt-0.5 block text-[10px] font-medium uppercase tracking-wide ${
+                  sourceMode === "youtube" ? "text-white/75" : "text-white/40"
+                }`}
+              >
+                Public link
+              </span>
             </button>
           </div>
           <div className="mt-4">
@@ -745,6 +851,10 @@ export default function ClipperPage() {
                     {video.name} · {(video.size / (1024 * 1024)).toFixed(1)} MB
                   </p>
                 )}
+                <p className="mt-2 text-xs leading-relaxed text-white/50">
+                  Sent over HTTPS and used only to run this Clipper job — the same pipeline as uploads elsewhere in
+                  NovaPulseAI.
+                </p>
               </>
             ) : (
               <>
@@ -759,6 +869,26 @@ export default function ClipperPage() {
                   onChange={(e) => setYoutubeUrl(e.target.value)}
                   className="w-full rounded-lg border border-white/15 bg-black/30 p-2.5 text-white placeholder:text-white/35"
                 />
+                <div className="mt-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.07] px-3 py-2.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-200/85">
+                    Server-side fetch
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-white/60">
+                    We request the public watch page from our cloud workers. If YouTube shows a bot check or blocks
+                    datacenter traffic, ask your operator to enable a signed-in session for the server, or use{" "}
+                    <button
+                      type="button"
+                      className="font-medium text-amber-200/95 underline decoration-amber-200/40 underline-offset-2 hover:text-white"
+                      onClick={() => {
+                        setSourceMode("upload")
+                        setValidationHint("")
+                      }}
+                    >
+                      Upload video
+                    </button>{" "}
+                    instead.
+                  </p>
+                </div>
               </>
             )}
           </div>
@@ -847,7 +977,7 @@ export default function ClipperPage() {
                 onChange={(e) =>
                   setClips(Math.min(20, Math.max(1, Number(e.target.value) || 1)))
                 }
-                className="w-full rounded-lg border border-white/15 bg-black/30 p-2.5 text-white"
+                className="np-select w-full"
               />
             </div>
             <div>
@@ -857,7 +987,7 @@ export default function ClipperPage() {
               <select
                 value={clipLengthPreset}
                 onChange={(e) => setClipLengthPreset(e.target.value as LengthPreset)}
-                className="w-full rounded-lg border border-white/15 bg-black/30 p-2.5 text-white"
+                className="np-select w-full"
               >
                 <option value="15">15 seconds</option>
                 <option value="30">30 seconds</option>
@@ -1066,7 +1196,7 @@ export default function ClipperPage() {
                       setPlatform(e.target.value as "tiktok" | "instagram" | "youtube")
                       setStyleCustomized(false)
                     }}
-                    className="w-full rounded-lg border border-white/15 bg-black/30 p-2.5 text-white"
+                    className="np-select w-full"
                   >
                     <option value="tiktok">TikTok</option>
                     <option value="instagram">Instagram Reels</option>
@@ -1138,7 +1268,7 @@ export default function ClipperPage() {
                     <select
                       value={streamPlatform}
                       onChange={(e) => setStreamPlatform(e.target.value as StreamPlatform)}
-                      className="w-full rounded-lg border border-white/15 bg-black/30 p-2.5 text-white"
+                      className="np-select w-full"
                     >
                       <option value="kick">Kick</option>
                       <option value="twitch">Twitch</option>
@@ -1187,7 +1317,7 @@ export default function ClipperPage() {
                     onChange={(e) =>
                       setCaptionMode(e.target.value as "burn" | "srt" | "both")
                     }
-                    className="w-full rounded-lg border border-white/15 bg-black/30 p-2.5 text-white"
+                    className="np-select w-full"
                   >
                     <option value="both">Burned-in + downloadable SRT</option>
                     <option value="burn">Burned-in only (no sidecar file)</option>
@@ -1265,21 +1395,75 @@ export default function ClipperPage() {
           </div>
         )}
 
-        {error && (
-          <div className="space-y-2 text-sm text-red-400">
-            {error}
-            {lastFailureRequestId ? ` (Request ID: ${lastFailureRequestId})` : ""}
-            <div>
-              <button
-                type="button"
-                onClick={() => void generate()}
-                className="rounded-lg border border-red-300/30 bg-red-500/15 px-3 py-1 text-xs text-red-100 hover:bg-red-500/25"
-              >
-                Retry
-              </button>
+        {error &&
+          (clipperErrorIsYoutubePremiumFailure(error) ? (
+            <div className="overflow-hidden rounded-2xl border border-white/12 bg-gradient-to-b from-white/[0.07] to-black/25 shadow-[0_24px_50px_-28px_rgba(0,0,0,0.85)] ring-1 ring-amber-500/15">
+              <div className="flex gap-3 border-b border-white/10 bg-amber-500/[0.06] px-4 py-3">
+                <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-200/90" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-200/80">
+                    {clipperErrorIsYoutubeJsCategory(error)
+                      ? "YouTube playback limit"
+                      : clipperErrorIsYoutubeCookiesIssueCategory(error)
+                        ? error === CLIP_UI_YOUTUBE_COOKIES_BAD
+                          ? "YouTube session file"
+                          : "YouTube server session"
+                        : "YouTube blocked for servers"}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-white/95">We could not ingest this YouTube source</p>
+                </div>
+              </div>
+              <div className="space-y-3 px-4 py-4">
+                <p className="text-sm leading-relaxed text-white/78">{error}</p>
+                <p className="text-xs leading-relaxed text-white/48">
+                  {clipperErrorIsYoutubeJsCategory(error)
+                    ? "Some links require a full browser playback stack. That is a platform limitation on our side, not a billing or account issue."
+                    : clipperErrorIsYoutubeCookiesIssueCategory(error)
+                      ? error === CLIP_UI_YOUTUBE_COOKIES_BAD
+                        ? "Operators should refresh the signed-in browser cookies export on the API host. End users can always upload the file instead."
+                        : "Operators can add a Netscape-format cookies export from a logged-in browser (internal operator docs). Upload stays the fastest sure path."
+                      : "Bot checks and datacenter blocks are common. Your link may still play in a normal browser; a configured operator session often improves success."}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSourceMode("upload")
+                      setError("")
+                      setValidationHint("")
+                    }}
+                    className="rounded-lg bg-purple-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-purple-500"
+                  >
+                    Switch to Upload video
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void generate()}
+                    className="rounded-lg border border-white/18 bg-white/[0.04] px-3.5 py-2 text-xs font-medium text-white/85 transition hover:bg-white/[0.08]"
+                  >
+                    Retry same source
+                  </button>
+                </div>
+                {lastFailureRequestId ? (
+                  <p className="text-[11px] text-white/38">Request ID: {lastFailureRequestId}</p>
+                ) : null}
+              </div>
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="space-y-2 text-sm text-red-400">
+              {error}
+              {lastFailureRequestId ? ` (Request ID: ${lastFailureRequestId})` : ""}
+              <div>
+                <button
+                  type="button"
+                  onClick={() => void generate()}
+                  className="rounded-lg border border-red-300/30 bg-red-500/15 px-3 py-1 text-xs text-red-100 hover:bg-red-500/25"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          ))}
         </section>
       </div>
 

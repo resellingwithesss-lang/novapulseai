@@ -580,7 +580,7 @@ function SelectBox({ label, value, onChange, options }: SelectBoxProps) {
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full p-3 rounded-xl bg-[#0f172a] border border-white/10"
+        className="np-select w-full"
       >
         {options.map((opt: string) => (
           <option key={opt} value={opt}>{opt}</option>

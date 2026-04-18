@@ -8,6 +8,9 @@ node_modules/
 !.env.example
 !**/.env.example
 
+# YouTube Netscape cookies for operator Docker bakes (server/Dockerfile → /app/cookies.txt)
+server/cookies.txt
+
 # --- Build & framework output ---
 dist/
 **/dist/

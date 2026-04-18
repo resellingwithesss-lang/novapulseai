@@ -57,8 +57,7 @@ export default function CreatorWorkflowSelectors({
     )
   }, [voices, workspaceId])
 
-  const selectCls =
-    "w-full rounded-lg border border-white/15 bg-black/30 p-2.5 text-sm text-white disabled:opacity-50"
+  const selectCls = "np-select w-full"
 
   return (
     <div className="space-y-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">

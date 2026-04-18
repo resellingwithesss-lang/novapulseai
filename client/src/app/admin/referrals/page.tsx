@@ -271,7 +271,7 @@ export default function AdminReferralsPage() {
                 setStatusFilter(e.target.value)
                 setPage(1)
               }}
-              className="rounded-lg border border-white/15 bg-black/35 px-3 py-2 text-sm text-white"
+              className="np-select np-select--sm min-w-[12rem] w-auto"
             >
               <option value="all">All statuses</option>
               <option value="PENDING">Pending</option>

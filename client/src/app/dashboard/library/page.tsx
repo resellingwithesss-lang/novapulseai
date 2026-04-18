@@ -292,7 +292,7 @@ export default function ContentLibraryPage() {
               <select
                 value={workspaceFilter}
                 onChange={(e) => setWorkspaceFilter(e.target.value)}
-                className="mt-1.5 w-full rounded-xl border border-white/12 bg-black/35 px-3 py-2.5 text-sm text-white"
+                className="np-select mt-1.5 w-full"
               >
                 <option value="">All workspaces</option>
                 {workspaces.map((w) => (
@@ -307,7 +307,7 @@ export default function ContentLibraryPage() {
               <select
                 value={activityKind}
                 onChange={(e) => setActivityKind(e.target.value as ActivityKind)}
-                className="mt-1.5 w-full rounded-xl border border-white/12 bg-black/35 px-3 py-2.5 text-sm text-white"
+                className="np-select mt-1.5 w-full"
               >
                 {KIND_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>

@@ -269,7 +269,7 @@ export async function runClipJob(jobId: string): Promise<void> {
         requestId,
         messagePreview: message.slice(0, 240),
         operatorNote:
-          "YouTube from servers: set YT_DLP_COOKIES (Netscape cookies.txt) for operator-only workflows; creators should upload the MP4 for guaranteed processing; many links are blocked or challenged in datacenter environments.",
+          "YouTube from servers: mount Netscape cookies.txt and set the operator cookies env (see docs/YOUTUBE_CLIPPER_OPERATORS.md). Creators can upload the MP4 for guaranteed processing. Datacenter IPs are still sometimes blocked even with cookies.",
       })
     }
   } finally {

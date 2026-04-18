@@ -77,7 +77,7 @@ export default function AdminUsersPanel({
                   onUpdatePlan(user.id, e.target.value as UiPlan)
                 }
                 disabled={actionLoading === user.id}
-                className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm"
+                className="np-select np-select--sm min-w-[9rem] w-auto"
               >
                 <option value="FREE">FREE</option>
                 <option value="STARTER">STARTER</option>

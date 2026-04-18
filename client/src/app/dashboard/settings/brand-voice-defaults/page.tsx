@@ -124,7 +124,7 @@ export default function BrandVoiceDefaultsPage() {
                   name="defaultVoice"
                   value={defaultId}
                   onChange={(e) => setDefaultId(e.target.value)}
-                  className="mt-2 w-full max-w-lg rounded-xl border border-white/[0.1] bg-black/30 px-3 py-2.5 text-sm text-white outline-none focus:border-purple-400/40 focus:ring-2 focus:ring-purple-400/35"
+                  className="np-select mt-2 w-full max-w-lg"
                 >
                   <option value="">No default (choose per project)</option>
                   {voices.map((v) => (

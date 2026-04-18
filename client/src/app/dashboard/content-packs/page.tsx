@@ -307,7 +307,7 @@ export default function ContentPacksPage() {
               <select
                 value={platform}
                 onChange={(e) => setPlatform(e.target.value)}
-                className={`${fieldClass} text-white`}
+                className="np-select mt-1.5 w-full"
                 disabled={generating || atCap}
               >
                 <option>TikTok</option>

@@ -3,6 +3,11 @@ import { existsSync, statSync } from "fs"
 import { mkdir, readdir, rm } from "fs/promises"
 import path from "path"
 import { log, serializeErr } from "../lib/logger"
+import {
+  resolveFfmpegBinDir,
+  resolveYtDlpBinaryPath,
+  resolveYoutubeCookiesForYtDlp,
+} from "./youtube-ingest-prerequisites"
 
 type YtDlpExec = {
   create: (binaryPath: string) => {
@@ -46,43 +51,6 @@ const VIDEO_EXTENSIONS = new Set([
   ".mpg",
   ".flv",
 ])
-
-/** Prefer system/binary installs; avoid relying on yt-dlp-exec postinstall (fragile in CI/Docker). */
-function resolveYtDlpBinary(): string {
-  const env = process.env.YT_DLP_PATH?.trim()
-  if (env && existsSync(env)) return env
-
-  const candidates = ["/usr/local/bin/yt-dlp", "/usr/bin/yt-dlp"]
-  for (const p of candidates) {
-    if (existsSync(p)) return p
-  }
-
-  return "yt-dlp"
-}
-
-function resolveFfmpegDir(): string | undefined {
-  const env = process.env.FFMPEG_PATH?.trim()
-  if (env && existsSync(env)) {
-    try {
-      const st = statSync(env)
-      return st.isDirectory() ? env : path.dirname(env)
-    } catch {
-      /* ignore */
-    }
-  }
-  if (existsSync("/usr/bin/ffmpeg")) return "/usr/bin"
-  return undefined
-}
-
-function resolveCookiesPath(): string | undefined {
-  const raw = process.env.YT_DLP_COOKIES?.trim()
-  if (!raw) return undefined
-  if (!existsSync(raw)) {
-    log.warn("youtube_dl_cookies_missing", { path: raw })
-    return undefined
-  }
-  return raw
-}
 
 function isPathUnderRoot(file: string, root: string): boolean {
   const rel = path.relative(path.resolve(root), path.resolve(file))
@@ -147,15 +115,24 @@ function extractCandidatePathsFromOutput(text: string): string[] {
   return [...new Set(out)]
 }
 
-/** End-user safe copy (no raw stderr). */
+/** End-user safe copy (no raw stderr, no raw env var names). */
 const MSG_YT_BLOCKED_SERVER_SIDE =
-  "This YouTube video is blocked for server-side download right now. Try another public link, upload the video directly, or configure cookies support (YT_DLP_COOKIES) for operator use."
+  "This YouTube video is blocked for server-side download right now. Try another public link, upload the source file, or ask your operator to enable server-side YouTube cookies for this deployment."
+
+const MSG_YT_COOKIES_REQUIRED_NOT_CONFIGURED =
+  "This YouTube video requires a signed-in session from our server, but no valid cookies file is configured for this deployment. Upload the video file, or have an operator add a fresh browser cookies export (see operator documentation)."
+
+const MSG_YT_COOKIES_INVALID_OR_EXPIRED =
+  "The server-side YouTube cookies file is present but invalid, empty, or expired. Export a fresh Netscape-format cookies file from a logged-in browser and redeploy, or upload the video file."
 
 const MSG_YT_JS_RUNTIME_USER =
   "This YouTube link cannot be downloaded automatically from our servers right now. Upload the video file for the most reliable result."
 
 type YoutubeDlClassifyCtx = {
-  cookiesConfigured: boolean
+  /** `--cookies` was passed to yt-dlp (readable non-empty file). */
+  cookiesPassedToYtDlp: boolean
+  /** `YT_DLP_COOKIES` env was non-empty (path may still be wrong). */
+  cookiesEnvSet: boolean
 }
 
 function logYoutubeDlOperatorHints(
@@ -171,15 +148,17 @@ function logYoutubeDlOperatorHints(
     userMessage === MSG_YT_BLOCKED_SERVER_SIDE
   ) {
     log.warn("youtube_dl_operator_workflow", {
-      cookiesConfigured: ctx.cookiesConfigured,
+      cookiesPassedToYtDlp: ctx.cookiesPassedToYtDlp,
+      cookiesEnvSet: ctx.cookiesEnvSet,
       hint:
-        "Operator: Netscape-format cookies.txt → set YT_DLP_COOKIES to its path on the API host and redeploy. Datacenter IPs are often challenged; uploading the source file is the reliable path for creators.",
+        "Operator: export Netscape cookies.txt from a logged-in browser → mount on the API host → set YT_DLP_COOKIES to that absolute path → redeploy. See docs/YOUTUBE_CLIPPER_OPERATORS.md. Datacenter IPs are still sometimes blocked.",
     })
   }
   if (/no supported javascript runtime|javascript runtime|\bejs\b|formats may be missing/i.test(t)) {
     log.warn("youtube_dl_operator_js_runtime", {
-      hint: "Operator: container sets YT_DLP_JS_RUNTIMES (Deno + Node) for yt-dlp EJS. Override env if needed. See https://github.com/yt-dlp/yt-dlp/wiki/EJS",
-      cookiesConfigured: ctx.cookiesConfigured,
+      hint: "Operator: ensure YT_DLP_JS_RUNTIMES (Deno + Node) for yt-dlp EJS. See https://github.com/yt-dlp/yt-dlp/wiki/EJS",
+      cookiesPassedToYtDlp: ctx.cookiesPassedToYtDlp,
+      cookiesEnvSet: ctx.cookiesEnvSet,
     })
   }
 }
@@ -198,6 +177,19 @@ function classifyYoutubeDlError(
     return "Server misconfiguration: an invalid yt-dlp option was passed. Check server logs for the exact flag and redeploy."
   }
 
+  const cookieFileBroken =
+    /unable to parse.*cookie|invalid cookie|cookie.*malformed|did not find any valid cookie|no valid cookies|netscape format|corrupted cookie/i.test(
+      text
+    )
+  if (cookieFileBroken) {
+    if (ctx.cookiesPassedToYtDlp) {
+      return MSG_YT_COOKIES_INVALID_OR_EXPIRED
+    }
+    if (ctx.cookiesEnvSet) {
+      return MSG_YT_COOKIES_INVALID_OR_EXPIRED
+    }
+  }
+
   const botOrHumanCheck =
     /sign in to confirm you.?re not a bot|not a bot|confirm you.?re not a bot|bot check|are you a human/i.test(
       text
@@ -206,6 +198,10 @@ function classifyYoutubeDlError(
     /use --cookies|cookies.*required|this video requires.*cookie|authentication.*cookie|login.*cookie/i.test(
       text
     )
+
+  if (cookiesRequired && !ctx.cookiesPassedToYtDlp) {
+    return MSG_YT_COOKIES_REQUIRED_NOT_CONFIGURED
+  }
 
   if (botOrHumanCheck || cookiesRequired) {
     return MSG_YT_BLOCKED_SERVER_SIDE
@@ -223,12 +219,12 @@ function classifyYoutubeDlError(
       text
     )
   ) {
-    return "Region blocked: YouTube is not serving this video to our server's region. Try uploading the file, or set YT_DLP_COOKIES if you have a valid export."
+    return "Region blocked: YouTube is not serving this video to our server's region. Try uploading the file, or use a cookies export from a region that can play the video (operator setup)."
   }
   if (
     /sign in to confirm your age|age.restricted|inappropriate for some users|confirm your age/i.test(text)
   ) {
-    return "Age restricted: this video requires a signed-in viewer. Server downloads cannot satisfy age verification; try YT_DLP_COOKIES or upload the file."
+    return "Age restricted: this video requires a signed-in viewer. Server downloads cannot satisfy age verification without a valid cookies export (operator setup) or upload the file."
   }
   if (
     /video unavailable|removed for violating|no longer available|deleted video|this video does not exist|unavailable/i.test(
@@ -458,6 +454,10 @@ function buildFlags(
   ffmpegDir: string | undefined,
   cookiesPath: string | undefined
 ): Record<string, unknown> {
+  const extRaw = process.env.YT_DLP_EXTRACTOR_ARGS?.trim()
+  const extractorDisabled = extRaw === "off" || extRaw === "none" || extRaw === "0"
+  const extractorArgs = extractorDisabled ? undefined : extRaw || "youtube:player_client=web"
+
   const flags: Record<string, unknown> = {
     format: spec.format,
     output: outputTemplate,
@@ -468,8 +468,8 @@ function buildFlags(
     geoBypass: true,
     geoBypassCountry: "US",
     userAgent: CHROME_LIKE_UA,
-    retries: 3,
-    fragmentRetries: 3,
+    retries: 4,
+    fragmentRetries: 4,
     noColor: true,
     noProgress: true,
     /**
@@ -483,6 +483,10 @@ function buildFlags(
 
   if (cookiesPath) {
     flags.cookies = cookiesPath
+  }
+
+  if (extractorArgs) {
+    flags.extractorArgs = extractorArgs
   }
 
   if (spec.forceIpv4) {
@@ -515,11 +519,20 @@ function getExecaProps(err: unknown): {
   }
 }
 
+/**
+ * Prefer progressive / capped-merge ladders first (fewer fragile DASH merges than bv*+ba on some titles).
+ */
 const ATTEMPTS: AttemptSpec[] = [
-  { name: "bv_ba_merge", format: "bv*+ba/b", mergeMp4: true, forceIpv4: false },
+  {
+    name: "merged_1080cap",
+    format: "bestvideo*[height<=1080]+bestaudio/best[height<=1080]/best",
+    mergeMp4: true,
+    forceIpv4: false,
+  },
   { name: "best_merge", format: "best", mergeMp4: true, forceIpv4: false },
-  { name: "best_no_merge", format: "best", mergeMp4: false, forceIpv4: false },
-  { name: "best_no_merge_ipv4", format: "best", mergeMp4: false, forceIpv4: true },
+  { name: "best_nomerge", format: "best", mergeMp4: false, forceIpv4: false },
+  { name: "bv_ba_merge", format: "bv*+ba/b", mergeMp4: true, forceIpv4: false },
+  { name: "best_nomerge_ipv4", format: "best", mergeMp4: false, forceIpv4: true },
 ]
 
 export const downloadYoutubeVideo = async (url: string): Promise<string> => {
@@ -534,19 +547,17 @@ export const downloadYoutubeVideo = async (url: string): Promise<string> => {
   /** Fixed stem inside isolated dir — avoids matching wrong files in shared tmp/. */
   const outputTemplate = path.join(jobDir, "video.%(ext)s")
 
-  const bin = resolveYtDlpBinary()
-  const ffmpegDir = resolveFfmpegDir()
-  const cookiesPath = resolveCookiesPath()
+  const bin = resolveYtDlpBinaryPath()
+  const ffmpegDir = resolveFfmpegBinDir()
+  const cookieRes = resolveYoutubeCookiesForYtDlp()
+  const cookiesPath = cookieRes.pathForYtDlp
   const ytDlp = createYtDlp(bin)
 
-  if (cookiesPath) {
-    log.info("youtube_dl_cookies_configured", { path: cookiesPath })
-  } else {
-    log.info("youtube_dl_cookies_not_configured", {
-      operatorNote:
-        "YT_DLP_COOKIES is not set. YouTube may return bot checks or limited formats; operators can mount a Netscape cookies.txt and set this env on the API service.",
-    })
-  }
+  log.info("youtube_dl_job_cookies", {
+    cookiesStatus: cookieRes.status,
+    cookiesPassedToYtDlp: Boolean(cookiesPath),
+    cookiesEnvSet: cookieRes.envWasSet,
+  })
 
   let lastStderr = ""
   let lastStdout = ""
@@ -585,7 +596,9 @@ export const downloadYoutubeVideo = async (url: string): Promise<string> => {
           return "invalid_url"
         }
       })(),
-      cookies: Boolean(cookiesPath),
+      cookiesPassedToYtDlp: Boolean(cookiesPath),
+      cookiesStatus: cookieRes.status,
+      extractorArgs: flags.extractorArgs != null ? String(flags.extractorArgs) : "(disabled)",
       jsRuntimes: String(flags.jsRuntimes ?? ""),
     })
 
@@ -667,6 +680,8 @@ export const downloadYoutubeVideo = async (url: string): Promise<string> => {
         selectedExists: existsSync(selected),
         selectedSizeBytes: validated.size,
         selectedExt: validated.ext,
+        cookiesPassedToYtDlp: Boolean(cookiesPath),
+        cookiesStatus: cookieRes.status,
       })
 
       return selected
@@ -703,12 +718,17 @@ export const downloadYoutubeVideo = async (url: string): Promise<string> => {
         stderr: lastStderr,
         stdout: lastStdout,
         filesAfter: filesAfterSnapshot,
+        cookiesPassedToYtDlp: Boolean(cookiesPath),
+        cookiesStatus: cookieRes.status,
         ...serializeErr(err),
       })
     }
   }
 
-  const classifyCtx: YoutubeDlClassifyCtx = { cookiesConfigured: Boolean(cookiesPath) }
+  const classifyCtx: YoutubeDlClassifyCtx = {
+    cookiesPassedToYtDlp: Boolean(cookiesPath),
+    cookiesEnvSet: cookieRes.envWasSet,
+  }
   const friendly = lastProblemWasResolution
     ? "Download completed but output file missing: yt-dlp finished but no valid video file could be confirmed. Check server logs or upload the file."
     : classifyYoutubeDlError(lastStderr, lastStdout, classifyCtx)

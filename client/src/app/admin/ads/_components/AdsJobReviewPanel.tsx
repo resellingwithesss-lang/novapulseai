@@ -26,6 +26,7 @@ import PremiumVideoPreview, {
   platformToPreviewAspect,
 } from "@/components/media/PremiumVideoPreview"
 import { buildAdVideoFilename } from "@/lib/adExport"
+import { getVideoPackagingPreset } from "@/lib/ad-studio-presets"
 
 /** Matches main ad job worker progress bands (see admin ads page). */
 function stageFromProgressRerender(p: number) {
@@ -374,10 +375,15 @@ export default function AdsJobReviewPanel({
       return "Music bed only — no voiceover on this render."
     }
     if (studioTrace.voiceMode === "ai_openai_tts") {
-      return "AI voiceover + music (OpenAI TTS) — preview matches viewer audio."
+      return "Synthetic voiceover + music (OpenAI TTS) — not a cloned human voice; preview matches exported audio."
     }
     return null
   }, [studioTrace.voiceMode])
+
+  const packagingMeta = useMemo(
+    () => getVideoPackagingPreset(studioTrace.videoPackaging),
+    [studioTrace.videoPackaging]
+  )
 
   const scoreSelection = script?.scoreSelection
   const thresholdGate =
@@ -549,6 +555,17 @@ export default function AdsJobReviewPanel({
                 {audioMixSummary}
               </p>
             ) : null}
+            {packagingMeta ? (
+              <p className="mt-2 max-w-prose text-xs leading-relaxed text-white/48">
+                <span className="font-medium text-white/65">Caption packaging · </span>
+                {packagingMeta.label} — {packagingMeta.captionFocus}
+              </p>
+            ) : studioTrace.videoPackaging ? (
+              <p className="mt-2 max-w-prose text-xs leading-relaxed text-white/48">
+                <span className="font-medium text-white/65">Caption packaging · </span>
+                {humanizePresetId(studioTrace.videoPackaging)}
+              </p>
+            ) : null}
           </div>
           {jobId && (
             <code className="rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-[11px] text-white/55">
@@ -574,7 +591,12 @@ export default function AdsJobReviewPanel({
           />
         ) : resolvedVideo ? (
           <div className="mt-6 space-y-4">
-            <PremiumVideoPreview src={resolvedVideo} aspect={previewAspect} />
+            <PremiumVideoPreview
+              src={resolvedVideo}
+              aspect={previewAspect}
+              label="Master render"
+              footnote="Same encoded output as download; browser chrome may add letterboxing on wide layouts."
+            />
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -932,12 +954,11 @@ export default function AdsJobReviewPanel({
           {rerender.state.videoUrl && !rerender.state.loading && (
             <div className="mt-4 space-y-3">
               <p className="text-sm text-emerald-200/90">Rerender completed.</p>
-              <video
+              <PremiumVideoPreview
                 src={rerender.state.videoUrl}
-                controls
-                playsInline
-                preload="metadata"
-                className="w-full max-w-xl rounded-xl border border-white/10"
+                aspect={previewAspect}
+                label="Rerender output"
+                footnote="New job carries its own metadata — open the linked job for full trace."
               />
               <div className="flex flex-wrap gap-2">
                 {onOpenJob && rerender.state.jobId ? (

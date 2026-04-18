@@ -499,7 +499,7 @@ ${preset.examples.map((line) => `- ${line}`).join("\n")}
         <select
           value={presetId}
           onChange={(e) => setPresetId(e.target.value as PresetId)}
-          className="mb-3 w-full rounded-xl border border-white/10 bg-[#0f172a] p-3"
+          className="np-select mb-3 w-full"
         >
           {PROMPT_PRESETS.map((preset) => (
             <option key={preset.id} value={preset.id}>
@@ -524,7 +524,7 @@ ${preset.examples.map((line) => `- ${line}`).join("\n")}
         <select
           value={platform}
           onChange={(e) => setPlatform(e.target.value as Platform)}
-          className="mb-6 w-full rounded-xl border border-white/10 bg-[#0f172a] p-3"
+          className="np-select mb-6 w-full"
         >
           <option>TikTok</option>
           <option>Instagram Reels</option>
@@ -536,7 +536,7 @@ ${preset.examples.map((line) => `- ${line}`).join("\n")}
         <select
           value={style}
           onChange={(e) => setStyle(e.target.value)}
-          className="mb-6 w-full rounded-xl border border-white/10 bg-[#0f172a] p-3"
+          className="np-select mb-6 w-full"
         >
           <option>Viral TikTok</option>
           <option>Authority Content</option>

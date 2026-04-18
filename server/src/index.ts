@@ -16,6 +16,7 @@ import { warnIfAdJobSchemaDrift } from "./lib/prisma-adjob-drift";
 import { assertApiDatabaseReady } from "./lib/prisma-schema-health";
 import { validateServerEnvironment } from "./lib/validate-server-env";
 import { log, serializeErr } from "./lib/logger";
+import { logYoutubeIngestStartupDiagnostics } from "./utils/youtube-ingest-prerequisites";
 import { startEmailQueueWorker } from "./lib/email-outbound";
 import { recoverPendingClipJobs } from "./modules/clip/clip.job.processor";
 
@@ -24,6 +25,7 @@ import { recoverPendingClipJobs } from "./modules/clip/clip.job.processor";
 ===================================================== */
 
 validateServerEnvironment();
+logYoutubeIngestStartupDiagnostics();
 
 /* =====================================================
    PATHS

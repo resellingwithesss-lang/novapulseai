@@ -23,6 +23,7 @@ import {
 } from "@prisma/client"
 import { expandAdminBroadcastAsync } from "../../lib/email-broadcast"
 import { normalizePlanTier, PLAN_MONTHLY_GBP } from "../plans/plan.constants"
+import { getYoutubeIngestHealthSnapshot } from "../../utils/youtube-ingest-prerequisites"
 
 const router = Router()
 const adminSafeUserSelect = {
@@ -54,6 +55,18 @@ router.use(requireCsrfForCookieAuth)
 /* ===============================
    DASHBOARD STATS
 ================================ */
+
+/**
+ * Operator-only: yt-dlp / ffmpeg / JS runtime / cookies file presence (no secrets, no cookie contents).
+ */
+router.get("/youtube-ingest-health", async (_req, res) => {
+  try {
+    return ok(res, { youtubeIngest: getYoutubeIngestHealthSnapshot() })
+  } catch (err) {
+    console.error("ADMIN youtube-ingest-health ERROR:", err)
+    return fail(res, 500, "Failed to read YouTube ingest prerequisites")
+  }
+})
 
 router.get("/dashboard", async (_req, res) => {
   try {

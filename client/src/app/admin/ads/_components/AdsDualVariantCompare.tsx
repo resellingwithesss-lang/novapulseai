@@ -171,7 +171,12 @@ export default function AdsDualVariantCompare({
 
               <div className="space-y-3 p-4">
                 {url ? (
-                  <PremiumVideoPreview src={url} aspect={aspect} />
+                  <PremiumVideoPreview
+                    src={url}
+                    aspect={aspect}
+                    label={row.rank === 1 ? "Primary output" : "Runner-up output"}
+                    footnote="Same pixels as the matching MP4 download for this variant."
+                  />
                 ) : (
                   <p className="text-sm text-red-300/90">
                     {row.failedReason || "Render failed"}

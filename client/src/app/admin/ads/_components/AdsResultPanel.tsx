@@ -1,14 +1,19 @@
 "use client"
 
-import PremiumVideoPreview from "@/components/media/PremiumVideoPreview"
+import PremiumVideoPreview, {
+  coerceAdsPlatform,
+  platformToPreviewAspect,
+} from "@/components/media/PremiumVideoPreview"
 import ToolResultLayout from "@/components/tools/results/ToolResultLayout"
 import { downloadMediaBlob, filenameFromPublicPath } from "@/lib/mediaOrigin"
 
 type AdsResultPanelProps = {
   videoUrl: string
+  /** When set, preview frame matches export aspect (TikTok / IG / YouTube). */
+  platform?: string | null
 }
 
-export default function AdsResultPanel({ videoUrl }: AdsResultPanelProps) {
+export default function AdsResultPanel({ videoUrl, platform }: AdsResultPanelProps) {
   const downloadName = (() => {
     try {
       const path = new URL(videoUrl).pathname
@@ -18,12 +23,14 @@ export default function AdsResultPanel({ videoUrl }: AdsResultPanelProps) {
     }
   })()
 
+  const aspect = platformToPreviewAspect(coerceAdsPlatform(platform))
+
   return (
     <ToolResultLayout
       title="Ad render"
       state="success"
       statusLabel="Ready"
-      summary="Playback uses the same master file as download — captions, hook/CTA cards, and mix match what you configured."
+      summary="Playback is the same encoded master as your MP4 download — captions, cards, and mix match the job settings. In-browser letterboxing only reflects player layout, not a separate render."
       actions={[
         {
           label: "Copy link",
@@ -48,7 +55,12 @@ export default function AdsResultPanel({ videoUrl }: AdsResultPanelProps) {
         { label: "Clipper", href: "/dashboard/tools/clipper" },
       ]}
     >
-      <PremiumVideoPreview src={videoUrl} aspect="9:16" />
+      <PremiumVideoPreview
+        src={videoUrl}
+        aspect={aspect}
+        label="Master render"
+        footnote="Aspect follows your platform target (9:16, 1:1, or 16:9). Use download for the exact file you will ship."
+      />
     </ToolResultLayout>
   )
 }
