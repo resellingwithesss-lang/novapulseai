@@ -147,20 +147,32 @@ function extractCandidatePathsFromOutput(text: string): string[] {
   return [...new Set(out)]
 }
 
-/** End-user safe copy (no raw stderr, no raw env var names). */
-const MSG_YT_BLOCKED_SERVER_SIDE =
+/**
+ * End-user safe copy (no raw stderr, no raw env var names).
+ *
+ * Exported for the narrow classifier tests in
+ * `server/src/tests/clip/youtube-classify.test.ts`. The frontend
+ * (`client/src/app/dashboard/tools/clipper/page.tsx`, functions
+ * `formatClipperJobErrorForUi` + `clipperErrorIsYoutubeJsCategory`) does
+ * substring matching against these exact strings to pick the UI banner, so
+ * their text must stay stable.
+ */
+export const MSG_YT_BLOCKED_SERVER_SIDE =
   "This YouTube video is blocked for server-side download right now. Try another public link, upload the source file, or ask your operator to enable server-side YouTube cookies for this deployment."
 
-const MSG_YT_COOKIES_REQUIRED_NOT_CONFIGURED =
+export const MSG_YT_COOKIES_REQUIRED_NOT_CONFIGURED =
   "This YouTube video requires a signed-in session from our server, but no valid cookies file is configured for this deployment. Upload the video file, or have an operator add a fresh browser cookies export (see operator documentation)."
 
-const MSG_YT_COOKIES_INVALID_OR_EXPIRED =
+export const MSG_YT_COOKIES_INVALID_OR_EXPIRED =
   "The server-side YouTube cookies file is present but invalid, empty, or expired. Export a fresh Netscape-format cookies file from a logged-in browser and redeploy, or upload the video file."
 
-const MSG_YT_JS_RUNTIME_USER =
+export const MSG_YT_JS_RUNTIME_USER =
   "This YouTube link cannot be downloaded automatically from our servers right now. Upload the video file for the most reliable result."
 
-type YoutubeDlClassifyCtx = {
+export const MSG_YT_GENERIC_FAILURE =
+  "Download failed: YouTube did not return a file we could save. Try again later, another link, or upload the source video."
+
+export type YoutubeDlClassifyCtx = {
   /** `--cookies` was passed to yt-dlp (readable non-empty file). */
   cookiesPassedToYtDlp: boolean
   /** `YT_DLP_COOKIES` env was non-empty (path may still be wrong). */
@@ -186,7 +198,7 @@ function logYoutubeDlOperatorHints(
         "Operator: export Netscape cookies.txt from a logged-in browser → mount on the API host → set YT_DLP_COOKIES to that absolute path → redeploy. See docs/YOUTUBE_CLIPPER_OPERATORS.md. Datacenter IPs are still sometimes blocked.",
     })
   }
-  if (/no supported javascript runtime|javascript runtime|\bejs\b|formats may be missing/i.test(t)) {
+  if (JS_RUNTIME_MISSING_RX.test(t)) {
     log.warn("youtube_dl_operator_js_runtime", {
       hint: "Operator: ensure YT_DLP_JS_RUNTIMES (Deno + Node) for yt-dlp EJS. See https://github.com/yt-dlp/yt-dlp/wiki/EJS",
       cookiesPassedToYtDlp: ctx.cookiesPassedToYtDlp,
@@ -195,7 +207,28 @@ function logYoutubeDlOperatorHints(
   }
 }
 
-function classifyYoutubeDlError(
+/**
+ * True ONLY when yt-dlp reports that a JavaScript runtime is missing / not
+ * available for YouTube player-script (EJS / nsig) extraction. Kept
+ * intentionally narrow.
+ *
+ * Regression history: the original match set included `javascript runtime`
+ * (bare substring), `\bejs\b`, and `formats may be missing`. Modern yt-dlp
+ * emits those phrases as ADVISORY warnings on virtually every YouTube run,
+ * even when a runtime is configured and the download eventually succeeds on
+ * another attempt (signature / nsig extraction routinely degrades and prints
+ * "Some formats may be missing" as a non-fatal warning). Using them as
+ * classification signal caused the classifier to return
+ * `MSG_YT_JS_RUNTIME_USER` for any failed YouTube job whose last attempt
+ * happened to include that noise — which the frontend then promotes to the
+ * hardest "YouTube playback limit" blocker UI with no retry. The explicit
+ * phrases below are what yt-dlp actually prints when the runtime is truly
+ * unavailable.
+ */
+const JS_RUNTIME_MISSING_RX =
+  /no supported javascript runtime|no javascript runtime (?:is )?available|requires a javascript runtime|install (?:a|the) javascript runtime/i
+
+export function classifyYoutubeDlError(
   stderr: string,
   stdout: string,
   ctx: YoutubeDlClassifyCtx
@@ -239,7 +272,7 @@ function classifyYoutubeDlError(
     return MSG_YT_BLOCKED_SERVER_SIDE
   }
 
-  if (/no supported javascript runtime|javascript runtime|\bejs\b|formats may be missing/i.test(text)) {
+  if (JS_RUNTIME_MISSING_RX.test(text)) {
     return MSG_YT_JS_RUNTIME_USER
   }
 
@@ -279,7 +312,7 @@ function classifyYoutubeDlError(
     return "Download interrupted: the transfer did not finish. Try again or upload the file."
   }
 
-  return "Download failed: YouTube did not return a file we could save. Try again later, another link, or upload the source video."
+  return MSG_YT_GENERIC_FAILURE
 }
 
 /** yt-dlp fragment / partial naming: video.f303.mp4, .part, etc. */

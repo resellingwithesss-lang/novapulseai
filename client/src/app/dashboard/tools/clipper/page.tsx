@@ -790,7 +790,7 @@ export default function ClipperPage() {
       toolId="clipper"
       title="Clipper Engine"
       subtitle="Automation pipeline: ingest a long-form source, detect strong moments, trim to your target length, timestamp every export, and align captions — then hand off to the rest of NovaPulseAI."
-      guidance="Jobs run asynchronously on the server (no long browser hang). You will see live stages: ingest → analyze → trim → captions → finalize. Direct upload up to 512MB is the most reliable source; public YouTube URLs work best when your deployment uses an operator-configured signed-in session (see operator docs) — otherwise upload if a link fails."
+      guidance="Jobs run asynchronously on the server (no long browser hang). You will see live stages: ingest → analyze → trim → captions → finalize. Paste a public YouTube URL and NovaPulse downloads the source server-side for you, or upload a file directly (up to 512MB). Both paths feed the same pipeline — upload is offered as a fallback only if YouTube surfaces a real bot check or blocked format for your link."
       statusLabel={
         blockedMessage ||
         (loading ? `Processing… ${jobProgress > 0 ? `${jobProgress}%` : ""}` : "Ready")
@@ -810,15 +810,11 @@ export default function ClipperPage() {
                 Source
               </h3>
               <p className="mt-1 text-xs text-white/55">
-                Upload your file for the most dependable ingest, or paste a public YouTube URL (success rate depends on
-                hosting setup and YouTube bot checks).
+                Paste a public YouTube URL and NovaPulse downloads the source server-side, or upload a file
+                directly. Both feed the same clip pipeline.
               </p>
             </div>
           </div>
-          <p className="mb-3 text-[11px] leading-relaxed text-white/45">
-            Direct upload avoids link-level blocks from YouTube or publishers. YouTube works for many public videos
-            but can fail when verification, sign-in, or bot checks appear for automated server access.
-          </p>
           <div className="grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-black/20 p-1">
             <button
               type="button"
@@ -835,10 +831,10 @@ export default function ClipperPage() {
               <span className="block font-semibold">Upload video</span>
               <span
                 className={`mt-0.5 block text-[10px] font-medium uppercase tracking-wide ${
-                  sourceMode === "upload" ? "text-white/80" : "text-emerald-300/90"
+                  sourceMode === "upload" ? "text-white/80" : "text-white/40"
                 }`}
               >
-                Most reliable
+                Direct file
               </span>
             </button>
             <button
@@ -856,10 +852,10 @@ export default function ClipperPage() {
               <span className="block font-semibold">YouTube link</span>
               <span
                 className={`mt-0.5 block text-[10px] font-medium uppercase tracking-wide ${
-                  sourceMode === "youtube" ? "text-white/75" : "text-white/40"
+                  sourceMode === "youtube" ? "text-white/80" : "text-emerald-300/90"
                 }`}
               >
-                Public link
+                Server-managed
               </span>
             </button>
           </div>
@@ -898,24 +894,15 @@ export default function ClipperPage() {
                   onChange={(e) => setYoutubeUrl(e.target.value)}
                   className="w-full rounded-lg border border-white/15 bg-black/30 p-2.5 text-white placeholder:text-white/35"
                 />
-                <div className="mt-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.07] px-3 py-2.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-200/85">
-                    Server-side fetch
+                <div className="mt-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-2.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-200/85">
+                    Server-managed ingest
                   </p>
-                  <p className="mt-1 text-xs leading-relaxed text-white/60">
-                    We request the public watch page from our cloud workers. If YouTube shows a bot check or blocks
-                    datacenter traffic, ask your operator to enable a signed-in session for the server, or use{" "}
-                    <button
-                      type="button"
-                      className="font-medium text-amber-200/95 underline decoration-amber-200/40 underline-offset-2 hover:text-white"
-                      onClick={() => {
-                        setSourceMode("upload")
-                        setValidationHint("")
-                      }}
-                    >
-                      Upload video
-                    </button>{" "}
-                    instead.
+                  <p className="mt-1 text-xs leading-relaxed text-white/65">
+                    NovaPulse downloads the video from this link on our servers and feeds it straight into the clip
+                    pipeline — you do not need to upload anything. If YouTube rejects the link on our side (bot
+                    check, geo block, private / age-gated content), we will surface a clear reason and offer an
+                    upload fallback then.
                   </p>
                 </div>
               </>

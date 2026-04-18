@@ -175,11 +175,15 @@ export async function runClipJob(jobId: string): Promise<void> {
   job.status = "ingesting"
   job.clipJobStage = "ingesting"
   job.progress = 3
+  // First-class server-managed YouTube ingest: we download the source
+  // ourselves and feed it into the pipeline exactly like an uploaded file.
+  // Surface that explicitly in the job message so the client UI can show the
+  // actual work being done instead of a generic "ingesting" state.
   job.message =
     job.params.source === "youtube"
       ? isResumed
-        ? "Resuming: re-downloading from YouTube…"
-        : "Downloading from YouTube…"
+        ? "Resuming: re-downloading YouTube source on the server…"
+        : "Downloading YouTube source on the server…"
       : isResumed
         ? "Resuming: re-checking uploaded source…"
         : "Preparing uploaded source…"
@@ -212,12 +216,17 @@ export async function runClipJob(jobId: string): Promise<void> {
     }
 
     if (!videoPath && job.params.source === "youtube" && job.params.youtubeUrl) {
+      // Server-managed ingest: yt-dlp runs the full 5-attempt format ladder
+      // with SSRF re-validation, optional operator cookies, and isolated
+      // per-job temp dirs. Only true non-recoverable failures throw here; the
+      // catch block below turns those into the user-safe, UI-classifiable
+      // messages in `youtube.downloader.ts` (see `classifyYoutubeDlError`).
       videoPath = await downloadYoutubeVideo(job.params.youtubeUrl)
       ownsYoutubeTempDir = true
       await patchJob(jobId, (j) => {
         j.sourceVideoPath = videoPath!
         j.progress = 12
-        j.message = "Download complete. Starting analysis…"
+        j.message = "YouTube source downloaded on the server. Starting analysis…"
       })
     }
 
