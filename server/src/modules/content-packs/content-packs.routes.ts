@@ -21,6 +21,7 @@ import {
   formatCreatorContextForPrompt,
   loadCreatorContextAttachments,
 } from "../workflow/creator-context"
+import { chargeCredits, CreditError, CREDIT_REASON } from "../../lib/credits"
 
 const router = Router()
 
@@ -285,24 +286,23 @@ Output ONLY JSON. Arrays must have the exact lengths requested. No markdown.`,
 
   try {
     const pack = await prisma.$transaction(async (tx) => {
-      const debit = await tx.user.updateMany({
-        where: { id: userId, credits: { gte: CONTENT_PACK_COST } },
-        data: {
-          credits: { decrement: CONTENT_PACK_COST },
-          totalGenerations: { increment: 1 },
-        },
-      })
-      if (debit.count === 0) {
-        throw new Error("INSUFFICIENT_CREDITS")
-      }
-      await tx.creditTransaction.create({
-        data: {
+      try {
+        await chargeCredits({
+          tx,
           userId,
-          amount: -CONTENT_PACK_COST,
-          type: "CREDIT_USE",
-          reason: "Content pack generation",
+          amount: CONTENT_PACK_COST,
+          reason: CREDIT_REASON.GENERATION_CONTENT_PACK,
           requestId,
-        },
+        })
+      } catch (err) {
+        if (err instanceof CreditError && err.code === "INSUFFICIENT_CREDITS") {
+          throw new Error("INSUFFICIENT_CREDITS")
+        }
+        throw err
+      }
+      await tx.user.update({
+        where: { id: userId },
+        data: { totalGenerations: { increment: 1 } },
       })
       return tx.contentPack.create({
         data: {

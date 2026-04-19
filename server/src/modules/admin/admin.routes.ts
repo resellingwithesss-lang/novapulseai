@@ -24,6 +24,13 @@ import {
 import { expandAdminBroadcastAsync } from "../../lib/email-broadcast"
 import { normalizePlanTier, PLAN_MONTHLY_GBP } from "../plans/plan.constants"
 import { getYoutubeIngestHealthSnapshot } from "../../utils/youtube-ingest-prerequisites"
+import {
+  chargeCredits,
+  grantCredits,
+  CREDIT_REASON,
+  CreditError,
+} from "../../lib/credits"
+import { recordAdminAudit } from "../../lib/admin-audit"
 
 const router = Router()
 const adminSafeUserSelect = {
@@ -466,9 +473,39 @@ router.get("/ad-jobs", async (req, res) => {
           : null
     const query = typeof req.query.query === "string" ? req.query.query.trim() : ""
 
+    // `cancelled` is a recent status value. Legacy rows stored
+    // status="failed" with "Cancelled by user" in failedReason; include
+    // both shapes when admins filter for cancelled so historical jobs
+    // stay discoverable.
+    const statusWhere: Prisma.AdJobWhereInput = (() => {
+      if (!status) return {}
+      if (status === "cancelled") {
+        return {
+          OR: [
+            { status: "cancelled" },
+            {
+              AND: [
+                { status: "failed" },
+                { failedReason: { contains: "ancel" } },
+              ],
+            },
+          ],
+        }
+      }
+      if (status === "failed") {
+        // Exclude legacy-cancelled rows from the "failed" bucket so the
+        // admin doesn't double-count cancellations as failures.
+        return {
+          status: "failed",
+          NOT: { failedReason: { contains: "ancel" } },
+        }
+      }
+      return { status }
+    })()
+
     const rows = await prisma.adJob.findMany({
       where: {
-        ...(status ? { status } : {}),
+        ...statusWhere,
         ...(hasOutput === true
           ? { outputUrl: { not: null } }
           : hasOutput === false
@@ -745,31 +782,77 @@ router.get("/tool-failures", async (_req, res) => {
    UPDATE PLAN
 ================================ */
 
+/**
+ * Zod schemas for the user mutation endpoints. Keeps validation close to the
+ * handler, and reuses Prisma enums so any schema migration forces a compile
+ * break here rather than a silent drift.
+ */
+const planUpdateSchema = z.object({
+  plan: z.nativeEnum(Plan),
+  reason: z.string().trim().min(3).max(280).optional(),
+})
+
+const ADMIN_CREDIT_ADJUSTMENT_MAX = 100_000
+const creditAdjustSchema = z.object({
+  amount: z
+    .number()
+    .int("Amount must be an integer")
+    .refine((n) => n !== 0, { message: "Amount cannot be zero" })
+    .refine((n) => Math.abs(n) <= ADMIN_CREDIT_ADJUSTMENT_MAX, {
+      message: `Absolute amount must be <= ${ADMIN_CREDIT_ADJUSTMENT_MAX}`,
+    }),
+  reason: z.string().trim().min(3).max(280),
+})
+
+const banUpdateSchema = z.object({
+  banned: z.boolean(),
+  reason: z.string().trim().min(3).max(280).optional(),
+})
+
+const deleteSchema = z.object({
+  reason: z.string().trim().min(3).max(280).optional(),
+})
+
 router.patch("/users/:id/plan", async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params
-    const { plan } = req.body
+    if (!req.user) return fail(res, 401, "Unauthorized")
 
-    if (!Object.values(Plan).includes(plan)) {
-      return fail(res, 400, "Invalid plan provided")
+    const parsed = planUpdateSchema.safeParse(req.body ?? {})
+    if (!parsed.success) {
+      return fail(res, 400, parsed.error.issues[0]?.message ?? "Invalid plan")
     }
+    const { plan, reason } = parsed.data
 
-    if (plan === Plan.ELITE && req.user?.role !== Role.SUPER_ADMIN) {
+    if (plan === Plan.ELITE && req.user.role !== Role.SUPER_ADMIN) {
       return fail(res, 403, "Only SUPER_ADMIN can assign ELITE plan manually")
     }
 
+    const before = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, plan: true },
+    })
+    if (!before) return fail(res, 404, "User not found")
+
     const updated = await prisma.user.update({
       where: { id },
-      data: {
-        plan,
-      },
+      data: { plan },
       select: adminSafeUserSelect,
     })
 
-    return ok(res, {
-      message: "User plan updated",
-      user: updated,
+    await recordAdminAudit({
+      adminUserId: req.user.id,
+      targetUserId: id,
+      action: AuditAction.PLAN_CHANGED,
+      requestId: resolveRequestId(req),
+      metadata: {
+        previousPlan: before.plan,
+        plan,
+        ...(reason ? { reason } : {}),
+      },
     })
+
+    return ok(res, { message: "User plan updated", user: updated })
   } catch (err) {
     console.error("ADMIN UPDATE PLAN ERROR:", err)
     return fail(res, 500, "Failed to update plan")
@@ -783,36 +866,74 @@ router.patch("/users/:id/plan", async (req: AuthRequest, res: Response) => {
 router.patch("/users/:id/credits", async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
-    const { amount } = req.body
+    if (!req.user) return fail(res, 401, "Unauthorized")
 
-    if (typeof amount !== "number") {
-      return fail(res, 400, "Amount must be a number")
+    const parsed = creditAdjustSchema.safeParse(req.body ?? {})
+    if (!parsed.success) {
+      return fail(res, 400, parsed.error.issues[0]?.message ?? "Invalid request")
+    }
+    const { amount, reason } = parsed.data
+
+    const requestId = resolveRequestId(req)
+
+    let result: { balanceBefore: number; balanceAfter: number }
+    try {
+      result = await prisma.$transaction(async (tx) => {
+        if (amount > 0) {
+          return grantCredits({
+            tx,
+            userId: id,
+            amount,
+            reason: reason || CREDIT_REASON.ADMIN_GRANT,
+            type: CreditType.ADMIN_ADJUSTMENT,
+            requestId,
+            metadata: { adminUserId: req.user!.id, reason },
+          })
+        }
+        return chargeCredits({
+          tx,
+          userId: id,
+          amount: Math.abs(amount),
+          reason: reason || CREDIT_REASON.ADMIN_DEBIT,
+          type: CreditType.ADMIN_ADJUSTMENT,
+          requestId,
+          metadata: { adminUserId: req.user!.id, reason },
+        })
+      })
+    } catch (err) {
+      if (err instanceof CreditError) {
+        if (err.code === "USER_NOT_FOUND") return fail(res, 404, "User not found")
+        if (err.code === "INSUFFICIENT_CREDITS") {
+          return fail(res, 400, "Cannot debit more credits than the user has")
+        }
+        if (err.code === "INVALID_AMOUNT") return fail(res, 400, err.message)
+      }
+      throw err
     }
 
-    const updatedUser = await prisma.$transaction(async (tx) => {
-      const user = await tx.user.update({
-        where: { id },
-        data: {
-          credits: { increment: amount },
-        },
-        select: adminSafeUserSelect,
-      })
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: adminSafeUserSelect,
+    })
 
-      await tx.creditTransaction.create({
-        data: {
-          userId: id,
-          amount,
-          type: amount >= 0 ? CreditType.CREDIT_ADD : CreditType.CREDIT_USE,
-          reason: "ADMIN_ADJUSTMENT",
-        },
-      })
-
-      return user
+    await recordAdminAudit({
+      adminUserId: req.user.id,
+      targetUserId: id,
+      action: amount > 0 ? AuditAction.CREDITS_ADDED : AuditAction.CREDITS_USED,
+      requestId,
+      metadata: {
+        amount,
+        reason,
+        balanceBefore: result.balanceBefore,
+        balanceAfter: result.balanceAfter,
+      },
     })
 
     return ok(res, {
-      message: "Credits adjusted",
-      user: updatedUser,
+      message: amount > 0 ? "Credits granted" : "Credits debited",
+      user,
+      balanceBefore: result.balanceBefore,
+      balanceAfter: result.balanceAfter,
     })
   } catch (err) {
     console.error("ADMIN CREDIT ERROR:", err)
@@ -824,13 +945,28 @@ router.patch("/users/:id/credits", async (req: AuthRequest, res) => {
    BAN / UNBAN
 ================================ */
 
-router.patch("/users/:id/ban", async (req, res) => {
+router.patch("/users/:id/ban", async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
-    const { banned } = req.body
+    if (!req.user) return fail(res, 401, "Unauthorized")
 
-    if (typeof banned !== "boolean") {
-      return fail(res, 400, "Banned must be boolean")
+    const parsed = banUpdateSchema.safeParse(req.body ?? {})
+    if (!parsed.success) {
+      return fail(res, 400, parsed.error.issues[0]?.message ?? "Invalid request")
+    }
+    const { banned, reason } = parsed.data
+
+    if (req.user.id === id) {
+      return fail(res, 400, "You cannot ban your own admin account")
+    }
+
+    const before = await prisma.user.findUnique({
+      where: { id },
+      select: { role: true, banned: true },
+    })
+    if (!before) return fail(res, 404, "User not found")
+    if (before.role === Role.SUPER_ADMIN && banned) {
+      return fail(res, 403, "Cannot ban SUPER_ADMIN account")
     }
 
     const updated = await prisma.user.update({
@@ -840,6 +976,18 @@ router.patch("/users/:id/ban", async (req, res) => {
         tokenVersion: { increment: 1 },
       },
       select: adminSafeUserSelect,
+    })
+
+    await recordAdminAudit({
+      adminUserId: req.user.id,
+      targetUserId: id,
+      action: AuditAction.USER_BANNED,
+      requestId: resolveRequestId(req),
+      metadata: {
+        banned,
+        previousBanned: before.banned,
+        ...(reason ? { reason } : {}),
+      },
     })
 
     return ok(res, {
@@ -858,31 +1006,28 @@ router.patch("/users/:id/ban", async (req, res) => {
 
 router.delete("/users/:id", async (req: AuthRequest, res) => {
   try {
-    if (!req.user) {
-      return fail(res, 401, "Unauthorized")
-    }
-
+    if (!req.user) return fail(res, 401, "Unauthorized")
     const { id } = req.params
 
-    // Prevent self-delete
+    const parsed = deleteSchema.safeParse(req.body ?? {})
+    if (!parsed.success) {
+      return fail(res, 400, parsed.error.issues[0]?.message ?? "Invalid request")
+    }
+    const { reason } = parsed.data
+
     if (req.user.id === id) {
-      return fail(
-        res,
-        400,
-        "You cannot delete your own admin account"
-      )
+      return fail(res, 400, "You cannot delete your own admin account")
     }
 
     const targetUser = await prisma.user.findUnique({
       where: { id },
-      select: { role: true },
+      select: { role: true, email: true },
     })
 
     if (!targetUser) {
       return fail(res, 404, "User not found")
     }
 
-    // Prevent deleting super admins
     if (targetUser.role === Role.SUPER_ADMIN) {
       return fail(res, 403, "Cannot delete SUPER_ADMIN account")
     }
@@ -895,12 +1040,117 @@ router.delete("/users/:id", async (req: AuthRequest, res) => {
       },
     })
 
-    return ok(res, {
-      message: "User deleted successfully",
+    await recordAdminAudit({
+      adminUserId: req.user.id,
+      targetUserId: id,
+      action: AuditAction.USER_DELETED,
+      requestId: resolveRequestId(req),
+      metadata: {
+        email: targetUser.email,
+        ...(reason ? { reason } : {}),
+      },
     })
+
+    return ok(res, { message: "User deleted successfully" })
   } catch (err) {
     console.error("ADMIN DELETE ERROR:", err)
     return fail(res, 500, "Failed to delete user")
+  }
+})
+
+/* ===============================
+   USER DETAIL + CREDIT HISTORY
+================================ */
+
+/**
+ * GET /admin/users/:id — full detail view for the admin user page.
+ * Returns the safe user shape plus some at-a-glance aggregates for the UI
+ * (transaction count, lifetime credits used, recent generation count).
+ * The admin overview already has global aggregates; this endpoint is the
+ * per-user drill-down.
+ */
+router.get("/users/:id", async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        email: true,
+        displayName: true,
+        role: true,
+        plan: true,
+        subscriptionStatus: true,
+        subscriptionStartedAt: true,
+        subscriptionEndsAt: true,
+        cancelAtPeriodEnd: true,
+        trialExpiresAt: true,
+        credits: true,
+        monthlyCredits: true,
+        bonusCredits: true,
+        lifetimeCreditsUsed: true,
+        monthlyResetAt: true,
+        banned: true,
+        deletedAt: true,
+        createdAt: true,
+        provider: true,
+      },
+    })
+    if (!user) return fail(res, 404, "User not found")
+
+    const [transactionCount, generationCount, adJobCount] = await Promise.all([
+      prisma.creditTransaction.count({ where: { userId: id } }),
+      prisma.generation.count({ where: { userId: id } }),
+      prisma.adJob.count({ where: { userId: id } }),
+    ])
+
+    return ok(res, {
+      user,
+      aggregates: { transactionCount, generationCount, adJobCount },
+    })
+  } catch (err) {
+    console.error("ADMIN USER DETAIL ERROR:", err)
+    return fail(res, 500, "Failed to load user")
+  }
+})
+
+/**
+ * GET /admin/users/:id/credit-transactions?page=&limit=
+ * Per-user ledger view for the admin detail page. Mirrors the settings
+ * page's ledger API (same row shape) but unrestricted to the requested
+ * user rather than the caller.
+ */
+router.get("/users/:id/credit-transactions", async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params
+    const limit = Math.min(Math.max(Number(req.query.limit ?? 25), 1), 100)
+    const page = Math.max(Number(req.query.page ?? 1), 1)
+    const skip = (page - 1) * limit
+
+    const [total, rows] = await Promise.all([
+      prisma.creditTransaction.count({ where: { userId: id } }),
+      prisma.creditTransaction.findMany({
+        where: { userId: id },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          amount: true,
+          type: true,
+          reason: true,
+          balanceAfter: true,
+          requestId: true,
+          metadata: true,
+          createdAt: true,
+        },
+      }),
+    ])
+
+    return ok(res, { page, limit, total, transactions: rows })
+  } catch (err) {
+    console.error("ADMIN USER CREDIT HISTORY ERROR:", err)
+    return fail(res, 500, "Failed to load credit history")
   }
 })
 

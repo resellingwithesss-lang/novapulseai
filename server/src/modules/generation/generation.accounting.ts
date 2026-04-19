@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from "@prisma/client"
 import type { GenerationType } from "./generation.contract"
 import type { GenerationAccountingErrorCode } from "./generation.contract"
 import { buildEntitlementSnapshot } from "../billing/billing.access"
+import { chargeCredits, CreditError, CREDIT_REASON } from "../../lib/credits"
 
 export type GenerationUserSnapshot = {
   id: string
@@ -230,34 +231,24 @@ export async function persistGenerationAndAccounting(
   }
 
   if (!isUnlimited) {
-    const debitResult = await tx.user.updateMany({
-      where: {
-        id: userId,
-        credits: { gte: generationCost },
-      },
-      data: { credits: { decrement: generationCost } },
-    })
-
-    if (debitResult.count === 0) {
-      throw new GenerationAccountingError(
-        "INSUFFICIENT_CREDITS",
-        "No credits remaining",
-        403
-      )
-    }
-    if (debitResult.count !== 1) {
-      throw new Error("Invariant violation: guarded debit affected unexpected rows")
-    }
-
-    await tx.creditTransaction.create({
-      data: {
+    try {
+      await chargeCredits({
+        tx,
         userId,
-        amount: -generationCost,
-        type: "CREDIT_USE",
-        reason: "Script generation",
+        amount: generationCost,
+        reason: CREDIT_REASON.GENERATION_SCRIPT,
         requestId,
-      },
-    })
+      })
+    } catch (err) {
+      if (err instanceof CreditError && err.code === "INSUFFICIENT_CREDITS") {
+        throw new GenerationAccountingError(
+          "INSUFFICIENT_CREDITS",
+          "No credits remaining",
+          403
+        )
+      }
+      throw err
+    }
   }
 
   await tx.generation.create({

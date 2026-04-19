@@ -49,8 +49,29 @@ import {
   assertPublicHttpUrl,
   isLoopbackIngestionAllowed,
 } from "../../lib/url-guard"
+import { requireCsrfForCookieAuth } from "../../middlewares/csrf-protect"
 
 const router = Router()
+
+/**
+ * Canonical ad-job lifecycle strings.
+ *
+ * Historically cancellation wrote `status: "failed"` with
+ * `failedReason: "Cancelled by user"`. That hid cancellations inside the
+ * failure bucket for admin filtering (where the UI offered a "cancelled"
+ * filter that matched zero rows) and distorted failure analytics. New
+ * cancellations now write `status: "cancelled"`. Historical rows are not
+ * migrated — the admin list treats `status: "failed"` with
+ * `failedReason: "Cancelled by user"` as cancelled for display purposes
+ * so prior rows remain discoverable.
+ */
+export const AD_JOB_STATUS = {
+  PROCESSING: "processing",
+  COMPLETED: "completed",
+  FAILED: "failed",
+  CANCELLED: "cancelled",
+} as const
+export type AdJobStatusValue = (typeof AD_JOB_STATUS)[keyof typeof AD_JOB_STATUS]
 
 /** Short, operator-facing failure text for ad jobs (stored on `failedReason`). */
 function humanizeAdWorkerFailure(err: unknown): string {
@@ -902,6 +923,23 @@ async function updateJob(jobId: string, data: Prisma.AdJobUpdateInput): Promise<
   })
 }
 
+/**
+ * Write a terminal status (`failed`/`completed`) but refuse to stomp an
+ * existing `cancelled` row — if the user cancelled mid-flight, the worker
+ * must not later overwrite the cancellation with its own failure. We
+ * `updateMany` with a `status != cancelled` guard so the write is a
+ * no-op when the cancel beat us to it.
+ */
+async function writeTerminalJobStatus(
+  jobId: string,
+  data: Prisma.AdJobUpdateInput
+): Promise<void> {
+  await prisma.adJob.updateMany({
+    where: { id: jobId, status: { not: AD_JOB_STATUS.CANCELLED } },
+    data: data as Prisma.AdJobUpdateManyMutationInput,
+  })
+}
+
 async function getJobByDbId(jobId: string) {
   return prisma.adJob.findUnique({
     where: { id: jobId },
@@ -912,10 +950,13 @@ async function getJobByDbId(jobId: string) {
 async function assertJobRunnable(jobDbId: string): Promise<void> {
   const job = await getJobByDbId(jobDbId)
   if (!job) throw new Error("JOB_NOT_FOUND")
-  if (job.status === "failed" && (job.failedReason || "").toLowerCase().includes("cancel")) {
+  if (job.status === AD_JOB_STATUS.CANCELLED) throw new Error("JOB_CANCELLED")
+  // Legacy cancelled rows stored status="failed" with a "cancel" phrase in
+  // failedReason — treat them the same to avoid resuming historical cancels.
+  if (job.status === AD_JOB_STATUS.FAILED && (job.failedReason || "").toLowerCase().includes("cancel")) {
     throw new Error("JOB_CANCELLED")
   }
-  if (job.status === "failed") throw new Error("JOB_ALREADY_FAILED")
+  if (job.status === AD_JOB_STATUS.FAILED) throw new Error("JOB_ALREADY_FAILED")
 }
 
 async function runAdGenerationJob(params: {
@@ -1183,8 +1224,8 @@ async function runAdGenerationJob(params: {
       message: failureMessage,
     })
 
-    await updateJob(params.jobDbId, {
-      status: "failed",
+    await writeTerminalJobStatus(params.jobDbId, {
+      status: AD_JOB_STATUS.FAILED,
       failedReason: failureMessage,
       progress: 0,
       renderCompletedAt: new Date()
@@ -1304,8 +1345,8 @@ async function runAdRerenderFromVariantJob(params: {
       message: failureMessage,
     })
 
-    await updateJob(params.jobDbId, {
-      status: "failed",
+    await writeTerminalJobStatus(params.jobDbId, {
+      status: AD_JOB_STATUS.FAILED,
       failedReason: failureMessage,
       progress: 0,
       renderCompletedAt: new Date(),
@@ -1510,16 +1551,24 @@ router.post(
       }
     )
 
-    return toolOk(res, {
-      requestId,
-      stage: "analyze",
-      status: "queued",
-      progress: 5,
-      jobId,
-      result: {
+    // Return the actual `processing` status the DB row starts with so the
+    // polling client and the job record do not disagree. Older clients that
+    // checked for `queued` treated `processing` the same way (in-flight,
+    // continue polling), so this is backward-compatible for existing UIs.
+    return toolOk(
+      res,
+      {
+        requestId,
+        stage: "analyze",
+        status: AD_JOB_STATUS.PROCESSING,
+        progress: 5,
         jobId,
+        result: {
+          jobId,
+        },
       },
-    }, 202)
+      202
+    )
     } catch (error: unknown) {
       console.error("[POST /ads/generate]", requestId, error)
 
@@ -1614,7 +1663,7 @@ router.post(
         code: "NOT_FOUND",
       })
     }
-    if (job.status === "completed") {
+    if (job.status === AD_JOB_STATUS.COMPLETED) {
       return toolFail(res, 409, "Completed jobs cannot be cancelled", {
         requestId,
         stage: "finalize",
@@ -1623,24 +1672,27 @@ router.post(
         jobId: req.params.jobId,
       })
     }
-    if (job.status === "failed") {
+    if (
+      job.status === AD_JOB_STATUS.FAILED ||
+      job.status === AD_JOB_STATUS.CANCELLED
+    ) {
       return toolOk(res, {
         requestId,
         stage: "failed",
-        status: "failed",
+        status: job.status === AD_JOB_STATUS.CANCELLED ? "cancelled" : "failed",
         progress: job.progress ?? 0,
         jobId: req.params.jobId,
         result: {
           jobId: req.params.jobId,
           cancelled: true,
-          reason: job.failedReason || "Job already failed",
+          reason: job.failedReason || "Job already stopped",
         },
       })
     }
     await prisma.adJob.update({
       where: { id: job.id },
       data: {
-        status: "failed",
+        status: AD_JOB_STATUS.CANCELLED,
         failedReason: "Cancelled by user",
         renderCompletedAt: new Date(),
       },
@@ -1657,8 +1709,8 @@ router.post(
     return toolOk(res, {
       requestId,
       stage: "failed",
-      status: "failed",
-      progress: 0,
+      status: "cancelled",
+      progress: job.progress ?? 0,
       jobId: req.params.jobId,
       result: {
         jobId: req.params.jobId,
@@ -1672,6 +1724,7 @@ router.post(
   "/:jobId/rerender-from-variant",
   requireAuth,
   requireAdmin,
+  requireCsrfForCookieAuth,
   async (req: AuthRequest, res: Response) => {
     const requestId = resolveRequestId(req)
     if (!req.user) {
@@ -1875,6 +1928,7 @@ router.patch(
   "/:jobId/operator-review",
   requireAuth,
   requireAdmin,
+  requireCsrfForCookieAuth,
   async (req: AuthRequest, res: Response) => {
     const requestId = resolveRequestId(req)
     if (!req.user) {

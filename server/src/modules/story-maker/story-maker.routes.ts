@@ -17,6 +17,7 @@ import {
   loadCreatorContextAttachments,
 } from "../workflow/creator-context"
 import { validateGenerationSourceRefs } from "../workflow/source-metadata"
+import { chargeCredits, CreditError, CREDIT_REASON } from "../../lib/credits"
 
 const router = Router()
 
@@ -411,26 +412,26 @@ JSON:
 
     await prisma.$transaction(async (tx) => {
       if (!isUnlimited) {
-        const debit = await tx.user.updateMany({
-          where: {
-            id: userId,
-            credits: { gte: STORY_COST },
-          },
-          data: {
-            credits: { decrement: STORY_COST },
-            totalGenerations: { increment: 1 },
-          },
-        })
-        if (debit.count === 0) {
-          throw new Error("INSUFFICIENT_CREDITS")
-        }
-        await tx.creditTransaction.create({
-          data: {
+        try {
+          await chargeCredits({
+            tx,
             userId,
-            amount: -STORY_COST,
-            type: "CREDIT_USE",
-            reason: "Story generation",
-          },
+            amount: STORY_COST,
+            reason: CREDIT_REASON.GENERATION_STORY,
+            requestId,
+          })
+        } catch (err) {
+          if (err instanceof CreditError && err.code === "INSUFFICIENT_CREDITS") {
+            throw new Error("INSUFFICIENT_CREDITS")
+          }
+          throw err
+        }
+        // `chargeCredits` handled the credit debit, ledger row, and
+        // lifetimeCreditsUsed increment. Still bump `totalGenerations` in a
+        // dedicated write so paid and unlimited paths stay parallel.
+        await tx.user.update({
+          where: { id: userId },
+          data: { totalGenerations: { increment: 1 } },
         })
       } else {
         await tx.user.update({

@@ -186,7 +186,9 @@ export default function AdsAdminJobsList({
                             ? "bg-emerald-500/15 text-emerald-200/95"
                             : row.status === "failed"
                               ? "bg-red-500/15 text-red-200/90"
-                              : "bg-white/10 text-white/70"
+                              : row.status === "cancelled"
+                                ? "bg-zinc-500/20 text-zinc-200/90"
+                                : "bg-white/10 text-white/70"
                         }`}
                       >
                         {row.status}

@@ -15,6 +15,7 @@ import { inferBillingIntervalFromStripePriceId } from "./plan-change-classificat
 import { logBillingEvent } from "./billing-events"
 import { markBillingProTrialConsumedIfProSubscriptionLive } from "./webhook-pro-trial"
 import { recordReferralCommissionFromInvoice } from "../referrals/referral.service"
+import { resetCreditsToPlan, CREDIT_REASON } from "../../lib/credits"
 
 const router = Router()
 
@@ -231,7 +232,9 @@ router.post("/", async (req: Request, res: Response) => {
           }
 
           if (!duplicate) {
-            // ✅ Hard reset credits to plan credits (prevents 1k vs 5k drift)
+            // Update plan/subscription fields (credits handled by
+            // resetCreditsToPlan below so the ledger has balanceAfter and a
+            // signed delta rather than a raw `amount = refillCredits`).
             await tx.user.update({
               where: { id: userId },
               data: {
@@ -240,11 +243,6 @@ router.post("/", async (req: Request, res: Response) => {
                   ? new Date(getItemPeriodEnd(subscription)! * 1000)
                   : null,
                 plan,
-
-                // HARD RESET:
-                credits: refillCredits,
-                monthlyCredits: refillCredits,
-                monthlyResetAt: new Date(),
               },
             })
 
@@ -255,14 +253,19 @@ router.post("/", async (req: Request, res: Response) => {
               plan,
             }
 
-            await tx.creditTransaction.create({
-              data: {
-                userId,
-                amount: refillCredits,
-                type: CreditType.CREDIT_ADD,
-                reason: "Monthly billing reset",
-                metadata: ledgerMetadata,
-              },
+            // type = CREDIT_ADD is kept for backward compatibility with the
+            // existing admin aggregate queries that sum `CREDIT_ADD` +
+            // `CREDIT_USE`. `resetCreditsToPlan` still writes `balanceAfter`
+            // and a signed `delta` so the ledger is reconstructable.
+            await resetCreditsToPlan({
+              tx,
+              userId,
+              target: refillCredits,
+              setMonthlyCredits: true,
+              resetMonthlyResetAt: true,
+              reason: CREDIT_REASON.MONTHLY_BILLING_RESET,
+              type: CreditType.CREDIT_ADD,
+              metadata: ledgerMetadata,
             })
           }
 
@@ -362,44 +365,62 @@ router.post("/", async (req: Request, res: Response) => {
           })
         }
 
-        await prisma.user.update({
-          where: { id: userId },
-          data: {
-            stripeCustomerId: getCustomerId(subscription.customer),
-            stripeSubscriptionId: subscription.id,
+        await prisma.$transaction(async (tx) => {
+          await tx.user.update({
+            where: { id: userId },
+            data: {
+              stripeCustomerId: getCustomerId(subscription.customer),
+              stripeSubscriptionId: subscription.id,
 
-            plan: resolvedPlan,
-            subscriptionStatus: mapStripeStatus(subscription.status),
+              plan: resolvedPlan,
+              subscriptionStatus: mapStripeStatus(subscription.status),
 
-            trialExpiresAt: subscription.trial_end
-              ? new Date(subscription.trial_end * 1000)
-              : existingUser.trialExpiresAt,
+              trialExpiresAt: subscription.trial_end
+                ? new Date(subscription.trial_end * 1000)
+                : existingUser.trialExpiresAt,
 
-            subscriptionStartedAt: getItemPeriodStart(subscription)
-              ? new Date(getItemPeriodStart(subscription)! * 1000)
-              : null,
+              subscriptionStartedAt: getItemPeriodStart(subscription)
+                ? new Date(getItemPeriodStart(subscription)! * 1000)
+                : null,
 
-            subscriptionEndsAt: getItemPeriodEnd(subscription)
-              ? new Date(getItemPeriodEnd(subscription)! * 1000)
-              : null,
+              subscriptionEndsAt: getItemPeriodEnd(subscription)
+                ? new Date(getItemPeriodEnd(subscription)! * 1000)
+                : null,
 
-            cancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
-            ...(pendingMatchesStripe
-              ? {
-                  stripeSubscriptionScheduleId: null,
-                  scheduledPlanTarget: null,
-                  scheduledPlanBilling: null,
-                  scheduledPlanEffectiveAt: null,
-                }
-              : {}),
-            ...(shouldResetCreditsForPlanChange
-              ? {
-                  credits: resetCredits,
-                  monthlyCredits: resetCredits,
-                  monthlyResetAt: new Date(),
-                }
-              : {}),
-          },
+              cancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
+              ...(pendingMatchesStripe
+                ? {
+                    stripeSubscriptionScheduleId: null,
+                    scheduledPlanTarget: null,
+                    scheduledPlanBilling: null,
+                    scheduledPlanEffectiveAt: null,
+                  }
+                : {}),
+            },
+          })
+
+          if (shouldResetCreditsForPlanChange) {
+            const isUpgrade =
+              planRank(normalizePlanTier(resolvedPlan)) >
+              planRank(normalizePlanTier(existingUser.plan))
+            await resetCreditsToPlan({
+              tx,
+              userId,
+              target: resetCredits,
+              setMonthlyCredits: true,
+              resetMonthlyResetAt: true,
+              reason: isUpgrade
+                ? CREDIT_REASON.PLAN_UPGRADE_RESET
+                : CREDIT_REASON.PLAN_DOWNGRADE_RESET,
+              type: CreditType.PLAN_UPGRADE,
+              metadata: {
+                stripeEventId: event.id,
+                stripeSubscriptionId: subscription.id,
+                previousPlan: existingUser.plan,
+                plan: resolvedPlan,
+              },
+            })
+          }
         })
 
         await markBillingProTrialConsumedIfProSubscriptionLive({ userId, subscription })
@@ -497,19 +518,32 @@ router.post("/", async (req: Request, res: Response) => {
             },
           })
         } else {
-          await prisma.user.update({
-            where: { id: userId },
-            data: {
-              plan: Plan.FREE,
-              subscriptionStatus: SubscriptionStatus.CANCELED,
-              stripeSubscriptionId: null,
-              subscriptionStartedAt: null,
-              subscriptionEndsAt: null,
-              cancelAtPeriodEnd: false,
-              credits: creditsForPlan(Plan.FREE),
-              monthlyCredits: creditsForPlan(Plan.FREE),
-              monthlyResetAt: new Date(),
-            },
+          const freeCredits = creditsForPlan(Plan.FREE)
+          await prisma.$transaction(async (tx) => {
+            await tx.user.update({
+              where: { id: userId },
+              data: {
+                plan: Plan.FREE,
+                subscriptionStatus: SubscriptionStatus.CANCELED,
+                stripeSubscriptionId: null,
+                subscriptionStartedAt: null,
+                subscriptionEndsAt: null,
+                cancelAtPeriodEnd: false,
+              },
+            })
+            await resetCreditsToPlan({
+              tx,
+              userId,
+              target: freeCredits,
+              setMonthlyCredits: true,
+              resetMonthlyResetAt: true,
+              reason: CREDIT_REASON.SUBSCRIPTION_CANCEL_RESET,
+              type: CreditType.PLAN_UPGRADE,
+              metadata: {
+                stripeEventId: event.id,
+                stripeSubscriptionId: subscription.id,
+              },
+            })
           })
         }
 

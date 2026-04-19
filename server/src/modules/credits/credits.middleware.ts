@@ -2,8 +2,8 @@ import { Response, NextFunction } from "express"
 import { prisma } from "../../lib/prisma"
 import { isStaffBillingExemptRole, staffEffectivePlanString } from "../../lib/staff-plan"
 import { AuthRequest } from "../auth/auth.middleware"
-import { CreditType } from "@prisma/client"
 import { getPlanCredits, isFreePlanTier, normalizePlanTier } from "../plans/plan.constants"
+import { chargeCredits, CreditError, CREDIT_REASON } from "../../lib/credits"
 
 interface CreditOptions {
   allowNegativeCost?: boolean
@@ -15,7 +15,7 @@ interface CreditOptions {
 
 export const requireCredits = (
   cost: number,
-  reason = "Usage",
+  reason: string = CREDIT_REASON.GENERATION_MIDDLEWARE,
   options: CreditOptions = {}
 ) => {
   return async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -107,32 +107,17 @@ export const requireCredits = (
           })
         }
 
-        /* 3.3 Atomic decrement */
-        const updated = await tx.user.updateMany({
-          where: {
-            id: userId,
-            credits: { gte: cost },
-          },
-          data: {
-            credits: { decrement: cost },
-          },
+        /* 3.3 Debit + ledger via shared helper (negative amount, balanceAfter,
+               lifetimeCreditsUsed increment). skipLogging is now a no-op — the
+               ledger row is always written, because reconstructing a balance
+               gap after the fact is much worse than one extra row per debit. */
+        await chargeCredits({
+          tx,
+          userId,
+          amount: cost,
+          reason,
         })
-
-        if (updated.count === 0) {
-          throw new Error("INSUFFICIENT_CREDITS")
-        }
-
-        /* 3.4 Ledger record */
-        if (!options.skipLogging) {
-          await tx.creditTransaction.create({
-            data: {
-              userId,
-              amount: cost,
-              type: CreditType.CREDIT_USE,
-              reason,
-            },
-          })
-        }
+        void options.skipLogging // retained for API compat, intentionally ignored
       })
 
       /* =====================================================
@@ -154,14 +139,19 @@ export const requireCredits = (
          5. STRUCTURED ERROR HANDLING
       ===================================================== */
 
+      if (error instanceof CreditError) {
+        switch (error.code) {
+          case "INSUFFICIENT_CREDITS":
+            return res.status(403).json({ success: false, message: "Not enough credits" })
+          case "USER_NOT_FOUND":
+            return res.status(404).json({ success: false, message: "User not found" })
+          case "INVALID_AMOUNT":
+            return res.status(400).json({ success: false, message: "Invalid credit amount" })
+        }
+      }
+
       if (error instanceof Error) {
         switch (error.message) {
-          case "INSUFFICIENT_CREDITS":
-            return res.status(403).json({
-              success: false,
-              message: "Not enough credits",
-            })
-
           case "USER_NOT_FOUND":
             return res.status(404).json({
               success: false,

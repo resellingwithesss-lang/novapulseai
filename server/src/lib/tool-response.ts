@@ -18,10 +18,22 @@ export type ToolErrorCode =
   /** DB behind `prisma/migrations` (Prisma P2021/P2022). */
   | "DATABASE_SCHEMA_MIGRATION_REQUIRED"
 
+/**
+ * Status strings surfaced in tool responses. `cancelled` was added so the
+ * ad generator can explicitly report user-initiated cancellations without
+ * collapsing them into generic `failed` responses.
+ */
+export type ToolResponseStatus =
+  | "queued"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "cancelled"
+
 type ToolOkPayload = {
   requestId?: string
   stage?: ToolStage
-  status?: "queued" | "processing" | "completed" | "failed"
+  status?: ToolResponseStatus
   progress?: number
   jobId?: string
 } & Record<string, unknown>
@@ -30,7 +42,7 @@ type ToolFailPayload = {
   requestId?: string
   stage?: ToolStage
   code?: ToolErrorCode
-  status?: "queued" | "processing" | "completed" | "failed"
+  status?: ToolResponseStatus
   progress?: number
   jobId?: string
 } & Record<string, unknown>

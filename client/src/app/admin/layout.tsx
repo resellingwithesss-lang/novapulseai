@@ -13,6 +13,7 @@ const navGroups: {
     label: "Operations",
     items: [
       { name: "Overview", href: "/admin", icon: LayoutDashboard },
+      { name: "Users", href: "/admin/users", icon: Users },
       { name: "Referrals", href: "/admin/referrals", icon: Users },
     ],
   },
