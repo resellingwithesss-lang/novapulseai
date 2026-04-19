@@ -48,7 +48,7 @@ export default function VideoScriptResults({
       nextSteps={[
         { label: "Open Story Maker", href: "/dashboard/tools/story-maker" },
         { label: "Open Clipper", href: "/dashboard/tools/clipper" },
-        { label: "Open Story Video Maker", href: "/dashboard/tools/story-video-maker" },
+        { label: "Open AI Ad Generator", href: "/dashboard/tools/ai-ad-generator" },
       ]}
     >
       <div className="mb-3 rounded-xl border border-pink-500/25 bg-pink-500/10 px-3 py-2 text-xs text-pink-100">

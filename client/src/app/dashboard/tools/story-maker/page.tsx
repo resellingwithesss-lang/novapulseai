@@ -205,7 +205,7 @@ export default function StoryMakerPage() {
         tool: "story-maker",
         title: output.title || "Story output",
         summary: output.hook,
-        continuePath: "/dashboard/tools/story-video-maker",
+        continuePath: "/dashboard/tools/ai-ad-generator",
         nextAction: "Use this as a creative brief for Story Video.",
       })
       recordEmailReadyEvent("OUTPUT_CREATED", `output:story-maker:${Date.now()}`, {

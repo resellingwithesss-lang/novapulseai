@@ -20,6 +20,7 @@ import CreatorOnboardingBanner from "./_components/CreatorOnboardingBanner"
 import WorkflowGoalTemplates from "./_components/WorkflowGoalTemplates"
 import DashboardNextAction from "./_components/DashboardNextAction"
 import ConsentBannerCard from "@/components/marketing/ConsentBannerCard"
+import DashboardGrowthBanner from "@/components/growth/DashboardGrowthBanner"
 import { useWorkflowSummary } from "@/hooks/useWorkflowSummary"
 import {
   fetchBrandVoices,
@@ -137,12 +138,14 @@ export default function DashboardPage() {
 
         <ConsentBannerCard />
 
+        <DashboardGrowthBanner />
+
         <section className="space-y-4">
           <div>
             <h2 className="np-title-section">Your growth stack</h2>
             <p className="np-text-body mt-2 max-w-2xl text-sm">
-              Pick a lane, ship an asset. Elite unlocks the AI Ad Generator — full auto video ads without
-              filming or editing.
+              Create high-performing ads and supporting assets without recording yourself. Elite unlocks
+              the AI Ad Generator — URL to finished spot, voiceover included.
             </p>
           </div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
@@ -150,7 +153,7 @@ export default function DashboardPage() {
             <ToolCard title="Clip Generator" href="/dashboard/tools/clipper" />
             <ToolCard title="Prompt Generator" href="/dashboard/tools/prompt" />
             <ToolCard title="Story Maker" href="/dashboard/tools/story-maker" />
-            <ToolCard title="AI Ad Generator" href="/dashboard/tools/story-video-maker" />
+            <ToolCard title="AI Ad Generator" href="/dashboard/tools/ai-ad-generator" />
           </div>
         </section>
 
@@ -336,7 +339,7 @@ export default function DashboardPage() {
               Full library
             </Link>
             <Link
-              href="/dashboard/tools/story-video-maker"
+              href="/dashboard/tools/ai-ad-generator"
               className="np-btn-chip outline-none focus-visible:ring-2 focus-visible:ring-purple-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0f19]"
             >
               Finish your video

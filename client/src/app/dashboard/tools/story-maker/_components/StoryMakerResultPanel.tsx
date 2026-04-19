@@ -87,7 +87,7 @@ export default function StoryMakerResultPanel({
       nextSteps={[
         {
           label: "Turn into Video Ad",
-          href: buildToolHandoffUrl("/dashboard/tools/story-video-maker", {
+          href: buildToolHandoffUrl("/dashboard/tools/ai-ad-generator", {
             topic: result.hook,
           }),
         },
