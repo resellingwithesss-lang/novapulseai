@@ -11,6 +11,14 @@ import dynamic from "next/dynamic"
 import { useSearchParams } from "next/navigation"
 import { api, ApiError } from "@/lib/api"
 import ToolPageShell from "@/components/tools/ToolPageShell"
+import {
+  ToolErrorPanel,
+  ToolInputSection,
+  ToolLoadingPanel,
+  ToolPrimaryCta,
+  ToolUpgradeHint,
+} from "@/components/tools/ToolWorkspace"
+import { tools } from "@/config/tools"
 import { useAuth } from "@/context/AuthContext"
 import { displayPlanForUser } from "@/lib/plans"
 import { useEntitlementSnapshot, formatBlockedReason } from "@/hooks/useEntitlementSnapshot"
@@ -18,6 +26,10 @@ import { normalizeToolOperation } from "@/lib/tool-operation"
 import UpgradeModal from "@/components/growth/UpgradeModal"
 import CreatorWorkflowSelectors from "@/components/workflow/CreatorWorkflowSelectors"
 import { incrementToolUsage, pushOutputHistory, recordEmailReadyEvent } from "@/lib/growth"
+import {
+  improveStoryScript,
+  type ImproveScriptMode,
+} from "@/lib/local-script-improve"
 
 type StoryOutput = {
   title: string
@@ -50,7 +62,7 @@ const StoryMakerResultPanel = dynamic(
 
 export default function StoryMakerPage() {
   const searchParams = useSearchParams()
-  const { user, refreshUser } = useAuth()
+  const { user, refreshUser, isAdmin } = useAuth()
   const { entitlement } = useEntitlementSnapshot()
   const [topic, setTopic] = useState("")
   const [format, setFormat] = useState("Reddit Confession")
@@ -69,6 +81,22 @@ export default function StoryMakerPage() {
   const [sourceType, setSourceType] = useState<
     "" | "CONTENT_PACK" | "GENERATION" | "MANUAL"
   >("")
+  const [improveUses, setImproveUses] = useState(0)
+
+  const storyToolMeta = tools.find((t) => t.id === "story-maker")
+
+  const [loadingStep, setLoadingStep] = useState(0)
+  useEffect(() => {
+    if (!loading) {
+      setLoadingStep(0)
+      return
+    }
+    setLoadingStep(0)
+    const id = window.setInterval(() => {
+      setLoadingStep((s) => Math.min(2, s + 1))
+    }, 2800)
+    return () => window.clearInterval(id)
+  }, [loading])
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -165,6 +193,7 @@ export default function StoryMakerPage() {
     setLoading(true)
     setError("")
     setResult(null)
+    setImproveUses(0)
 
     abortRef.current?.abort()
     abortRef.current = new AbortController()
@@ -242,6 +271,17 @@ export default function StoryMakerPage() {
     refreshUser,
   ])
 
+  const applyStoryImprove = useCallback(
+    (mode: ImproveScriptMode) => {
+      if (!result) return
+      const cap = entitlement?.improveActionsLimit ?? 0
+      if (cap <= 0 || improveUses >= cap) return
+      setResult((prev) => (prev ? improveStoryScript(prev, mode) : prev))
+      setImproveUses((u) => u + 1)
+    },
+    [result, entitlement?.improveActionsLimit, improveUses]
+  )
+
   /* ==============================
      Scroll to Result
   ============================== */
@@ -258,8 +298,9 @@ export default function StoryMakerPage() {
     <ToolPageShell
       toolId="story-maker"
       title="Story Maker"
-      subtitle="Turn a raw idea into a structured story script with hook, pacing, caption, and distribution tags."
-      guidance="Use this for narrative-led posts, storytelling shorts, and serialized content concepts."
+      outcome={storyToolMeta?.outcome}
+      subtitle="AI builds your ads — no filming required. Hook, build, payoff, and CTA with caption and tags."
+      guidance="Works best with a specific situation, tension, or twist — not a one-word topic."
       statusLabel={
         entitlementBlockedMessage
           ? entitlementBlockedMessage
@@ -267,9 +308,12 @@ export default function StoryMakerPage() {
       }
       statusTone={entitlementBlockedMessage ? "warning" : "success"}
     >
-    <div className="max-w-6xl mx-auto pb-24">
+    <div className="mx-auto max-w-6xl space-y-6 pb-24">
 
-      <div className="mb-6">
+      <ToolInputSection
+        title="Brand context"
+        description="Optional — connects this story to your workspace and voice."
+      >
         <CreatorWorkflowSelectors
           workspaceId={workspaceId}
           brandVoiceId={brandVoiceId}
@@ -277,124 +321,134 @@ export default function StoryMakerPage() {
           onBrandVoiceChange={setBrandVoiceId}
           disabled={loading}
         />
-      </div>
+      </ToolInputSection>
 
-      {/* TEXTAREA */}
-      <textarea
-        ref={textareaRef}
-        maxLength={MAX_CHAR}
-        value={topic}
-        onChange={(e) => {
-          setTopic(e.target.value)
-          if (error) setError("")
-        }}
-        placeholder="Describe your viral story idea..."
-        className="w-full p-4 rounded-xl bg-white/5 border border-white/10 mb-2 resize-none"
-      />
+      <ToolInputSection
+        title="Your story idea"
+        description={pacingPreview}
+      >
+        <textarea
+          ref={textareaRef}
+          maxLength={MAX_CHAR}
+          value={topic}
+          onChange={(e) => {
+            setTopic(e.target.value)
+            if (error) setError("")
+          }}
+          placeholder="e.g. The day I found out my co-founder was running a second company using our list…"
+          className="mb-2 w-full resize-none rounded-xl border border-white/10 bg-white/5 p-4 text-sm outline-none ring-purple-400/0 transition focus:border-purple-400/35 focus:ring-2 focus:ring-purple-400/25"
+        />
+        <div className="flex justify-end text-xs text-white/45">
+          <span className={topic.length > MAX_CHAR - 50 ? "text-red-400" : ""}>
+            {topic.length}/{MAX_CHAR}
+          </span>
+        </div>
+      </ToolInputSection>
 
-      <div className="flex justify-between text-xs mb-6">
-        <span className="text-gray-500">
-          {pacingPreview}
-        </span>
-        <span
-          className={
-            topic.length > MAX_CHAR - 50
-              ? "text-red-400"
-              : "text-gray-500"
-          }
-        >
-          {topic.length}/{MAX_CHAR}
-        </span>
-      </div>
+      <ToolInputSection
+        title="Format & pacing"
+        description="Pick a narrative shape and how hard the pacing hits. You can change this anytime."
+      >
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <label className="block space-y-1.5">
+            <span className="text-xs font-medium text-white/55">Story format</span>
+            <select
+              value={format}
+              onChange={(e) => setFormat(e.target.value)}
+              className="np-select w-full"
+            >
+              <option>Reddit Confession</option>
+              <option>POV Immersive</option>
+              <option>Two Character Dialogue</option>
+              <option>Dark Secret</option>
+              <option>Fake Podcast Clip</option>
+            </select>
+          </label>
 
-      {/* CONTROLS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <select
-          value={format}
-          onChange={(e) => setFormat(e.target.value)}
-          className="np-select w-full"
-        >
-          <option>Reddit Confession</option>
-          <option>POV Immersive</option>
-          <option>Two Character Dialogue</option>
-          <option>Dark Secret</option>
-          <option>Fake Podcast Clip</option>
-        </select>
+          <label className="block space-y-1.5">
+            <span className="text-xs font-medium text-white/55">Ending</span>
+            <select
+              value={ending}
+              onChange={(e) => setEnding(e.target.value)}
+              className="np-select w-full"
+              aria-label="Story ending style"
+            >
+              <option value="CLIFFHANGER">Cliffhanger</option>
+              <option value="TWIST">Twist reveal</option>
+              <option value="FULL_CIRCLE">Full circle</option>
+              <option value="CALLBACK">Callback to hook</option>
+            </select>
+          </label>
 
-        <select
-          value={ending}
-          onChange={(e) => setEnding(e.target.value)}
-          className="np-select w-full"
-          aria-label="Story ending style"
-        >
-          <option value="CLIFFHANGER">Ending: Cliffhanger</option>
-          <option value="TWIST">Ending: Twist reveal</option>
-          <option value="FULL_CIRCLE">Ending: Full circle</option>
-          <option value="CALLBACK">Ending: Callback to hook</option>
-        </select>
-
-        <div className="md:col-span-2">
-          <input
-            type="range"
-            min="1"
-            max="10"
-            value={intensity}
-            onChange={(e) => setIntensity(Number(e.target.value))}
-            className="accent-purple-500 w-full"
-          />
-          <div className="flex justify-between text-xs mt-1">
-            <span>Intensity {intensity}/10</span>
-            <span className="text-purple-300">
-              {intensityLabel}
-            </span>
+          <div className="md:col-span-2">
+            <span className="text-xs font-medium text-white/55">Pacing ({intensityLabel})</span>
+            <input
+              type="range"
+              min="1"
+              max="10"
+              value={intensity}
+              onChange={(e) => setIntensity(Number(e.target.value))}
+              className="mt-2 w-full accent-purple-500"
+            />
+            <div className="mt-1 flex justify-between text-xs text-white/45">
+              <span>Calmer</span>
+              <span className="text-purple-300">{intensity}/10</span>
+              <span>Faster tension</span>
+            </div>
           </div>
         </div>
-      </div>
+      </ToolInputSection>
 
-      {/* CTA */}
-      <button
-        onClick={generate}
+      <ToolPrimaryCta
+        onClick={() => void generate()}
         disabled={!canGenerate}
-        className="w-full py-4 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 font-semibold disabled:opacity-50 hover:scale-[1.01] transition"
+        loading={loading}
+        loadingLabel="Writing your story script…"
+        helperText="Uses credits per run. Pro unlocks Story Maker if you’re on Starter or Free."
       >
-        {loading ? "Engineering Viral Script..." : "Generate Viral Script"}
-      </button>
-      {loading && (
+        Generate story script
+      </ToolPrimaryCta>
+      {loading ? (
         <button
           type="button"
           onClick={() => abortRef.current?.abort()}
-          className="mt-2 w-full rounded-full border border-white/15 bg-white/5 py-2 text-xs text-white/70 hover:bg-white/10"
+          className="w-full rounded-full border border-white/15 bg-white/5 py-2 text-xs text-white/70 hover:bg-white/10"
         >
-          Stop waiting (request may still finish server-side)
+          Cancel wait (generation may still finish on the server)
         </button>
-      )}
+      ) : null}
 
-      {error && (
-        <div className="mt-4 text-red-400 text-sm flex justify-between">
-          <span>
-            {error}
-            {lastFailureRequestId ? ` (Request ID: ${lastFailureRequestId})` : ""}
-          </span>
-          <button onClick={generate} className="underline">
-            Retry
-          </button>
-        </div>
-      )}
-      {contextualNudge && (
-        <div className="mt-4 rounded-xl border border-purple-500/30 bg-purple-500/10 px-4 py-3 text-sm text-purple-100">
-          {contextualNudge}
-          <a href="/pricing" className="ml-2 underline">See upgrade options</a>
-        </div>
-      )}
+      {loading ? (
+        <ToolLoadingPanel
+          steps={[
+            "Framing hook and emotional arc",
+            "Writing script, caption, and hashtags",
+            "Adding pacing notes you can shoot from",
+          ]}
+          activeStepIndex={loadingStep}
+        />
+      ) : null}
 
-      {/* RESULT */}
-      {result && (
+      {error ? (
+        <ToolErrorPanel
+          message={error}
+          onRetry={() => void generate()}
+          diagnostic={isAdmin ? lastFailureRequestId : null}
+        />
+      ) : null}
+
+      {contextualNudge ? <ToolUpgradeHint message={contextualNudge} cta="See plans" /> : null}
+
+      {result ? (
         <div ref={resultRef}>
           <StoryMakerResultPanel
             result={result}
+            improveActionsLimit={entitlement?.improveActionsLimit ?? 0}
+            improveUses={improveUses}
+            onImprove={applyStoryImprove}
           />
         </div>
-      )}
+      ) : null}
       <UpgradeModal
         open={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}

@@ -19,6 +19,10 @@ type PlanDefinition = {
   yearlyPriceGbp?: number
   trialDays?: number
   monthlyPriceGbp: number
+  scriptVariantCount: number
+  adVariantCount: number
+  clipVariantCount: number
+  improveActionsLimit: number
 }
 
 /** Display-only; server uses STRIPE_PRO_TRIAL_DAYS. 0 = no trial messaging. */
@@ -37,6 +41,10 @@ export const PLAN_CONFIG: Record<UiPlan, PlanDefinition> = {
     credits: 4,
     tools: ["video-script"],
     monthlyPriceGbp: 0,
+    scriptVariantCount: 2,
+    adVariantCount: 0,
+    clipVariantCount: 0,
+    improveActionsLimit: 1,
   },
   STARTER: {
     credits: 200,
@@ -45,6 +53,10 @@ export const PLAN_CONFIG: Record<UiPlan, PlanDefinition> = {
     yearlyPriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_STARTER_YEARLY,
     yearlyPriceGbp: 144,
     monthlyPriceGbp: 14.99,
+    scriptVariantCount: 3,
+    adVariantCount: 0,
+    clipVariantCount: 6,
+    improveActionsLimit: 2,
   },
   PRO: {
     credits: 1000,
@@ -54,6 +66,10 @@ export const PLAN_CONFIG: Record<UiPlan, PlanDefinition> = {
     yearlyPriceGbp: 288,
     trialDays: resolveClientProTrialDays(),
     monthlyPriceGbp: 29.99,
+    scriptVariantCount: 5,
+    adVariantCount: 0,
+    clipVariantCount: 10,
+    improveActionsLimit: 4,
   },
   ELITE: {
     credits: 5000,
@@ -62,6 +78,10 @@ export const PLAN_CONFIG: Record<UiPlan, PlanDefinition> = {
     yearlyPriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_ELITE_YEARLY,
     yearlyPriceGbp: 480,
     monthlyPriceGbp: 49.99,
+    scriptVariantCount: 7,
+    adVariantCount: 2,
+    clipVariantCount: 14,
+    improveActionsLimit: 6,
   },
 }
 
@@ -140,6 +160,16 @@ export function displayPlanForUser(
 
 export function getPlanCredits(plan?: string | null): number {
   return PLAN_CONFIG[normalizePlan(plan)].credits
+}
+
+export function getPlanOutputLimits(plan?: string | null) {
+  const row = PLAN_CONFIG[normalizePlan(plan)]
+  return {
+    scriptVariantCount: row.scriptVariantCount,
+    adVariantCount: row.adVariantCount,
+    clipVariantCount: row.clipVariantCount,
+    improveActionsLimit: row.improveActionsLimit,
+  }
 }
 
 export function getPlanMonthlyPriceGbp(plan?: string | null): number {

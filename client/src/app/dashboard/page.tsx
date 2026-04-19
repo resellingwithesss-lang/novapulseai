@@ -144,8 +144,8 @@ export default function DashboardPage() {
           <div>
             <h2 className="np-title-section">Your growth stack</h2>
             <p className="np-text-body mt-2 max-w-2xl text-sm">
-              Create high-performing ads and supporting assets without recording yourself. Elite unlocks
-              the AI Ad Generator — URL to finished spot, voiceover included.
+              Create high-performing ads without recording yourself. Elite unlocks the AI Ad Generator — URL to
+              finished spot, voiceover included.
             </p>
           </div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">

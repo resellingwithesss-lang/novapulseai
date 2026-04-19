@@ -1,8 +1,10 @@
 "use client"
 
+import Link from "next/link"
 import { useState } from "react"
 import ToolResultLayout from "@/components/tools/results/ToolResultLayout"
 import { buildToolHandoffUrl } from "@/lib/tool-handoff"
+import type { ImproveScriptMode } from "@/lib/local-script-improve"
 
 type StoryOutput = {
   title: string
@@ -22,14 +24,21 @@ type StoryOutput = {
 
 type StoryMakerResultPanelProps = {
   result: StoryOutput
+  improveActionsLimit?: number
+  improveUses?: number
+  onImprove?: (mode: ImproveScriptMode) => void
 }
 
 export default function StoryMakerResultPanel({
   result,
+  improveActionsLimit = 0,
+  improveUses = 0,
+  onImprove,
 }: StoryMakerResultPanelProps) {
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState<string | null>(null)
   const [showBreakdown, setShowBreakdown] = useState(false)
+  const improveRemaining = Math.max(0, improveActionsLimit - improveUses)
 
   const copyAll = async () => {
     try {
@@ -97,6 +106,44 @@ export default function StoryMakerResultPanel({
       <div className="mb-3 rounded-xl border border-purple-500/25 bg-purple-500/10 px-3 py-2 text-xs text-purple-100">
         Upgrade path: scale this story into multiple production-ready variants with Pro/Elite workflows.
       </div>
+      {onImprove && improveActionsLimit > 0 ? (
+        <div className="mb-4 space-y-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-white/60">
+            <span>
+              Improve passes left:{" "}
+              <span className="font-semibold text-white/85">{improveRemaining}</span>
+            </span>
+            {improveRemaining === 0 ? (
+              <Link
+                href="/dashboard/billing"
+                className="font-medium text-violet-200 underline-offset-2 hover:underline"
+              >
+                Unlock more on higher plans
+              </Link>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                { mode: "aggressive" as const, label: "More aggressive" },
+                { mode: "shorter" as const, label: "Shorten" },
+                { mode: "conversion" as const, label: "Rewrite for conversions" },
+              ] as const
+            ).map(({ mode, label }) => (
+              <button
+                key={mode}
+                type="button"
+                disabled={improveRemaining <= 0}
+                onClick={() => onImprove(mode)}
+                className="rounded-full border border-white/12 bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-white/80 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-white/40">Local refinements — no extra credit.</p>
+        </div>
+      ) : null}
       {copyError ? (
         <div className="mb-3 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-200/95">
           {copyError}

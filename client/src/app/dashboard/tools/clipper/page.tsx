@@ -223,6 +223,7 @@ export default function ClipperPage() {
 
   const searchParams = useSearchParams()
   const { entitlement } = useEntitlementSnapshot()
+  const clipVariantCap = entitlement?.clipVariantCount ?? 8
   const [sourceMode, setSourceMode] = useState<"upload" | "youtube">("upload")
   const [video, setVideo] = useState<File | null>(null)
   const [youtubeUrl, setYoutubeUrl] = useState("")
@@ -789,8 +790,9 @@ export default function ClipperPage() {
     <ToolPageShell
       toolId="clipper"
       title="Clipper Engine"
-      subtitle="Automation pipeline: ingest a long-form source, detect strong moments, trim to your target length, timestamp every export, and align captions — then hand off to the rest of NovaPulseAI."
-      guidance="Jobs run asynchronously on the server (no long browser hang). You will see live stages: ingest → analyze → trim → captions → finalize. Paste a public YouTube URL and NovaPulse downloads the source server-side for you, or upload a file directly (up to 512MB). Both paths feed the same pipeline — upload is offered as a fallback only if YouTube surfaces a real bot check or blocked format for your link."
+      outcome="A ranked shortlist of clips worth editing — trimmed, titled, and captioned from your long video."
+      subtitle="AI builds your clips — no filming required. One source, a highlighted best clip, then the rest ranked for you."
+      guidance="Runs in the background — you’ll see clear stages (ingest → analyze → trim → captions). If YouTube blocks cloud download, upload the file for the same pipeline."
       statusLabel={
         blockedMessage ||
         (loading ? `Processing… ${jobProgress > 0 ? `${jobProgress}%` : ""}` : "Ready")
@@ -911,6 +913,38 @@ export default function ClipperPage() {
           <p className="mt-2 text-xs text-white/45">
             Jobs run server-side. This panel controls packaging style only.
           </p>
+        </section>
+
+        <section className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-4">
+          <h3 className="text-sm font-semibold text-white/90">Run preset</h3>
+          <p className="mt-1 text-xs text-white/55">
+            Quick clips keeps things fast; Deep analysis asks for more moments (capped by your plan: up to{" "}
+            {clipVariantCap} clips).
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setClips(Math.min(4, clipVariantCap))
+                setClipLengthPreset("30")
+                setShowAdvanced(false)
+              }}
+              className="rounded-lg border border-white/15 bg-purple-500/15 px-4 py-2 text-xs font-semibold text-white/90 hover:bg-purple-500/25"
+            >
+              Quick clips
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setClips(Math.min(10, clipVariantCap))
+                setClipLengthPreset("45")
+                setShowAdvanced(false)
+              }}
+              className="rounded-lg border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold text-white/80 hover:bg-white/10"
+            >
+              Deep analysis
+            </button>
+          </div>
         </section>
 
         {packAngleHint && (
