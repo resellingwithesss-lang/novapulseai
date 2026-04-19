@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { api, ApiError } from "@/lib/api"
 import { normalizePlan } from "@/lib/plans"
+import { isAdminOrAboveRole, roleDisplayName } from "@/lib/roles"
 
 type AdminUserRow = {
   id: string
@@ -195,9 +196,9 @@ export default function AdminUsersPage() {
                     Banned
                   </span>
                 ) : null}
-                {u.role !== "USER" ? (
+                {isAdminOrAboveRole(u.role) ? (
                   <span className="ml-2 rounded-full border border-amber-400/35 bg-amber-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-200">
-                    {u.role}
+                    {roleDisplayName(u.role)}
                   </span>
                 ) : null}
               </div>
