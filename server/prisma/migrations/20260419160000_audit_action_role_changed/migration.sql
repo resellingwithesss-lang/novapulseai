@@ -1,0 +1,24 @@
+-- ============================================================================
+-- PHASE A.1 · ADDITIVE SCHEMA: add ROLE_CHANGED to AuditAction
+-- ----------------------------------------------------------------------------
+-- This completes the additive-only schema block of the role/access redesign.
+-- It belongs with Phase A logically (it does not mutate any row, only extends
+-- an enum), but it cannot live in the same file as the Phase B data migration
+-- because Postgres forbids USING a freshly-added enum value inside the same
+-- transaction where it was added.
+--
+-- Deploy ordering:
+--   1. Phase A       - 20260419150000_role_owner_creator_and_plan_grants
+--   2. Phase A.1     - THIS FILE
+--   3. Phase C-lite  - CODE deploy (no migration): every role check, staff-
+--                      floor, impersonation guard, and admin UI learns
+--                      OWNER and renders CREATOR safely.
+--   4. Phase B       - 20260419160100_role_phase_b_data_migration
+--                      (must NOT be applied before Phase C-lite is live).
+--
+-- `ROLE_CHANGED` is intentionally generic: it serves the Phase B data
+-- migration AND future admin-triggered role changes (Phase D's admin UI).
+-- Disambiguation is carried in `AuditLog.metadata.source`.
+-- ============================================================================
+
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'ROLE_CHANGED';
