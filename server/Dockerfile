@@ -102,12 +102,9 @@ ENV YT_DLP_JS_RUNTIMES=deno:/usr/local/bin/deno,node:/usr/local/bin/node
 # fluent-ffmpeg + spawn() sites agree on a single path across the server.
 ENV FFMPEG_PATH=/usr/bin/ffmpeg
 ENV FFPROBE_PATH=/usr/bin/ffprobe
-# ---------------------------------------------------------------------------
-# YouTube operator cookies are intentionally NOT baked into this image.
-# Provide them at runtime via a Railway Volume or Secret File mount and set
-# `YT_DLP_COOKIES` to the absolute path of the mounted file. See
-# `docs/YOUTUBE_CLIPPER_OPERATORS.md` for the operator runbook.
-# ---------------------------------------------------------------------------
+# Optional: mount operator secrets at runtime and set YT_DLP_COOKIES to the
+# file path (see docs/YOUTUBE_CLIPPER_OPERATORS.md). Nothing secret is copied
+# into this image at build time.
 
 COPY --from=build /app /app
 
