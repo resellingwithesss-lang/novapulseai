@@ -8,6 +8,14 @@ import { normalizeToolOperation } from "@/lib/tool-operation"
 import { useAuth } from "@/context/AuthContext"
 import { displayPlanForUser } from "@/lib/plans"
 import ToolPageShell from "@/components/tools/ToolPageShell"
+import {
+  ToolErrorPanel,
+  ToolInputSection,
+  ToolLoadingPanel,
+  ToolPrimaryCta,
+  ToolUpgradeHint,
+} from "@/components/tools/ToolWorkspace"
+import { tools } from "@/config/tools"
 import CreatorWorkflowSelectors from "@/components/workflow/CreatorWorkflowSelectors"
 import UpgradeModal from "@/components/growth/UpgradeModal"
 import { incrementToolUsage, pushOutputHistory, recordEmailReadyEvent } from "@/lib/growth"
@@ -15,6 +23,10 @@ import {
   formatBlockedReason,
   useEntitlementSnapshot,
 } from "@/hooks/useEntitlementSnapshot"
+import {
+  improveVideoScript,
+  type ImproveScriptMode,
+} from "@/lib/local-script-improve"
 
 /* =====================================================
 TYPES
@@ -61,7 +73,7 @@ MAIN PAGE
 
 export default function VideoScriptPage() {
   const searchParams = useSearchParams()
-  const { user, refreshUser } = useAuth()
+  const { user, refreshUser, isAdmin } = useAuth()
   const { entitlement } = useEntitlementSnapshot()
 
   const [mode, setMode] = useState<"video" | "story">("video")
@@ -93,6 +105,22 @@ export default function VideoScriptPage() {
   const [sourceType, setSourceType] = useState<
     "" | "CONTENT_PACK" | "GENERATION" | "MANUAL"
   >("")
+  const [improveUses, setImproveUses] = useState(0)
+
+  const videoToolMeta = tools.find((t) => t.id === "video-script")
+
+  const [loadingStep, setLoadingStep] = useState(0)
+  useEffect(() => {
+    if (!loading) {
+      setLoadingStep(0)
+      return
+    }
+    setLoadingStep(0)
+    const id = window.setInterval(() => {
+      setLoadingStep((s) => Math.min(2, s + 1))
+    }, 2800)
+    return () => window.clearInterval(id)
+  }, [loading])
 
   useEffect(() => {
     const handoffTopic = searchParams.get("topic")
@@ -168,6 +196,7 @@ export default function VideoScriptPage() {
     setLoading(true)
     setError(null)
     setResult(null)
+    setImproveUses(0)
 
     try {
 
@@ -308,6 +337,24 @@ ${r.hashtags.join(" ")}
 
   }, [result])
 
+  const applyScriptImprove = useCallback(
+    (index: number, mode: ImproveScriptMode) => {
+      if (!result) return
+      const cap = entitlement?.improveActionsLimit ?? 0
+      if (cap <= 0 || improveUses >= cap) return
+      setResult((prev) => {
+        if (!prev) return prev
+        const next = [...prev]
+        const cur = next[index]
+        if (!cur) return prev
+        next[index] = improveVideoScript(cur, mode)
+        return next
+      })
+      setImproveUses((u) => u + 1)
+    },
+    [result, entitlement?.improveActionsLimit, improveUses]
+  )
+
   /* =====================================================
   UI
   ===================================================== */
@@ -316,21 +363,25 @@ ${r.hashtags.join(" ")}
     <ToolPageShell
       toolId="video-script"
       title="Video Script Engine"
-      subtitle="Generate retention-focused scripts you can post directly or hand off into your next production step."
-      guidance="Use a concrete topic. Strong topic quality improves hooks, pacing, and CTA quality."
+      outcome={videoToolMeta?.outcome}
+      subtitle="AI builds your ads — no filming required. You get hooks, body, captions, and a top pick ranked for retention."
+      guidance="One clear topic beats a vague niche. The sharper the input, the stronger the hooks and CTA."
       statusLabel={entitlementBlockedMessage ? entitlementBlockedMessage : "Generation available"}
       statusTone={entitlementBlockedMessage ? "warning" : "success"}
       ctaHref="/dashboard/tools/clipper"
       ctaLabel="Open Clipper Engine"
     >
-      <div className="max-w-6xl mx-auto pb-24">
+      <div className="mx-auto max-w-6xl space-y-6 pb-24">
 
       <ModeSwitch
         mode={mode}
         setMode={setMode}
       />
 
-      <div className="mb-6">
+      <ToolInputSection
+        title="Brief"
+        description="Optional: tie this run to a workspace and brand voice. Defaults work great for quick tests."
+      >
         <CreatorWorkflowSelectors
           workspaceId={workspaceId}
           brandVoiceId={brandVoiceId}
@@ -338,93 +389,109 @@ ${r.hashtags.join(" ")}
           onBrandVoiceChange={setBrandVoiceId}
           disabled={loading}
         />
-      </div>
+      </ToolInputSection>
 
       {(sourceContentPackId || sourceType) && (
         <p
           data-testid="npai-lineage-hint"
-          className="mb-4 rounded-xl border border-violet-500/25 bg-violet-500/10 px-4 py-2 text-xs text-violet-100/95"
+          className="rounded-xl border border-violet-500/25 bg-violet-500/10 px-4 py-2 text-xs text-violet-100/95"
         >
-          <span className="font-medium text-violet-200">Lineage</span>
-          {sourceType ? ` · ${sourceType}` : ""}
-          {sourceContentPackId ? ` · pack ${sourceContentPackId}` : ""}
-          {workspaceId ? ` · workspace ${workspaceId}` : ""}
-          {brandVoiceId ? ` · brand voice ${brandVoiceId}` : ""}
+          <span className="font-medium text-violet-200">Using library context</span>
+          {sourceType ? ` · ${sourceType.replace(/_/g, " ").toLowerCase()}` : ""}
+          {isAdmin && sourceContentPackId ? ` · pack ${sourceContentPackId}` : ""}
+          {isAdmin && workspaceId ? ` · workspace ${workspaceId}` : ""}
+          {isAdmin && brandVoiceId ? ` · voice ${brandVoiceId}` : ""}
         </p>
       )}
 
-      <textarea
-        value={topic}
-        maxLength={500}
-        onChange={(e) => setTopic(e.target.value)}
-        placeholder="Enter your viral topic..."
-        className="w-full p-4 rounded-xl bg-white/5 border border-white/10 mb-2"
-      />
-
-      <div className="text-xs text-right text-white/40 mb-6">
-        {topic.length}/500 characters
-      </div>
-
-      <SettingsGrid
-        tone={tone}
-        setTone={setTone}
-        platform={platform}
-        setPlatform={setPlatform}
-        audience={audience}
-        setAudience={setAudience}
-        experience={experience}
-        setExperience={setExperience}
-        goal={goal}
-        setGoal={setGoal}
-        psychology={psychology}
-        setPsychology={setPsychology}
-      />
-
-      <Slider
-        label="Scroll Stop Intensity"
-        value={intensity}
-        onChange={setIntensity}
-      />
-
-      <Slider
-        label="Controversy Level"
-        value={controversy}
-        onChange={setControversy}
-      />
-
-      <button
-        onClick={generate}
-        disabled={!canGenerate || loading}
-        className="w-full mt-8 py-4 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 disabled:opacity-50"
+      <ToolInputSection
+        title="What’s the video about?"
+        description="Describe the idea, product, or story in plain language — as if you were briefing an editor."
       >
-        {loading ? "Generating..." : "Generate Script (-1 Credit)"}
-      </button>
+        <textarea
+          value={topic}
+          maxLength={500}
+          onChange={(e) => setTopic(e.target.value)}
+          placeholder="e.g. Why our skincare routine cut morning prep to 4 minutes…"
+          className="mb-2 w-full rounded-xl border border-white/10 bg-white/5 p-4 text-sm outline-none ring-purple-400/0 transition focus:border-purple-400/35 focus:ring-2 focus:ring-purple-400/25"
+        />
+        <div className="text-right text-xs text-white/40">{topic.length}/500</div>
+      </ToolInputSection>
 
-      {error && (
-        <p className="text-red-400 mt-4">
-          {error}
-          {lastFailureRequestId ? ` (Request ID: ${lastFailureRequestId})` : ""}
-        </p>
-      )}
-      {contextualNudge && (
-        <div className="mt-4 rounded-xl border border-purple-500/30 bg-purple-500/10 px-4 py-3 text-sm text-purple-100">
-          {contextualNudge}
-          <a href="/pricing" className="ml-2 underline">Compare plans</a>
+      <details className="np-card group open:border-purple-500/20 open:bg-white/[0.02] p-5 md:p-6">
+        <summary className="cursor-pointer list-none text-sm font-semibold text-white/88 [&::-webkit-details-marker]:hidden">
+          <span className="group-open:text-purple-200">Fine-tune style</span>
+          <span className="ml-2 text-xs font-normal text-white/45">(optional — defaults are tuned for most creators)</span>
+        </summary>
+        <div className="mt-5">
+          <SettingsGrid
+            tone={tone}
+            setTone={setTone}
+            platform={platform}
+            setPlatform={setPlatform}
+            audience={audience}
+            setAudience={setAudience}
+            experience={experience}
+            setExperience={setExperience}
+            goal={goal}
+            setGoal={setGoal}
+            psychology={psychology}
+            setPsychology={setPsychology}
+          />
+          <Slider label="Scroll-stopping energy" value={intensity} onChange={setIntensity} />
+          <Slider label="Edge / tension" value={controversy} onChange={setControversy} />
         </div>
-      )}
+      </details>
 
-      {requestId && (
-        <div className="mt-4 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/50">
-          Request ID: {requestId} | Runtime: {duration}ms
+      <ToolPrimaryCta
+        onClick={() => void generate()}
+        disabled={!canGenerate}
+        loading={loading}
+        loadingLabel="Generating your script pack…"
+        helperText="Uses 1 credit per run. Higher plans include more credits and tools."
+      >
+        Generate script pack
+      </ToolPrimaryCta>
+
+      {loading ? (
+        <ToolLoadingPanel
+          steps={[
+            "Shaping hooks for your topic and platform",
+            "Writing script, caption, hashtags, and CTA",
+            "Polishing variations you can post or iterate",
+          ]}
+          activeStepIndex={loadingStep}
+        />
+      ) : null}
+
+      {error ? (
+        <ToolErrorPanel
+          message={error}
+          onRetry={() => void generate()}
+          diagnostic={isAdmin ? lastFailureRequestId ?? requestId ?? null : null}
+        />
+      ) : null}
+
+      {contextualNudge ? (
+        <ToolUpgradeHint message={contextualNudge} />
+      ) : null}
+
+      {isAdmin && requestId && !loading ? (
+        <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-[11px] text-white/45">
+          Request {requestId}
+          {typeof duration === "number" ? ` · ${duration}ms` : ""}
         </div>
-      )}
+      ) : null}
 
-      {result && (
+      {result ? (
         <VideoScriptResults
           result={result}
           onCopyAll={copyAll}
+          improveActionsLimit={entitlement?.improveActionsLimit ?? 0}
+          improveUses={improveUses}
+          onImprove={applyScriptImprove}
         />
-      )}
+      ) : null}
 
       </div>
       <UpgradeModal

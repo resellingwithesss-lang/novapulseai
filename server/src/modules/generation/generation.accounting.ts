@@ -12,6 +12,7 @@ export type GenerationUserSnapshot = {
   subscriptionStatus: string
   trialExpiresAt: Date | null
   stripeSubscriptionId: string | null
+  role: string
 }
 
 export class GenerationAccountingError extends Error {
@@ -65,6 +66,7 @@ export async function loadGenerationUserSnapshot(
       subscriptionStatus: true,
       trialExpiresAt: true,
       stripeSubscriptionId: true,
+      role: true,
     },
   })
 
@@ -78,6 +80,7 @@ export async function loadGenerationUserSnapshot(
     subscriptionStatus: user.subscriptionStatus,
     trialExpiresAt: user.trialExpiresAt,
     stripeSubscriptionId: user.stripeSubscriptionId,
+    role: user.role,
   }
 }
 
@@ -86,7 +89,7 @@ export function evaluateGenerationEligibility(
   now: Date,
   generationCost: number
 ):
-  | { allowed: true; isUnlimited: boolean }
+  | { allowed: true; isUnlimited: boolean; scriptVariantCount: number }
   | { allowed: false; status: number; message: string } {
   const entitlement = buildEntitlementSnapshot(
     {
@@ -96,6 +99,7 @@ export function evaluateGenerationEligibility(
       stripeSubscriptionId: user.stripeSubscriptionId,
       banned: user.banned,
       credits: user.credits,
+      role: user.role,
     },
     {
       now,
@@ -135,7 +139,11 @@ export function evaluateGenerationEligibility(
     }
   }
 
-  return { allowed: true, isUnlimited: entitlement.isUnlimited }
+  return {
+    allowed: true,
+    isUnlimited: entitlement.isUnlimited,
+    scriptVariantCount: entitlement.scriptVariantCount,
+  }
 }
 
 export async function loadLastGenerationTimestamp(

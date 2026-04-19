@@ -5,7 +5,7 @@ import {
   buildEntitlementSnapshot,
   evaluateBillingAccess,
 } from "../../modules/billing/billing.access"
-import { getWorkflowLimits } from "../../modules/plans/plan.constants"
+import { getPlanOutputLimits, getWorkflowLimits } from "../../modules/plans/plan.constants"
 
 test("invalid plan values normalize to FREE and do not grant paid tools", () => {
   const snapshot = buildEntitlementSnapshot({
@@ -38,6 +38,11 @@ test("FREE users can use script generation without a paid subscription", () => {
   assert.equal(snapshot.workflowLimits.maxWorkspaces, wf.workspaces)
   assert.equal(snapshot.workflowLimits.maxBrandVoices, wf.brandVoices)
   assert.equal(snapshot.workflowLimits.maxContentPacks, wf.contentPacks)
+  const limits = getPlanOutputLimits("FREE")
+  assert.equal(snapshot.scriptVariantCount, limits.scriptVariantCount)
+  assert.equal(snapshot.adVariantCount, limits.adVariantCount)
+  assert.equal(snapshot.clipVariantCount, limits.clipVariantCount)
+  assert.equal(snapshot.improveActionsLimit, limits.improveActionsLimit)
 })
 
 test("invalid subscription status does not unlock paid access", () => {

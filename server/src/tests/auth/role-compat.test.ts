@@ -160,6 +160,8 @@ test("buildEntitlementSnapshot grants admin feature for OWNER and floors plan to
   assert.equal(snap.featureAccess.admin.blockedReason, null)
   assert.equal(snap.normalizedPlan, "ELITE")
   assert.equal(snap.isPaid, true)
+  assert.equal(snap.scriptVariantCount, 7)
+  assert.equal(snap.adVariantCount, 2)
 })
 
 test("buildEntitlementSnapshot grants admin feature for legacy SUPER_ADMIN", () => {
@@ -173,6 +175,7 @@ test("buildEntitlementSnapshot grants admin feature for legacy SUPER_ADMIN", () 
   })
   assert.equal(snap.featureAccess.admin.allowed, true)
   assert.equal(snap.normalizedPlan, "ELITE")
+  assert.equal(snap.adVariantCount, 2)
 })
 
 test("buildEntitlementSnapshot denies admin feature for USER and CREATOR", () => {

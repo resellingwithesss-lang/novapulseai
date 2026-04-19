@@ -421,7 +421,7 @@ export default function PricingPage() {
           </h1>
 
           <p className="np-text-body mx-auto mt-4 max-w-2xl sm:mt-5 sm:text-lg">
-            Start free, graduate to Starter for automation,{" "}
+            More variants → better performance → higher ROI. Start free, graduate to Starter for automation,{" "}
             <span className="text-white/72">choose Pro when you need scripts + Story Maker</span>,{" "}
             or Elite when Ad Studio and full creative volume are core to how you grow.
           </p>

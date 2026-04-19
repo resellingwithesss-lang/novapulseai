@@ -12,6 +12,16 @@ type PlanDefinition = {
   /** Stripe price id — FREE has none */
   priceId?: string
   yearlyPriceId?: string
+  /**
+   * Output / UX limits (server + client). Do not replace credit debiting — these
+   * only cap how many artifacts we return or how many “improve” actions we expose.
+   */
+  scriptVariantCount: number
+  /** Elite ads: maps to renderTopVariants (max 2 in pipeline). */
+  adVariantCount: number
+  /** Clip jobs: max requested clips per run (clamped server-side). */
+  clipVariantCount: number
+  improveActionsLimit: number
 }
 
 /**
@@ -32,24 +42,40 @@ export const PLAN_CONFIG: Record<PlanTier, PlanDefinition> = {
   FREE: {
     credits: 4,
     tools: ["video-script"],
+    scriptVariantCount: 2,
+    adVariantCount: 0,
+    clipVariantCount: 0,
+    improveActionsLimit: 1,
   },
   STARTER: {
     credits: 200,
     tools: ["clipper", "prompt"],
     priceId: process.env.STRIPE_PRICE_STARTER_MONTHLY ?? "STRIPE_STARTER_ID",
     yearlyPriceId: process.env.STRIPE_PRICE_STARTER_YEARLY,
+    scriptVariantCount: 3,
+    adVariantCount: 0,
+    clipVariantCount: 6,
+    improveActionsLimit: 2,
   },
   PRO: {
     credits: 1000,
     tools: ["clipper", "prompt", "story-maker", "video-script"],
     priceId: process.env.STRIPE_PRICE_PRO_MONTHLY ?? "STRIPE_PRO_ID",
     yearlyPriceId: process.env.STRIPE_PRICE_PRO_YEARLY,
+    scriptVariantCount: 5,
+    adVariantCount: 0,
+    clipVariantCount: 10,
+    improveActionsLimit: 4,
   },
   ELITE: {
     credits: 5000,
     tools: "ALL",
     priceId: process.env.STRIPE_PRICE_ELITE_MONTHLY ?? "STRIPE_ELITE_ID",
     yearlyPriceId: process.env.STRIPE_PRICE_ELITE_YEARLY,
+    scriptVariantCount: 7,
+    adVariantCount: 2,
+    clipVariantCount: 14,
+    improveActionsLimit: 6,
   },
 }
 
@@ -107,6 +133,23 @@ export function isFreePlanTier(plan?: string | null): boolean {
 
 export function getPlanCredits(plan?: string | null): number {
   return PLAN_CONFIG[normalizePlanTier(plan)].credits
+}
+
+/** Numeric output limits for tools + improve actions (plan ladder). */
+export function getPlanOutputLimits(plan?: string | null): {
+  scriptVariantCount: number
+  adVariantCount: number
+  clipVariantCount: number
+  improveActionsLimit: number
+} {
+  const tier = normalizePlanTier(plan)
+  const row = PLAN_CONFIG[tier]
+  return {
+    scriptVariantCount: row.scriptVariantCount,
+    adVariantCount: row.adVariantCount,
+    clipVariantCount: row.clipVariantCount,
+    improveActionsLimit: row.improveActionsLimit,
+  }
 }
 
 export function planRank(plan?: string | null): number {

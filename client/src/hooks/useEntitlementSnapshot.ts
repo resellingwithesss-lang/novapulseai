@@ -38,6 +38,10 @@ export type EntitlementSnapshot = {
     maxBrandVoices: number
     maxContentPacks: number
   }
+  scriptVariantCount: number
+  adVariantCount: number
+  clipVariantCount: number
+  improveActionsLimit: number
   featureAccess: {
     generation: FeatureAccessDecision
     prompt: FeatureAccessDecision

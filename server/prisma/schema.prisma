@@ -123,6 +123,7 @@ enum LifecycleTrigger {
   INACTIVE_USER_REACTIVATION
   ELITE_FEATURE_PROMOTION
   REFERRAL_PUSH
+  LOW_CREDITS_NUDGE
 }
 
 enum ReferralCommissionStatus {

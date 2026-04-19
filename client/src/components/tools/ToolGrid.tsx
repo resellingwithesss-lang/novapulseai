@@ -233,12 +233,8 @@ export default function ToolGrid() {
 
               {/* Text Content */}
               <h3 className="text-xl font-semibold text-white">{tool.title}</h3>
-              <p className="text-sm text-white/60 mt-3 leading-relaxed">
-                {tool.description}
-              </p>
-              <p className="mt-3 text-xs text-white/45">
-                Outcome: {tool.outcome}
-              </p>
+              <p className="mt-2 text-sm font-medium leading-snug text-white/78">{tool.outcome}</p>
+              <p className="mt-3 text-sm text-white/55 leading-relaxed">{tool.description}</p>
 
               {/* Launch Action */}
               {!locked && (

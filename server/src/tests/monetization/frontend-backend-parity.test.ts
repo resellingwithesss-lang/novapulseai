@@ -9,8 +9,10 @@ import {
 import {
   PLAN_CONFIG as CLIENT_PLAN_CONFIG,
   WORKFLOW_LIMITS as CLIENT_WORKFLOW_LIMITS,
+  getPlanOutputLimits as clientGetPlanOutputLimits,
   planAllowsTool as frontendPlanAllowsTool,
 } from "../../../../client/src/lib/plans"
+import { getPlanOutputLimits as serverGetPlanOutputLimits } from "../../modules/plans/plan.constants"
 
 const ALL_TOOLS = [
   "clipper",
@@ -46,6 +48,16 @@ test("frontend and backend agree on workflow caps", () => {
       CLIENT_WORKFLOW_LIMITS[plan],
       SERVER_WORKFLOW_LIMITS[plan],
       `${plan} workflow limits mismatch`
+    )
+  }
+})
+
+test("frontend and backend agree on plan output limits (variants + improve cap)", () => {
+  for (const plan of ALL_PLANS) {
+    assert.deepEqual(
+      clientGetPlanOutputLimits(plan),
+      serverGetPlanOutputLimits(plan),
+      `${plan} output limits mismatch`
     )
   }
 })

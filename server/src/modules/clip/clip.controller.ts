@@ -9,7 +9,10 @@ import type {
 } from "./types/clip.types"
 import type { AuthRequest } from "../auth/auth.middleware"
 import { prisma } from "../../lib/prisma"
-import { evaluateBillingAccess } from "../billing/billing.access"
+import {
+  buildEntitlementSnapshot,
+  evaluateBillingAccess,
+} from "../billing/billing.access"
 import { resolveRequestId, toolFail, toolOk } from "../../lib/tool-response"
 import { logToolEvent } from "../../lib/tool-logger"
 import type { ClipJobRecord } from "./clip.job.types"
@@ -135,6 +138,8 @@ export const createClipJob = async (req: MulterRequest, res: Response) => {
         trialExpiresAt: true,
         stripeSubscriptionId: true,
         banned: true,
+        credits: true,
+        role: true,
       },
     })
 
@@ -155,6 +160,16 @@ export const createClipJob = async (req: MulterRequest, res: Response) => {
       })
     }
 
+    const entitlement = buildEntitlementSnapshot({
+      plan: billingUser.plan,
+      subscriptionStatus: billingUser.subscriptionStatus,
+      trialExpiresAt: billingUser.trialExpiresAt,
+      stripeSubscriptionId: billingUser.stripeSubscriptionId,
+      banned: billingUser.banned,
+      credits: billingUser.credits,
+      role: billingUser.role,
+    })
+
     const parsed = clipRequestSchema.safeParse(req.body)
     if (!parsed.success) {
       return toolFail(res, 400, "Invalid clip request payload", {
@@ -168,7 +183,7 @@ export const createClipJob = async (req: MulterRequest, res: Response) => {
 
     const {
       youtubeUrl,
-      clips,
+      clips: requestedClips,
       platform,
       subtitleStyle,
       clipLengthPreset,
@@ -176,6 +191,11 @@ export const createClipJob = async (req: MulterRequest, res: Response) => {
       captionsEnabled,
       captionMode,
     } = parsed.data
+
+    const clips = Math.max(
+      1,
+      Math.min(requestedClips, entitlement.clipVariantCount || 20)
+    )
 
     const targetClipDurationSec = resolveTargetClipDurationSec(
       clipLengthPreset,

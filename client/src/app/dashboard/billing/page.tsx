@@ -17,6 +17,8 @@ import type { BillingInvoiceRow, BillingSubscription } from "@/components/billin
 import DashboardShell from "@/components/dashboard/DashboardShell"
 import { useAuth } from "@/context/AuthContext"
 import { formatBlockedReason, useEntitlementSnapshot } from "@/hooks/useEntitlementSnapshot"
+import { useGrowthSurface } from "@/hooks/useGrowthSurface"
+import Link from "next/link"
 import { api, ApiError } from "@/lib/api"
 import { formatBillingCheckoutError } from "@/lib/billing-user-messages"
 import {
@@ -33,6 +35,7 @@ export default function BillingPage() {
   const searchParams = useSearchParams()
   const { user, refreshUser } = useAuth()
   const { entitlement, refresh: refreshEntitlement } = useEntitlementSnapshot()
+  const { banner: growthBanner, loading: growthLoading } = useGrowthSurface()
   const [subscription, setSubscription] = useState<BillingSubscription | null>(null)
   const [invoices, setInvoices] = useState<BillingInvoiceRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -314,6 +317,20 @@ export default function BillingPage() {
           hasStripeCustomer={hasStripeCustomer}
           onOpenPortal={() => void openPortal()}
         />
+
+        {!growthLoading && growthBanner ? (
+          <div className="rounded-2xl border border-purple-500/25 bg-gradient-to-r from-purple-600/[0.18] to-pink-600/[0.12] px-5 py-4 text-sm text-white/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="max-w-2xl leading-relaxed">{growthBanner.message}</p>
+              <Link
+                href={growthBanner.href}
+                className="shrink-0 rounded-full bg-white/15 px-4 py-2 text-xs font-semibold text-white ring-1 ring-white/20 transition hover:bg-white/25"
+              >
+                {growthBanner.cta}
+              </Link>
+            </div>
+          </div>
+        ) : null}
 
         <header className="border-b border-white/[0.07] pb-8">
           <h1 className="text-2xl font-semibold tracking-[-0.02em] text-white md:text-3xl md:leading-tight">

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { buildToolHandoffUrl } from "@/lib/tool-handoff"
 import ToolResultLayout from "@/components/tools/results/ToolResultLayout"
 import {
@@ -116,7 +116,11 @@ export default function ClipperResultsPanel({
 }: ClipperResultsPanelProps) {
   const [downloadError, setDownloadError] = useState<string | null>(null)
 
-  const topClip = results[0]
+  const orderedResults = useMemo(
+    () => [...results].sort((a, b) => b.score - a.score),
+    [results]
+  )
+  const topClip = orderedResults[0]
   const topClipFetchUrl = topClip ? toAbsoluteMediaUrl(topClip.publicPath) : null
   const topClipOpenUrl = topClip ? toDirectApiMediaUrl(topClip.publicPath) : null
   const topClipFilename = topClip ? filenameFromPublicPath(topClip.publicPath) : "clip.mp4"
@@ -149,20 +153,20 @@ export default function ClipperResultsPanel({
   return (
     <ToolResultLayout
       title="Clip job output"
-      state={results.length > 0 ? "success" : "empty"}
-      statusLabel={results.length > 0 ? `${results.length} clips` : "No clips"}
-      summary="Vertical 9:16 renders with source timecodes. Captions are labeled by source (transcript vs speech-to-text)."
+      state={orderedResults.length > 0 ? "success" : "empty"}
+      statusLabel={orderedResults.length > 0 ? `${orderedResults.length} clips` : "No clips"}
+      summary="Best clip highlighted by score; the rest follow. Vertical 9:16 with source timecodes and caption source labels."
       emptyMessage="No clips were generated. Try a longer source, fewer clips, or a shorter target length."
       keyOutputs={[
         {
           label: "Top score",
-          value: results.length > 0 ? `${Math.round(results[0].score)}/100` : "—",
+          value: orderedResults.length > 0 ? `${Math.round(orderedResults[0].score)}/100` : "—",
         },
         {
           label: "Delivered",
           value: jobSummary
             ? `${jobSummary.generatedClips}/${jobSummary.requestedClips}`
-            : `${results.length}`,
+            : `${orderedResults.length}`,
         },
         {
           label: "Target length",
@@ -243,7 +247,7 @@ export default function ClipperResultsPanel({
       )}
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        {results.map((clip, i) => {
+        {orderedResults.map((clip, i) => {
           const url = toAbsoluteMediaUrl(clip.publicPath)
           const openUrl = toDirectApiMediaUrl(clip.publicPath)
           const srtUrl = clip.subtitlePublicPath
@@ -272,15 +276,25 @@ export default function ClipperResultsPanel({
             sourceType: contextId ? "GENERATION" : undefined,
           })
 
+          const isBest = i === 0
           return (
             <div
               key={`${clip.publicPath}-${i}`}
-              className="rounded-xl bg-[#111827] p-4 ring-1 ring-white/10"
+              className={`rounded-xl bg-[#111827] p-4 ring-1 ${
+                isBest ? "ring-emerald-400/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]" : "ring-white/10"
+              }`}
             >
               <div className="mb-3 flex items-start justify-between gap-2">
                 <div>
-                  <div className="text-sm font-semibold text-white">
-                    {clip.title || `Clip ${clip.index + 1}`}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="text-sm font-semibold text-white">
+                      {clip.title || `Clip ${clip.index + 1}`}
+                    </div>
+                    {isBest ? (
+                      <span className="rounded-full border border-emerald-400/40 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-200">
+                        Best clip
+                      </span>
+                    ) : null}
                   </div>
                   {clip.summary && (
                     <div className="mt-1 text-xs text-white/50">{clip.summary}</div>

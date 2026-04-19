@@ -213,7 +213,11 @@ router.post("/", requireAuth, async (req: AuthRequest, res: Response) => {
         code: "FORBIDDEN",
       });
     }
-    const { isUnlimited } = eligibility;
+    const { isUnlimited, scriptVariantCount } = eligibility;
+    const maxScripts = Math.max(
+      1,
+      Math.min(GENERATION_MAX_SCRIPTS, scriptVariantCount)
+    );
 
     /* ================= COOLDOWN ================= */
 
@@ -306,7 +310,7 @@ Each script must feel meaningfully different (angle A/B/C: contrarian vs tutoria
 `.trim()
 
     const userPrompt = `
-Generate 7 distinct high-retention ${type} scripts. We will keep the best ${GENERATION_MAX_SCRIPTS} downstream — maximize variety and quality.
+Generate 7 distinct high-retention ${type} scripts. We will keep the best ${maxScripts} downstream — maximize variety and quality.
 
 Topic / brief: "${cleanInput}"
 Tone: ${tone}
@@ -422,10 +426,7 @@ JSON shape:
 
     /* ================= VALIDATION ================= */
 
-    const finalScripts = selectFinalScripts(
-      scripts,
-      GENERATION_MAX_SCRIPTS
-    );
+    const finalScripts = selectFinalScripts(scripts, maxScripts);
 
     if (!finalScripts.length) {
       logToolEvent("warn", {

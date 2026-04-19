@@ -23,6 +23,7 @@ import { escapeHtml, marketingBroadcastWrapper } from "./email-templates"
 
 export type MarketingTemplateId =
   | "credit_exhaustion_upgrade_v1"
+  | "low_credits_nudge_v1"
   | "trial_ending_reminder_v1"
   | "inactive_user_reactivation_v1"
   | "elite_feature_promotion_v1"
@@ -92,6 +93,53 @@ function app(): string {
    TEMPLATE: credit_exhaustion_upgrade_v1
    Context: credits = 0 on a free/starter plan
 ============================================================ */
+
+/* ============================================================
+   TEMPLATE: low_credits_nudge_v1
+   Context: credits low but > 0 (does not overlap exhaustion at 0)
+============================================================ */
+
+const lowCreditsNudge: MarketingTemplate = {
+  id: "low_credits_nudge_v1",
+  name: "Low credits — refill before you stall",
+  category: "upgrade",
+  lifecycle: true,
+  previewText: () =>
+    "You still have credits — use them wisely, or refill before the well runs dry.",
+  subject: (v) =>
+    `${firstName(v.displayName)}, you’re running light on credits`,
+  innerHtml: (v) => {
+    const name = escapeHtml(firstName(v.displayName))
+    const credits = typeof v.credits === "number" ? v.credits : 0
+    return `
+      <p style="${EYEBROW_STYLE}">Creator growth club</p>
+      <p style="${HEADLINE_STYLE}">${name}, your credit balance is getting thin.</p>
+      <p style="${BODY_STYLE}">
+        You’re not at zero yet — this is the window to refill or upgrade before
+        a high‑value run stalls mid‑week. Keep momentum on scripts, clips, and
+        launches without scrambling at the last minute.
+      </p>
+      <ul style="margin:0 0 20px 0;padding-left:18px;color:#cbd5e1;font-size:14px;line-height:1.7;">
+        <li><strong style="color:#fff;">Predictable monthly pool</strong> — plan runs instead of guessing what’s left.</li>
+        <li><strong style="color:#fff;">Full tool stack</strong> — Clipper, Story Maker, and Elite ads when you need them.</li>
+      </ul>
+      <div>
+        <a href="${escapeHtml(app())}/dashboard/billing?utm_source=lifecycle&amp;utm_campaign=low_credits" style="${CTA_STYLE}">Review plans &amp; credits</a>
+        <a href="${escapeHtml(app())}/dashboard?utm_source=lifecycle&amp;utm_campaign=low_credits" style="${SECONDARY_CTA}">Open dashboard</a>
+      </div>
+      <p style="${MUTED_STYLE};margin-top:22px;">Current balance: about <strong style="color:#e2e8f0;">${credits}</strong> credits.</p>
+    `
+  },
+  text: (v) => {
+    const credits = typeof v.credits === "number" ? v.credits : 0
+    return (
+      `${firstName(v.displayName)}, your credit balance is getting thin.\n\n` +
+      `You still have credits (${credits}) — refill or upgrade before a key run stalls.\n\n` +
+      `Plans & billing: ${app()}/dashboard/billing\n` +
+      `Dashboard: ${app()}/dashboard`
+    )
+  },
+}
 
 const creditExhaustion: MarketingTemplate = {
   id: "credit_exhaustion_upgrade_v1",
@@ -322,6 +370,7 @@ const referralPush: MarketingTemplate = {
 export const MARKETING_TEMPLATES: Record<MarketingTemplateId, MarketingTemplate> =
   {
     credit_exhaustion_upgrade_v1: creditExhaustion,
+    low_credits_nudge_v1: lowCreditsNudge,
     trial_ending_reminder_v1: trialEnding,
     inactive_user_reactivation_v1: reactivation,
     elite_feature_promotion_v1: elitePromo,

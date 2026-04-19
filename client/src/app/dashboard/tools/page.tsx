@@ -48,8 +48,8 @@ export default function ToolsHubPage() {
           </p>
           <h1 className="text-3xl font-semibold tracking-[-0.022em] text-white md:text-4xl">Tools</h1>
           <p className="text-base font-normal leading-relaxed text-white/50 md:text-white/52">
-            Everything you need to script, storyboard, clip, and render — in one place. Pick a tool to
-            start; outputs sync to your{" "}
+            Each tool is built around a clear deliverable — scripts, prompts, stories, clips, or finished
+            ads. Open one, generate, and save to your{" "}
             <Link
               href="/dashboard/library"
               className="font-medium text-purple-200/88 underline decoration-white/15 underline-offset-[0.2em] outline-none transition-colors hover:text-purple-100/95 focus-visible:rounded focus-visible:ring-2 focus-visible:ring-purple-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0f19]"

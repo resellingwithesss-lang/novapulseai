@@ -17,6 +17,7 @@ import { incrementToolUsage, pushOutputHistory, recordEmailReadyEvent } from "@/
 import UpgradeModal from "@/components/growth/UpgradeModal"
 import { toAbsoluteMediaUrl } from "@/lib/mediaOrigin"
 import { useAuth } from "@/context/AuthContext"
+import { tools } from "@/config/tools"
 
 type GenerateResponse = {
   success: boolean
@@ -88,6 +89,10 @@ export default function AiAdGeneratorPage() {
 
   const videoOutputRef = useRef<HTMLDivElement | null>(null)
   const eliteAds = Boolean(entitlement?.featureAccess.ads.allowed)
+  const renderVariantCount = useMemo(() => {
+    if (!entitlement) return 1
+    return Math.min(2, Math.max(1, entitlement.adVariantCount || 1))
+  }, [entitlement])
 
   const activePreset = useMemo(
     () => STYLE_PRESETS.find((p) => p.id === stylePresetId) ?? STYLE_PRESETS[0],
@@ -152,6 +157,8 @@ export default function AiAdGeneratorPage() {
     return "about 4–10 minutes"
   }
 
+  const adsToolMeta = tools.find((t) => t.id === "story-video-maker")
+
   const polling = useAdsJobPolling({
     // Keep legacy key so in-flight jobs survive the /story-video-maker → /ai-ad-generator rename.
     storageKey: "vf:story-video-maker:job",
@@ -200,7 +207,7 @@ export default function AiAdGeneratorPage() {
           editingStyle: activePreset.editingStyle,
           ultra: true,
           creativeMode: activePreset.creativeMode,
-          renderTopVariants: 1,
+          renderTopVariants: renderVariantCount,
           voice: "alloy",
           voiceMode: "ai_openai_tts",
           ...(audienceNotes.trim()
@@ -265,8 +272,9 @@ export default function AiAdGeneratorPage() {
     <ToolPageShell
       toolId="story-video-maker"
       title="AI Ad Generator"
-      subtitle="AI generates your ad from a product link — script, voiceover, on-screen visuals, and captions. You never touch a timeline or a camera."
-      guidance="Use a clear offer page (headline, proof, CTA). NovaPulseAI analyzes the URL and assembles a finished spot for the platform you choose."
+      outcome={adsToolMeta?.outcome}
+      subtitle="Paste a URL + optional notes — we return your best ad, extra variants (by plan), and CTA ideas. No filming or timeline work."
+      guidance="Strong pages (clear headline, proof, CTA) produce stronger ads. Defaults work; open Fine-tune only if you want a different length or platform."
       statusLabel={
         blockedMessage ??
         (polling.state.loading ? "Creating your ad" : "Ready — one tap to generate")
@@ -339,70 +347,84 @@ export default function AiAdGeneratorPage() {
             />
           </div>
 
-          <div className="grid gap-5 md:grid-cols-2">
-            <div>
-              <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-white/60">
-                Platform
-              </label>
-              <select
-                value={platform}
-                onChange={(e) => setPlatform(e.target.value)}
-                disabled={polling.state.loading}
-                className="np-select w-full"
-              >
-                <option value="tiktok">TikTok · vertical 9:16</option>
-                <option value="instagram">Instagram · square 1:1</option>
-                <option value="youtube">YouTube · horizontal 16:9</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-white/60">
-                Length
-              </label>
-              <select
-                value={duration}
-                onChange={(e) => setDuration(Number(e.target.value))}
-                disabled={polling.state.loading}
-                className="np-select w-full"
-              >
-                <option value={15}>15 seconds · snappy</option>
-                <option value={30}>30 seconds · balanced</option>
-                <option value={45}>45 seconds · more story</option>
-                <option value={60}>60 seconds · deeper pitch</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-white/60">
-              Style & tone
-            </label>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {STYLE_PRESETS.map((p) => {
-                const active = stylePresetId === p.id
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
+          <details className="rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-3">
+            <summary className="cursor-pointer list-none text-sm font-semibold text-white/85 [&::-webkit-details-marker]:hidden">
+              Fine-tune look &amp; length{" "}
+              <span className="text-xs font-normal text-white/40">(optional)</span>
+            </summary>
+            <div className="mt-4 space-y-5">
+              <div className="grid gap-5 md:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-white/60">
+                    Platform
+                  </label>
+                  <select
+                    value={platform}
+                    onChange={(e) => setPlatform(e.target.value)}
                     disabled={polling.state.loading}
-                    onClick={() => setStylePresetId(p.id)}
-                    className={`rounded-xl border px-4 py-3 text-left transition disabled:opacity-50 ${
-                      active
-                        ? "border-violet-400/45 bg-violet-500/[0.15] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
-                        : "border-white/[0.1] bg-white/[0.03] hover:border-white/[0.18]"
-                    }`}
+                    className="np-select w-full"
                   >
-                    <span className="block text-sm font-semibold text-white/90">{p.label}</span>
-                    <span className="mt-1 block text-xs leading-relaxed text-white/45">
-                      {p.description}
-                    </span>
-                  </button>
-                )
-              })}
+                    <option value="tiktok">TikTok · vertical 9:16</option>
+                    <option value="instagram">Instagram · square 1:1</option>
+                    <option value="youtube">YouTube · horizontal 16:9</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-white/60">
+                    Length
+                  </label>
+                  <select
+                    value={duration}
+                    onChange={(e) => setDuration(Number(e.target.value))}
+                    disabled={polling.state.loading}
+                    className="np-select w-full"
+                  >
+                    <option value={15}>15 seconds · snappy</option>
+                    <option value={30}>30 seconds · balanced</option>
+                    <option value={45}>45 seconds · more story</option>
+                    <option value={60}>60 seconds · deeper pitch</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-white/60">
+                  Style &amp; tone
+                </label>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {STYLE_PRESETS.map((p) => {
+                    const active = stylePresetId === p.id
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        disabled={polling.state.loading}
+                        onClick={() => setStylePresetId(p.id)}
+                        className={`rounded-xl border px-4 py-3 text-left transition disabled:opacity-50 ${
+                          active
+                            ? "border-violet-400/45 bg-violet-500/[0.15] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                            : "border-white/[0.1] bg-white/[0.03] hover:border-white/[0.18]"
+                        }`}
+                      >
+                        <span className="block text-sm font-semibold text-white/90">{p.label}</span>
+                        <span className="mt-1 block text-xs leading-relaxed text-white/45">
+                          {p.description}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
-          </div>
+          </details>
         </div>
+
+        {eliteAds && entitlement && entitlement.adVariantCount < 2 ? (
+          <p className="mt-4 text-center text-xs text-amber-200/90">
+            Unlock more high-performing variants with Pro/Elite — your current tier includes one hero render per run.
+          </p>
+        ) : null}
 
         <button
           type="button"
@@ -410,7 +432,7 @@ export default function AiAdGeneratorPage() {
           disabled={!canGenerate}
           className="mt-8 w-full rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 py-3.5 text-sm font-semibold text-white shadow-lg shadow-purple-900/30 disabled:opacity-50"
         >
-          {polling.state.loading ? "Creating your ad…" : "Generate my AI ad"}
+          {polling.state.loading ? "Creating your ad…" : "Generate my ad"}
         </button>
         {polling.state.loading ? (
           <button

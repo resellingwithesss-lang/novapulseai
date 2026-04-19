@@ -13,6 +13,8 @@ type ToolPageShellProps = {
   /** Stable id for a11y, analytics, and E2E (`data-npai-tool`). */
   toolId?: ToolId
   title: string
+  /** One-line outcome: what the user walks away with (shown prominently). */
+  outcome?: string
   subtitle: string
   guidance?: string
   statusLabel?: string
@@ -25,6 +27,7 @@ type ToolPageShellProps = {
 export default function ToolPageShell({
   toolId,
   title,
+  outcome,
   subtitle,
   guidance,
   statusLabel,
@@ -70,7 +73,14 @@ export default function ToolPageShell({
         </div>
 
         <h1 className="text-3xl font-semibold tracking-[-0.022em] md:text-4xl">{title}</h1>
-        <p className="mt-3 max-w-3xl text-base font-normal leading-relaxed text-white/50 md:text-white/52">
+        {outcome ? (
+          <p className="mt-3 max-w-3xl text-base font-medium leading-snug text-white/88 md:text-lg">
+            {outcome}
+          </p>
+        ) : null}
+        <p
+          className={`max-w-3xl text-base font-normal leading-relaxed text-white/50 md:text-white/52 ${outcome ? "mt-2" : "mt-3"}`}
+        >
           {subtitle}
         </p>
 

@@ -10,6 +10,7 @@ import {
   isFreePlanTier,
   minimumUpgradePlanForTool,
   getWorkflowLimits,
+  getPlanOutputLimits,
 } from "../plans/plan.constants"
 
 type SubscriptionState = "ACTIVE" | "TRIALING" | "PAST_DUE" | "CANCELED" | "EXPIRED" | "PAUSED"
@@ -61,6 +62,11 @@ export type EntitlementSnapshot = {
     maxBrandVoices: number
     maxContentPacks: number
   }
+  /** Plan-based caps for variants and improve actions (additive; credits still apply). */
+  scriptVariantCount: number
+  adVariantCount: number
+  clipVariantCount: number
+  improveActionsLimit: number
   featureAccess: {
     generation: FeatureAccessDecision
     prompt: FeatureAccessDecision
@@ -243,6 +249,7 @@ export function buildEntitlementSnapshot(
   })
 
   const wf = getWorkflowLimits(planForEntitlements)
+  const outputLimits = getPlanOutputLimits(planForEntitlements)
 
   const prompt: FeatureAccessDecision =
     baseReason
@@ -271,6 +278,10 @@ export function buildEntitlementSnapshot(
       maxBrandVoices: wf.brandVoices,
       maxContentPacks: wf.contentPacks,
     },
+    scriptVariantCount: outputLimits.scriptVariantCount,
+    adVariantCount: outputLimits.adVariantCount,
+    clipVariantCount: outputLimits.clipVariantCount,
+    improveActionsLimit: outputLimits.improveActionsLimit,
     featureAccess: {
       generation,
       prompt,

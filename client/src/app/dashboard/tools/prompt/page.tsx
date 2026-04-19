@@ -2,11 +2,32 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
+import { Copy, Download, RotateCcw, Sparkles } from "lucide-react"
 import ToolPageShell from "@/components/tools/ToolPageShell"
+import {
+  ToolErrorPanel,
+  ToolInputSection,
+  ToolOutputSection,
+  ToolPrimaryCta,
+  ToolUpgradeHint,
+} from "@/components/tools/ToolWorkspace"
+import { tools } from "@/config/tools"
 import { formatBlockedReason, useEntitlementSnapshot } from "@/hooks/useEntitlementSnapshot"
 import { incrementToolUsage, pushOutputHistory } from "@/lib/growth"
+import { useAuth } from "@/context/AuthContext"
+import { displayPlanForUser, getPlanOutputLimits } from "@/lib/plans"
+import {
+  VARIANT_META,
+  buildPromptDocument,
+  documentHasImproveMarker,
+  improveMarker,
+  improveSnippet,
+  type ImproveKind,
+  type Platform,
+  type PromptVariantId,
+} from "./prompt-build"
 
-type Platform = "TikTok" | "Instagram Reels" | "YouTube Shorts" | "X / Threads" | "LinkedIn"
+const VARIANT_ORDER: PromptVariantId[] = ["balanced", "bold", "lean", "convert"]
 type PresetId =
   | "UGC_AD"
   | "EDUCATIONAL_SHORT"
@@ -31,60 +52,6 @@ type PromptPreset = {
   extraConstraints: string[]
   examples: string[]
   useCases: string[]
-}
-
-const ENABLE_PROMPT_AI_REFINER = false
-
-async function refinePromptWithAI(prompt: string): Promise<string> {
-  // Prepared hook for future optional AI refinement.
-  // Intentionally local/no-op until explicitly enabled and wired to backend.
-  if (!ENABLE_PROMPT_AI_REFINER) return prompt
-  return prompt
-}
-
-function inferAudienceDetail(audience: string): string {
-  const clean = audience.trim()
-  if (!clean) {
-    return "Define this clearly before generation: niche, sophistication level, buying intent, and what they tried before."
-  }
-  return clean
-}
-
-function platformGuidance(platform: Platform): string {
-  switch (platform) {
-    case "TikTok":
-      return "Fast open in first 1.5 seconds, pattern interrupts every 3-5 seconds, native language over corporate phrasing."
-    case "Instagram Reels":
-      return "Visual-first framing, concise line breaks, polished but conversational pacing, strong first-frame text."
-    case "YouTube Shorts":
-      return "Clear progression and payoff, stronger context setup, high information density, fewer slang shortcuts."
-    case "X / Threads":
-      return "Short lines, sharp thesis, high clarity, no fluff, one concrete takeaway per beat."
-    case "LinkedIn":
-      return "Authority-forward framing, practical insight cadence, proof-led examples, no meme slang, no clickbait phrasing."
-    default:
-      return "Match platform-native consumption style while preserving clarity and retention."
-  }
-}
-
-function styleDirectives(style: string): string {
-  const map: Record<string, string> = {
-    "Viral TikTok":
-      "Use kinetic, high-retention pacing. Short lines. Curiosity-driven transitions. Keep language native and concrete.",
-    "Authority Content":
-      "Use confident expert voice. Name frameworks. Prioritize clarity and specificity over hype.",
-    "Emotional Story":
-      "Build emotional arc: tension -> vulnerability -> realization -> shift. Sensory detail where useful.",
-    "Contrarian Take":
-      "Lead with a credible disagreement. Steel-man the common view once, then provide a stronger alternative.",
-    "Product Launch":
-      "Use mechanism-led persuasion: pain -> unique mechanism -> evidence -> objection handling -> CTA.",
-    "Tutorial Deep-Dive":
-      "Teach in steps with mini outcomes. Keep transitions explicit. Avoid abstract advice without actions.",
-    "UGC Testimonial":
-      "Use first-person lived experience voice. Ground claims in concrete moments, metrics, and before/after context.",
-  }
-  return map[style] ?? "Write with high clarity, concrete detail, and platform-native pacing."
 }
 
 const PROMPT_PRESETS: PromptPreset[] = [
@@ -325,17 +292,38 @@ function getPresetById(id: PresetId): PromptPreset {
 
 export default function PromptPage() {
   const searchParams = useSearchParams()
+  const { user } = useAuth()
   const { entitlement } = useEntitlementSnapshot()
   const [topic, setTopic] = useState("")
   const [audience, setAudience] = useState("")
   const [style, setStyle] = useState("Viral TikTok")
   const [presetId, setPresetId] = useState<PresetId>("UGC_AD")
   const [platform, setPlatform] = useState<Platform>("TikTok")
-  const [prompt, setPrompt] = useState("")
+  const [variantPack, setVariantPack] = useState<Partial<Record<PromptVariantId, string>>>({})
+  const [activeVariant, setActiveVariant] = useState<PromptVariantId>("balanced")
+  const [improvementsByVariant, setImprovementsByVariant] = useState<
+    Record<PromptVariantId, string[]>
+  >({ balanced: [], bold: [], lean: [], convert: [] })
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [builtAt, setBuiltAt] = useState<string | null>(null)
   const [repeatUsageCount, setRepeatUsageCount] = useState(0)
+
+  const promptToolMeta = tools.find((t) => t.id === "prompt")
+
+  const activeBase = variantPack[activeVariant] ?? ""
+  const activeExtras = improvementsByVariant[activeVariant] ?? []
+  const activeFullPrompt = activeBase + activeExtras.join("")
+  const wordCount = activeFullPrompt.trim() ? activeFullPrompt.trim().split(/\s+/).length : 0
+
+  const uiPlan = user ? displayPlanForUser(user.plan, user.role) : "FREE"
+  const improveCap =
+    entitlement?.improveActionsLimit ?? getPlanOutputLimits(uiPlan).improveActionsLimit
+  const improvePassesUsed = useMemo(
+    () =>
+      Object.values(improvementsByVariant).reduce((sum, arr) => sum + arr.length, 0),
+    [improvementsByVariant]
+  )
 
   useEffect(() => {
     const handoffTopic = searchParams.get("topic")
@@ -377,7 +365,7 @@ export default function PromptPage() {
     return map[style] ?? map["Viral TikTok"]
   }, [style])
 
-  const generatePrompt = async () => {
+  const generatePrompt = () => {
     if (!canGenerate) return
     if (topic.trim().length < 3) {
       setError("Add a clear topic (at least 3 characters) before generating.")
@@ -385,218 +373,370 @@ export default function PromptPage() {
     }
     setError(null)
 
-    const cleanTopic = topic.trim()
-    const cleanAudience = inferAudienceDetail(audience)
-    const styleRule = styleDirectives(style)
-    const platformRule = platformGuidance(platform)
     const preset = getPresetById(presetId)
-
-    const basePrompt = `ROLE
-${preset.roleFraming}
-
-OBJECTIVE
-${preset.objectiveFraming}
-Create one high-retention ${platform} script package about "${cleanTopic}" for "${cleanAudience}" that is specific, usable, and ready to publish.
-
-CONTEXT
-- Preset pack: ${preset.label}
-- Platform: ${platform}
-- Style profile: ${style}
-- Topic: ${cleanTopic}
-- Audience: ${cleanAudience}
-- Primary outcome: maximize retention first, then drive a single clear next action.
-
-STYLE
-- ${styleRule}
-- ${platformRule}
-- Hook logic: ${preset.hookLogic}
-- Pacing rules: ${preset.pacingRules}
-- CTA style: ${preset.ctaStyle}
-- Every section must contain concrete detail, not generic motivational language.
-- Keep language easy to read aloud; avoid jargon unless the audience expects it.
-
-OUTPUT FORMAT (STRICT)
-Return exactly these sections in order:
-1) HOOK OPTIONS (3)
-   - 3 distinct hooks with different mechanisms (curiosity, contrarian, outcome).
-2) SCRIPT (45-75 seconds)
-   - A complete spoken script with this internal structure:
-     a) Hook
-     b) Context
-     c) Value Ladder (3-5 beats)
-     d) Proof Beat
-     e) Friction Removal
-     f) CTA
-3) ON-SCREEN TEXT PLAN
-   - 6-10 overlays, each <= 8 words.
-4) CAPTION
-   - 1 caption, <= 220 characters.
-5) HASHTAGS
-   - 8-12 relevant tags, single line.
-6) VARIATION NOTES
-   - 3 concise ways to adapt this script for A/B testing.
-
-CONSTRAINTS
-- No fake metrics, no fabricated claims, no invented case studies.
-- No weak openers like "Hey guys" or "In this video".
-- No vague directives like "be authentic" without specific execution.
-- In the main SCRIPT section, include exactly one CTA action.
-- Keep readability high: short lines, direct verbs, concrete nouns.
-${preset.outputConstraints.map((line) => `- ${line}`).join("\n")}
-${preset.extraConstraints.map((line) => `- ${line}`).join("\n")}
-
-EXAMPLES (MICRO PATTERNS)
-${preset.examples.map((line) => `- ${line}`).join("\n")}
-- Strong hook pattern: "You don't need more content ideas. You need a repeatable content operating system."
-- Strong proof pattern: "In 14 days, this workflow cut our edit time from 5 hours to 2."
-- Strong CTA pattern: "Comment 'SYSTEM' and I'll send the framework."`
-
-    const finalPrompt = await refinePromptWithAI(basePrompt)
-
-    setPrompt(finalPrompt)
+    const nextPack: Partial<Record<PromptVariantId, string>> = {}
+    for (const v of VARIANT_ORDER) {
+      nextPack[v] = buildPromptDocument({
+        preset,
+        platform,
+        style,
+        topic: topic.trim(),
+        audience,
+        variant: v,
+      })
+    }
+    setVariantPack(nextPack)
+    setImprovementsByVariant({
+      balanced: [],
+      bold: [],
+      lean: [],
+      convert: [],
+    })
+    setActiveVariant("balanced")
     setBuiltAt(new Date().toLocaleTimeString())
     const usageCount = incrementToolUsage("prompt")
     setRepeatUsageCount(usageCount)
     pushOutputHistory({
       tool: "prompt",
-      title: "Prompt template created",
+      title: "Prompt pack created (4 variants)",
       summary: topic.slice(0, 72),
       continuePath: "/dashboard/tools/video",
-      nextAction: "Apply this prompt to generate scripts.",
+      nextAction: "Paste a variant into your model or open Video Script Engine.",
     })
   }
+
+  const applyImprove = (kind: ImproveKind) => {
+    if (improvePassesUsed >= improveCap) {
+      setError(
+        "You’ve reached your Improve limit for this plan. Upgrade for more stacked passes per pack."
+      )
+      return
+    }
+    setError(null)
+    const base = variantPack[activeVariant] ?? ""
+    const extras = [...(improvementsByVariant[activeVariant] ?? [])]
+    const candidate = base + extras.join("")
+    if (documentHasImproveMarker(candidate, kind)) return
+    extras.push(improveSnippet(kind))
+    setImprovementsByVariant({ ...improvementsByVariant, [activeVariant]: extras })
+  }
+
+  const resetActiveTweaks = () => {
+    setImprovementsByVariant({ ...improvementsByVariant, [activeVariant]: [] })
+  }
+
+  const copyActiveVariant = async () => {
+    try {
+      await navigator.clipboard.writeText(activeFullPrompt)
+      setCopied(true)
+      setError(null)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch {
+      setError("Couldn’t access the clipboard. Select the text and copy manually.")
+    }
+  }
+
+  const copyAllVariants = async () => {
+    const chunks = VARIANT_ORDER.map((id) => {
+      const b = variantPack[id] ?? ""
+      const e = (improvementsByVariant[id] ?? []).join("")
+      const meta = VARIANT_META[id]
+      return `═══ ${meta.label.toUpperCase()}${meta.badge ? ` · ${meta.badge}` : ""} ═══\n\n${b}${e}`
+    })
+    try {
+      await navigator.clipboard.writeText(chunks.join("\n\n\n"))
+      setCopied(true)
+      setError(null)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch {
+      setError("Couldn’t access the clipboard.")
+    }
+  }
+
+  const downloadAllVariants = () => {
+    const chunks = VARIANT_ORDER.map((id) => {
+      const b = variantPack[id] ?? ""
+      const e = (improvementsByVariant[id] ?? []).join("")
+      const meta = VARIANT_META[id]
+      return `=== ${meta.label} ===\n\n${b}${e}`
+    })
+    const blob = new Blob([chunks.join("\n\n\n\n")], { type: "text/plain;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `novapulse-prompt-pack-${Date.now()}.txt`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const hasPack = VARIANT_ORDER.some((id) => Boolean(variantPack[id]?.trim()))
 
   return (
     <ToolPageShell
       toolId="prompt"
       title="Prompt Intelligence"
-      subtitle="Build layered, retention-aware prompt templates locally in your browser."
-      guidance="Use this when you want consistent prompt structure for a niche, offer, or audience segment."
-      statusLabel={blockedMessage || "Template tool (no credits required)"}
+      outcome={promptToolMeta?.outcome}
+      subtitle="One tap builds four strategic prompt variants — Improve passes stack locally (no credits). More passes on higher plans."
+      guidance="Give a specific topic and audience. Pick a preset + platform — we handle structure, constraints, and A/B-ready variation notes."
+      statusLabel={blockedMessage || "No credits used — builds locally"}
       statusTone={blockedMessage ? "warning" : "success"}
     >
-      <div className="mx-auto max-w-6xl pb-20">
-        <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs text-white/70">
-          Prompt Intelligence is a local template utility: it does not call the AI backend.
-          Use the output directly or pass it into Video Script Engine.
-        </div>
-        <textarea
-          value={topic}
-          onChange={(e) => setTopic(e.target.value)}
-          placeholder="Core topic, offer, or story premise..."
-          className="mb-4 w-full rounded-xl border border-white/10 bg-white/5 p-4"
-          rows={4}
-        />
-
-        <input
-          type="text"
-          value={audience}
-          onChange={(e) => setAudience(e.target.value)}
-          placeholder="Audience (e.g. beginner creators 18–30, burned out on trends)"
-          className="mb-6 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm"
-        />
-
-        <select
-          value={presetId}
-          onChange={(e) => setPresetId(e.target.value as PresetId)}
-          className="np-select mb-3 w-full"
-        >
-          {PROMPT_PRESETS.map((preset) => (
-            <option key={preset.id} value={preset.id}>
-              {preset.label}
-            </option>
-          ))}
-        </select>
-        <p className="mb-6 text-xs leading-relaxed text-white/55">
-          {getPresetById(presetId).summary}
-        </p>
-        <div className="mb-6 rounded-xl border border-white/10 bg-white/[0.025] px-4 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/56">
-            Use case examples
-          </p>
-          <ul className="mt-2 space-y-1.5 text-xs leading-relaxed text-white/65">
-            {getPresetById(presetId).useCases.map((useCase) => (
-              <li key={useCase}>• {useCase}</li>
-            ))}
-          </ul>
-        </div>
-
-        <select
-          value={platform}
-          onChange={(e) => setPlatform(e.target.value as Platform)}
-          className="np-select mb-6 w-full"
-        >
-          <option>TikTok</option>
-          <option>Instagram Reels</option>
-          <option>YouTube Shorts</option>
-          <option>X / Threads</option>
-          <option>LinkedIn</option>
-        </select>
-
-        <select
-          value={style}
-          onChange={(e) => setStyle(e.target.value)}
-          className="np-select mb-6 w-full"
-        >
-          <option>Viral TikTok</option>
-          <option>Authority Content</option>
-          <option>Emotional Story</option>
-          <option>Contrarian Take</option>
-          <option>Product Launch</option>
-          <option>Tutorial Deep-Dive</option>
-          <option>UGC Testimonial</option>
-        </select>
-
-        <p className="mb-6 text-xs leading-relaxed text-white/45">{styleHints}</p>
-
-        <button
-          onClick={() => {
-            void generatePrompt()
-          }}
-          disabled={!canGenerate}
-          className="w-full rounded-full bg-gradient-to-r from-blue-500 to-purple-600 py-4 font-semibold disabled:opacity-50"
-        >
-          Build Prompt Template
-        </button>
-        {error && <p className="mt-3 text-sm text-red-300/95">{error}</p>}
-        {repeatUsageCount >= 3 && (
-          <p className="mt-3 text-sm text-purple-200">
-            You’re using Prompt Intelligence frequently. Upgrade for higher throughput across the full
-            workflow.
-            <a href="/pricing" className="ml-2 underline">
-              Upgrade
+      <div className="mx-auto max-w-6xl space-y-6 pb-20">
+        <div className="flex flex-wrap items-start gap-3 rounded-xl border border-white/10 bg-gradient-to-r from-purple-500/[0.07] to-fuchsia-500/[0.05] px-4 py-3">
+          <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-purple-300" aria-hidden />
+          <p className="text-xs leading-relaxed text-white/70">
+            <span className="font-semibold text-white/88">What you get:</span> four complete prompt documents
+            (same core brief, different strategic bias) — each with role, objective, strict output sections, and
+            constraints. Refine any tab with <span className="text-white/88">Improve</span> passes, then paste into
+            ChatGPT / Claude or{" "}
+            <a href="/dashboard/tools/video" className="font-medium text-purple-200 underline">
+              Video Script Engine
             </a>
+            .
           </p>
-        )}
+        </div>
 
-        {prompt && (
-          <div className="mt-8 rounded-xl border border-white/10 bg-white/5 p-6">
-            <div className="mb-3 flex justify-end">
+        <ToolInputSection
+          title="What are you making?"
+          description="One specific topic + one specific audience beats a vague niche every time."
+        >
+          <textarea
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+            placeholder="e.g. Why we replaced our funnel with a single Loom + a Notion page — and doubled booked calls"
+            className="mb-3 w-full rounded-xl border border-white/10 bg-white/5 p-4 text-sm outline-none transition focus:border-purple-400/40 focus:ring-2 focus:ring-purple-400/20"
+            rows={3}
+          />
+          <input
+            type="text"
+            value={audience}
+            onChange={(e) => setAudience(e.target.value)}
+            placeholder="Who watches this? (e.g. B2B marketers doing demand gen with small teams)"
+            className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none transition focus:border-purple-400/40"
+          />
+        </ToolInputSection>
+
+        <ToolInputSection
+          title="Creative preset"
+          description="Tap a card — each preset ships a different strategic skeleton (still the same quality bar)."
+        >
+          <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {PROMPT_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => setPresetId(preset.id)}
+                className={`min-w-[148px] shrink-0 rounded-xl border px-3 py-2.5 text-left text-xs transition ${
+                  presetId === preset.id
+                    ? "border-purple-400/45 bg-purple-500/15 text-white shadow-[0_0_24px_-8px_rgba(168,85,247,0.5)]"
+                    : "border-white/10 bg-black/25 text-white/70 hover:border-white/20 hover:bg-white/[0.04]"
+                }`}
+              >
+                <span className="block font-semibold text-white/92">{preset.label}</span>
+                <span className="mt-1 block leading-snug text-white/50">{preset.summary}</span>
+              </button>
+            ))}
+          </div>
+        </ToolInputSection>
+
+        <ToolInputSection
+          title="Channel"
+          description="We bake platform-native pacing into the prompt so the model doesn’t sound generic."
+        >
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                "TikTok",
+                "Instagram Reels",
+                "YouTube Shorts",
+                "X / Threads",
+                "LinkedIn",
+              ] as Platform[]
+            ).map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPlatform(p)}
+                className={`rounded-full border px-3.5 py-2 text-xs font-medium transition ${
+                  platform === p
+                    ? "border-purple-400/50 bg-purple-500/20 text-white"
+                    : "border-white/12 bg-white/[0.04] text-white/65 hover:border-white/22"
+                }`}
+              >
+                {p === "Instagram Reels" ? "Reels" : p === "YouTube Shorts" ? "Shorts" : p === "X / Threads" ? "X" : p}
+              </button>
+            ))}
+          </div>
+        </ToolInputSection>
+
+        <details className="np-card open:border-purple-500/25 open:bg-white/[0.02] p-5">
+          <summary className="cursor-pointer list-none text-sm font-semibold text-white/88 [&::-webkit-details-marker]:hidden">
+            Advanced: delivery style
+            <span className="ml-2 text-xs font-normal text-white/45">(optional — auto-matched to preset)</span>
+          </summary>
+          <div className="mt-4 space-y-3">
+            <select
+              value={style}
+              onChange={(e) => setStyle(e.target.value)}
+              className="np-select w-full max-w-md"
+            >
+              <option>Viral TikTok</option>
+              <option>Authority Content</option>
+              <option>Emotional Story</option>
+              <option>Contrarian Take</option>
+              <option>Product Launch</option>
+              <option>Tutorial Deep-Dive</option>
+              <option>UGC Testimonial</option>
+            </select>
+            <p className="text-xs leading-relaxed text-white/48">{styleHints}</p>
+            <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-xs text-white/55">
+              <span className="font-medium text-white/70">Preset fit: </span>
+              {getPresetById(presetId).useCases[0]}
+            </div>
+          </div>
+        </details>
+
+        <ToolPrimaryCta
+          onClick={generatePrompt}
+          disabled={!canGenerate}
+          helperText={
+            blockedMessage
+              ? blockedMessage
+              : "Builds 4 variants instantly on your device. Starter+ required to use this tool in production."
+          }
+        >
+          Generate 4 prompt variants
+        </ToolPrimaryCta>
+
+        {error ? <ToolErrorPanel message={error} /> : null}
+
+        {repeatUsageCount >= 3 ? (
+          <ToolUpgradeHint message="You’re shipping a lot of creative briefs — upgrade for higher monthly credits on Video Script, Story Maker, Clipper, and Elite ads." />
+        ) : null}
+
+        {uiPlan === "STARTER" && hasPack ? (
+          <ToolUpgradeHint
+            message="Pro adds more monthly credits and Story Maker — turn these prompts into narrative scripts without leaving the stack."
+            cta="View Pro"
+          />
+        ) : null}
+
+        {hasPack ? (
+          <ToolOutputSection
+            title="Your prompt studio"
+            description="Switch variants for different angles. Stack Improve passes on the active tab — each pass appends a revision block your model will follow."
+          >
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              {builtAt ? (
+                <p className="text-xs text-white/45">
+                  Pack built <span className="text-white/65">{builtAt}</span>
+                  <span className="ml-2 text-white/35">· ~{wordCount} words (active tab)</span>
+                </p>
+              ) : (
+                <span />
+              )}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void copyActiveVariant()}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/88 hover:bg-white/10"
+                >
+                  <Copy className="h-3.5 w-3.5" aria-hidden />
+                  {copied ? "Copied" : "Copy tab"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void copyAllVariants()}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/88 hover:bg-white/10"
+                >
+                  <Copy className="h-3.5 w-3.5" aria-hidden />
+                  Copy all 4
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadAllVariants}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-100 hover:bg-emerald-500/15"
+                >
+                  <Download className="h-3.5 w-3.5" aria-hidden />
+                  Download .txt
+                </button>
+              </div>
+            </div>
+
+            <div className="mb-4 flex flex-wrap gap-2 border-b border-white/10 pb-3">
+              {VARIANT_ORDER.map((id) => {
+                const meta = VARIANT_META[id]
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setActiveVariant(id)}
+                    className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                      activeVariant === id
+                        ? "border-purple-400/45 bg-purple-500/20 text-white"
+                        : "border-white/10 bg-black/30 text-white/60 hover:border-white/18"
+                    }`}
+                  >
+                    {meta.label}
+                    {meta.badge ? (
+                      <span className="rounded-md bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-200">
+                        {meta.badge}
+                      </span>
+                    ) : null}
+                  </button>
+                )
+              })}
+            </div>
+
+            <p className="mb-3 text-xs leading-relaxed text-white/52">{VARIANT_META[activeVariant].hint}</p>
+
+            <div className="mb-4 flex flex-wrap gap-2">
+              <span className="w-full text-[11px] font-semibold uppercase tracking-[0.12em] text-white/40">
+                Improve active variant
+              </span>
+              {(
+                [
+                  { kind: "shorter" as const, label: "Tighten" },
+                  { kind: "aggressive" as const, label: "More aggressive" },
+                  { kind: "conversion" as const, label: "Rewrite for conversions" },
+                ] as const
+              ).map(({ kind, label }) => {
+                const applied = documentHasImproveMarker(activeFullPrompt, kind)
+                return (
+                  <button
+                    key={kind}
+                    type="button"
+                    disabled={applied || improvePassesUsed >= improveCap}
+                    onClick={() => applyImprove(kind)}
+                    className="rounded-full border border-white/12 bg-white/[0.05] px-3 py-1.5 text-xs font-medium text-white/80 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                    title={applied ? `${improveMarker(kind)} already added` : undefined}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
               <button
                 type="button"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(prompt)
-                    setCopied(true)
-                    setError(null)
-                    window.setTimeout(() => setCopied(false), 1600)
-                  } catch {
-                    setError("Clipboard access failed. Copy manually from the text area.")
-                  }
-                }}
-                className="rounded-lg border border-white/15 px-3 py-1 text-xs text-white/70 hover:bg-white/10"
+                onClick={resetActiveTweaks}
+                className="inline-flex items-center gap-1 rounded-full border border-white/10 px-3 py-1.5 text-xs text-white/55 hover:bg-white/5"
               >
-                {copied ? "Copied" : "Copy prompt"}
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+                Reset tab tweaks
               </button>
             </div>
-            {builtAt ? (
-              <p className="mb-3 text-xs text-white/45">
-                Template built locally at {builtAt}.
-              </p>
-            ) : null}
-            <p className="whitespace-pre-line text-gray-300">{prompt}</p>
-          </div>
-        )}
+
+            <pre className="max-h-[min(520px,55vh)] overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/40 p-4 font-mono text-[13px] leading-relaxed text-white/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+              {activeFullPrompt}
+            </pre>
+
+            <p className="mt-4 text-xs text-white/45">
+              Next:{" "}
+              <a href="/dashboard/tools/video" className="font-medium text-purple-200 underline">
+                Open Video Script Engine with this brief →
+              </a>
+            </p>
+          </ToolOutputSection>
+        ) : null}
       </div>
     </ToolPageShell>
   )

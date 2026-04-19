@@ -24,6 +24,7 @@ import {
 } from "@prisma/client"
 import type { MarketingTemplateId, MarketingRenderVars } from "./marketing-templates"
 import { SENDABLE_MARKETING_STATUSES } from "./marketing-constants"
+import { getPlanCredits } from "../modules/plans/plan.constants"
 
 export interface LifecycleCandidate {
   id: string
@@ -140,6 +141,51 @@ const creditExhaustion: LifecycleTriggerDefinition = {
     displayName: c.displayName ?? "",
     currentPlan: c.plan,
     credits: c.credits,
+  }),
+}
+
+/* ============================================================
+   1b) LOW CREDITS NUDGE (not zero — distinct from exhaustion)
+============================================================ */
+
+const lowCreditsNudge: LifecycleTriggerDefinition = {
+  trigger: LifecycleTrigger.LOW_CREDITS_NUDGE,
+  templateId: "low_credits_nudge_v1",
+  displayName: "Low credits urgency (non-zero)",
+  minIntervalSeconds: 15 * 60,
+  cooldownMs: 7 * 24 * 60 * 60 * 1000,
+  respectsFrequencyCap: true,
+  killSwitchEnv: "LIFECYCLE_LOW_CREDITS_ENABLED",
+  priority: 15,
+  perTickLimit: 80,
+  buildWhere: (now) => ({
+    ...consentGate(),
+    credits: { gt: 0, lte: 80 },
+    plan: { in: [Plan.FREE, Plan.STARTER, Plan.PRO] },
+    subscriptionStatus: {
+      in: [
+        SubscriptionStatus.ACTIVE,
+        SubscriptionStatus.TRIALING,
+        SubscriptionStatus.PAST_DUE,
+      ],
+    },
+    lastActiveAt: {
+      gte: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
+    },
+    ...noRecentSend(
+      LifecycleTrigger.LOW_CREDITS_NUDGE,
+      new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+    ),
+  }),
+  postFilter: (c) => {
+    const monthly = getPlanCredits(c.plan)
+    const threshold = Math.max(2, Math.min(80, Math.floor(monthly * 0.08)))
+    return c.credits > 0 && c.credits <= threshold
+  },
+  buildVariables: (c) => ({
+    displayName: c.displayName ?? "",
+    credits: c.credits,
+    currentPlan: c.plan,
   }),
 }
 
@@ -322,6 +368,7 @@ const referralPush: LifecycleTriggerDefinition = {
 
 export const LIFECYCLE_TRIGGERS: ReadonlyArray<LifecycleTriggerDefinition> = [
   trialEnding, // priority 10
+  lowCreditsNudge, // priority 15
   creditExhaustion, // priority 20
   eliteFeaturePromotion, // priority 30
   inactiveReactivation, // priority 40

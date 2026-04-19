@@ -9,7 +9,10 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "../../lib/prisma"
 import { requireAuth, AuthRequest } from "../auth/auth.middleware"
 import { isAdminOrAboveRole } from "../../lib/roles"
-import { evaluateBillingAccess } from "../billing/billing.access"
+import {
+  buildEntitlementSnapshot,
+  evaluateBillingAccess,
+} from "../billing/billing.access"
 import { resolveRequestId, toolFail, toolOk } from "../../lib/tool-response"
 import { buildMediaOutput } from "../tools/tool.media"
 import { logToolEvent } from "../../lib/tool-logger"
@@ -296,12 +299,20 @@ function mergeMetadataJson(
   return { ...base, ...patch } as Prisma.InputJsonValue
 }
 
-function resolveRenderTopVariants(requested?: number): 1 | 2 {
-  if (requested === 2) return 2
-  if (requested === 1) return 1
-  const raw = (process.env.AD_RENDER_TOP_VARIANTS || "").trim().toLowerCase()
-  if (raw === "2" || raw === "two") return 2
-  return 1
+function resolveRenderTopVariants(
+  requested: number | undefined,
+  entitlementAdVariantCap: number
+): 1 | 2 {
+  let desired: 1 | 2
+  if (requested === 2) desired = 2
+  else if (requested === 1) desired = 1
+  else {
+    const raw = (process.env.AD_RENDER_TOP_VARIANTS || "").trim().toLowerCase()
+    desired = raw === "2" || raw === "two" ? 2 : 1
+  }
+  const cap = Math.min(2, Math.max(1, entitlementAdVariantCap || 1))
+  const merged = Math.min(desired, cap)
+  return merged >= 2 ? 2 : 1
 }
 
 function safeFilePart(s: string): string {
@@ -1398,6 +1409,8 @@ router.post(
         trialExpiresAt: true,
         stripeSubscriptionId: true,
         banned: true,
+        credits: true,
+        role: true,
       },
     })
 
@@ -1421,6 +1434,16 @@ router.post(
         code: "FORBIDDEN",
       })
     }
+
+    const entitlement = buildEntitlementSnapshot({
+      plan: billingUser.plan,
+      subscriptionStatus: billingUser.subscriptionStatus,
+      trialExpiresAt: billingUser.trialExpiresAt,
+      stripeSubscriptionId: billingUser.stripeSubscriptionId,
+      banned: billingUser.banned,
+      credits: billingUser.credits,
+      role: billingUser.role,
+    })
 
     let siteUrl: string
 
@@ -1474,7 +1497,10 @@ router.post(
 
     ensureGeneratedFolder()
 
-    const renderTop = resolveRenderTopVariants(data.renderTopVariants)
+    const renderTop = resolveRenderTopVariants(
+      data.renderTopVariants,
+      entitlement.adVariantCount
+    )
     const fastPreview = resolveAdFastPreview(data)
 
     const studioResolution = resolveStudioCreativeMode(
