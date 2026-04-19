@@ -137,12 +137,21 @@ export default function DashboardPage() {
 
         <ConsentBannerCard />
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <ToolCard title="Video Script" href="/dashboard/tools/video" />
-          <ToolCard title="Clip Generator" href="/dashboard/tools/clipper" />
-          <ToolCard title="Prompt Generator" href="/dashboard/tools/prompt" />
-          <ToolCard title="Story Maker" href="/dashboard/tools/story-maker" />
-          <ToolCard title="Story Video Generator" href="/dashboard/tools/story-video-maker" />
+        <section className="space-y-4">
+          <div>
+            <h2 className="np-title-section">Your growth stack</h2>
+            <p className="np-text-body mt-2 max-w-2xl text-sm">
+              Pick a lane, ship an asset. Elite unlocks the AI Ad Generator — full auto video ads without
+              filming or editing.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <ToolCard title="Video Script" href="/dashboard/tools/video" />
+            <ToolCard title="Clip Generator" href="/dashboard/tools/clipper" />
+            <ToolCard title="Prompt Generator" href="/dashboard/tools/prompt" />
+            <ToolCard title="Story Maker" href="/dashboard/tools/story-maker" />
+            <ToolCard title="AI Ad Generator" href="/dashboard/tools/story-video-maker" />
+          </div>
         </section>
 
         <p className="-mt-6 text-center text-xs text-white/45">

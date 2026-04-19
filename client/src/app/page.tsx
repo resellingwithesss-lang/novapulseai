@@ -17,70 +17,74 @@ const workflowSteps = [
     icon: Scissors,
     name: "Clipper Engine",
     tier: "Starter+",
-    outcome: "Pull high-retention moments from long-form video.",
+    outcome:
+      "Mine long-form for the moments that actually retain—ranked clips you can post this week.",
   },
   {
     icon: Wand2,
     name: "Prompt Intelligence",
     tier: "Starter+",
-    outcome: "Reusable prompts tuned to your content goals.",
+    outcome:
+      "Turn winning angles into reusable prompt systems—not one-off ChatGPT threads you lose.",
   },
   {
     icon: Sparkles,
     name: "Story Maker",
     tier: "Pro+",
-    outcome: "Structured story scripts with hooks and pacing.",
+    outcome:
+      "Beat-by-beat story scripts built for watch-time: hook, tension, payoff, CTA.",
   },
   {
     icon: Film,
     name: "Video Script Engine",
     tier: "Free try → Pro+",
     outcome:
-      "Hooks, full scripts, captions, and tags. Included on Free (4 credits); full monthly limits on Pro+.",
+      "Packs of hooks, scripts, captions, and tags—structured for short-form, not generic paragraphs.",
   },
   {
     icon: Rocket,
-    name: "Story Video Generator",
+    name: "AI Ad Generator",
     tier: "Elite",
-    outcome: "Script-to-video pipeline for ads and promos.",
+    outcome:
+      "URL in → full auto video ad out: AI script, voiceover, visuals, subtitles — no filming or editing.",
   },
 ] as const
 
 const trustItems = [
   {
     icon: CreditCard,
-    title: "Billing via Stripe",
-    body: "Subscriptions, portal, and invoices—standard, transparent checkout.",
+    title: "Stripe-native billing",
+    body: "Subscriptions, customer portal, and invoices—upgrade paths that match real SaaS expectations.",
   },
   {
     icon: Layers,
-    title: "Plans that match workload",
-    body: "Free to try scripts, then Starter → Pro → Elite with clear credits and tool access.",
+    title: "Tiers that scale with output",
+    body: "Free to prove value, then Starter → Pro → Elite as your weekly shipping volume grows.",
   },
   {
     icon: Link2,
-    title: "One connected flow",
-    body: "Outputs are built to feed the next step instead of dead-end files.",
+    title: "One pipeline, not five tabs",
+    body: "Scripts, clips, stories, and ads hand off inside NovaPulseAI instead of dying in downloads folders.",
   },
   {
     icon: Users,
-    title: "Built for operators",
-    body: "Creators and lean teams who publish on a schedule—not one-off gimmicks.",
+    title: "Built for publishing teams",
+    body: "Creators and lean marketing squads who ship on a calendar—not hobby experiments.",
   },
 ] as const
 
 const benefitRows = [
   {
-    title: "Less tab-hopping",
-    body: "Script, prompt, clip, and video tools live together so you are not rebuilding context in five apps.",
+    title: "A growth operating system",
+    body: "Positioning, packaging, and generation stay in one workspace so every tool reinforces the same brand story.",
   },
   {
-    title: "Predictable usage",
-    body: "Credits and plan limits are visible in-product—no surprise walls mid-task.",
+    title: "Usage you can plan around",
+    body: "Credits and gates are visible before you commit—fewer mid-flow surprises when you are on deadline.",
   },
   {
-    title: "Faster iteration",
-    body: "Ship more variations per week when generation, structure, and handoffs stay in one workspace.",
+    title: "More shots on goal",
+    body: "When structure and iteration live together, you ship more testable creative per week—not more busywork.",
   },
 ] as const
 
@@ -112,17 +116,16 @@ export default function HomePage() {
         <div className="np-container">
           <div className="relative z-[1] w-full min-w-0 text-center">
             <p className="np-eyebrow landing-fade-up mb-4 md:mb-5 md:text-xs">
-              Creator automation
+              Creator growth OS
             </p>
             <h1 className="np-title-hero landing-fade-up landing-delay-1 mx-auto flex w-full max-w-4xl flex-col items-center gap-1.5 text-4xl sm:gap-2 md:text-5xl lg:text-5xl xl:text-6xl">
-              <span className="block w-full text-balance">Scripts, clips, repurposing</span>
-              <span className="block w-full text-balance">One connected system.</span>
+              <span className="block w-full text-balance">Content and ads that convert.</span>
+              <span className="block w-full text-balance">One high-performance engine.</span>
             </h1>
             <p className="np-text-body landing-fade-up landing-delay-2 mx-auto mt-8 max-w-2xl text-pretty sm:mt-10 sm:text-base sm:leading-[1.65] md:mt-10 md:text-[1.0625rem] md:leading-[1.66] md:text-white/58">
-              Generate scripts, pull high-retention clips, and run story-to-video
-              workflows in one workspace—with plan access, credits, and limits always
-              in view.
-              Start free, scale when your output does.
+              NovaPulseAI connects scripts, clips, stories, and Elite Ad Studio renders in a
+              single workflow—so you move from idea to shipped creative without re-building context
+              in a pile of disconnected AI tools. Plans, credits, and gates stay visible from day one.
             </p>
           </div>
           <div className="relative z-30 mt-12 w-full min-w-0 sm:mt-14 md:mt-16">
@@ -144,7 +147,7 @@ export default function HomePage() {
                 href="/#workflow"
                 className="np-btn-tertiary inline-flex min-h-10 w-full max-w-full items-center justify-center rounded-lg px-3 py-2.5 text-sm font-medium tracking-[-0.01em] outline-none underline-offset-[0.22em] transition-colors duration-200 hover:underline focus-visible:ring-2 focus-visible:ring-purple-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050816] active:text-white/66 sm:ml-0 sm:h-11 sm:w-auto sm:max-w-[min(100%,20rem)] sm:justify-center sm:leading-none lg:ml-0.5 lg:border-l lg:border-white/[0.06] lg:pl-5"
               >
-                Automation workflow
+                See the stack
               </a>
             </div>
           </div>
@@ -175,7 +178,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <SectionDivider label="Core tools" />
+      <SectionDivider label="The engine" />
 
       {/* —— Workflow / tools —— */}
       <section
@@ -189,11 +192,11 @@ export default function HomePage() {
               id="workflow-heading"
               className="text-balance text-3xl font-semibold tracking-[-0.022em] text-white/[0.97] md:text-[2.05rem] md:leading-[1.15]"
             >
-              What you actually run inside NovaPulseAI
+              The tools behind a serious publishing cadence
             </h2>
             <p className="mt-5 max-w-[42rem] text-base font-normal leading-[1.62] text-white/56 md:mt-6 md:text-lg md:leading-[1.65] md:text-white/58">
-              Each tool produces concrete assets. Higher plans unlock more of
-              the pipeline—see{" "}
+              Every module ships tangible creative—structured scripts, ranked clips, story arcs, and
+              Elite-grade ad renders. Higher tiers unlock more of the pipeline; see{" "}
               <a
                 href="/pricing"
                 className="font-medium text-purple-200/88 underline-offset-2 outline-none transition-colors duration-200 hover:text-purple-100/95 hover:underline focus-visible:rounded focus-visible:ring-2 focus-visible:ring-purple-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050816]"
@@ -232,7 +235,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <SectionDivider label="Why teams switch" />
+      <SectionDivider label="Why operators stay" />
 
       {/* —— Outcomes —— */}
       <section
@@ -244,11 +247,11 @@ export default function HomePage() {
             id="outcomes-heading"
             className="max-w-2xl text-balance text-3xl font-semibold tracking-[-0.022em] text-white/[0.97] md:text-[2.05rem] md:leading-[1.15]"
           >
-            Why teams switch to a single content stack
+            Why growth teams consolidate here
           </h2>
           <p className="mt-5 max-w-2xl text-base font-normal leading-[1.62] text-white/56 md:mt-6 md:text-lg md:leading-[1.65] md:text-white/58">
-            The goal is not more AI features—it is less friction between ideation
-            and shipped output.
+            The point is not another chat window—it is a repeatable path from brief to asset,
+            with monetization and limits that match how you actually ship.
           </p>
           <ul className="mt-12 grid gap-5 md:grid-cols-3 md:gap-x-6 md:gap-y-6 md:[&>*:nth-child(2)]:translate-y-1.5 lg:gap-x-7 lg:gap-y-7">
             {benefitRows.map(({ title, body }) => (
@@ -285,13 +288,12 @@ export default function HomePage() {
             />
             <div className="relative max-w-2xl">
               <h2 className="text-2xl font-semibold tracking-[-0.022em] text-white/[0.97] md:text-[1.875rem] md:leading-snug">
-                Simple plans. Clear limits.
+                Plans that match how hard you ship
               </h2>
               <p className="mt-5 text-base font-normal leading-[1.62] text-white/56 md:mt-6 md:leading-[1.65] md:text-white/58">
-                Every account can try the Video Script Engine on Free (4 credits).
-                Starter adds clip + prompt automation; Pro adds story + full script
-                limits; Elite unlocks story-to-video. Pro includes a short paid
-                trial—see pricing.
+                Free proves the script engine (4 credits). Starter adds Clipper + Prompt Intelligence.
+                Pro unlocks Story Maker and full script volume. Elite adds Ad Studio—multi-variant,
+                scored creative and rendered vertical ads. Pro includes a short paid trial; details on pricing.
               </p>
               <div className="mt-8 flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
                 <a
@@ -320,11 +322,11 @@ export default function HomePage() {
         <div className="np-container relative">
           <div className="mx-auto max-w-2xl">
             <h2 className="text-balance text-2xl font-semibold tracking-[-0.022em] text-white/[0.97] md:text-[1.875rem] md:leading-snug">
-              Ready to tighten your content workflow?
+              Ready to run a tighter growth stack?
             </h2>
             <p className="mt-5 text-base font-normal leading-[1.62] text-white/56 md:mt-6 md:leading-[1.65] md:text-white/58">
-              Create a free account to run script generation, then upgrade when you
-              want the full automation stack.
+              Start free on the Video Script Engine, then graduate into clips, stories, and Elite Ad Studio
+              when your output—and revenue—depend on it.
             </p>
             <div className="mt-9 flex min-w-0 w-full max-w-full flex-col items-center justify-center gap-3 sm:mt-10 sm:flex-row sm:gap-3">
               <a

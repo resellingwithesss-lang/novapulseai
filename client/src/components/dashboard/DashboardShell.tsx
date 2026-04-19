@@ -74,15 +74,15 @@ export default function DashboardShell({
         {showCommandHero ? (
           <div className="max-w-2xl space-y-3">
             <h1 className="text-4xl font-semibold leading-[1.06] tracking-[-0.024em] text-white md:text-5xl">
-              <span className="text-white">Your Creator</span>
+              <span className="text-white">Your growth</span>
               <span className="block bg-gradient-to-r from-purple-300 to-fuchsia-300 bg-clip-text text-transparent">
-                Command Center
+                command center
               </span>
             </h1>
 
             <p className="text-base font-normal leading-relaxed text-white/58 md:text-lg md:leading-[1.65] md:text-white/60">
-              One operating system for ideation, scripting, repurposing, and publishing workflows.
-              Clear outputs, measurable progress, and less time lost to tool switching.
+              AI Ad Generator, scripts, clips, and stories in one pipeline — press go and get finished ads
+              without building a toolkit. Credits and plan gates stay visible as you work.
             </p>
           </div>
         ) : null}

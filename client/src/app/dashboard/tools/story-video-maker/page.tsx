@@ -1,7 +1,7 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import ToolPageShell from "@/components/tools/ToolPageShell"
 import ToolResultLayout from "@/components/tools/results/ToolResultLayout"
@@ -20,6 +20,7 @@ import {
   STUDIO_QUICK_PICK_MODE_IDS,
   VIDEO_PACKAGING_PRESETS,
 } from "@/lib/ad-studio-presets"
+import AdVariantIntelligencePanel from "@/components/ad-studio/AdVariantIntelligencePanel"
 
 const AdsResultPanel = dynamic(
   () => import("@/app/admin/ads/_components/AdsResultPanel"),
@@ -78,6 +79,11 @@ export default function StoryVideoMakerPage() {
     "" | "CONTENT_PACK" | "GENERATION" | "MANUAL"
   >("")
 
+  /** AI Video Ad = default hero layout; Script focus = variants + copy first, video in disclosure. */
+  const [adType, setAdType] = useState<"ai_video" | "script_only">("ai_video")
+  const videoOutputRef = useRef<HTMLDivElement | null>(null)
+  const eliteAds = Boolean(entitlement?.featureAccess.ads.allowed)
+
   useEffect(() => {
     const u = searchParams.get("siteUrl")
     if (u?.trim()) {
@@ -134,12 +140,24 @@ export default function StoryVideoMakerPage() {
     return "Completed"
   }
 
+  const friendlyStageFromProgress = (p: number) => {
+    if (p < 35) return "Writing your ad script…"
+    if (p < 55) return "Generating AI voiceover…"
+    return "Assembling your video ad…"
+  }
+
   const polling = useAdsJobPolling({
     storageKey: "vf:story-video-maker:job",
     normalizeOutputUrl: (url) => toAbsoluteMediaUrl(url),
     stageFromProgress,
     cancelPath: (jobId) => `/ads/${jobId}/cancel`,
   })
+
+  const workflowStep = useMemo(() => {
+    if (polling.state.videoUrl) return 3 as const
+    if (polling.state.loading) return 2 as const
+    return 1 as const
+  }, [polling.state.loading, polling.state.videoUrl])
 
   const canGenerate = !polling.state.loading && !blockedMessage
 
@@ -223,7 +241,7 @@ export default function StoryVideoMakerPage() {
     setRepeatUsageCount(usageCount)
     pushOutputHistory({
       tool: "story-video-maker",
-      title: "Story video generated",
+      title: "AI video ad generated",
       summary: polling.state.videoUrl,
       continuePath: "/dashboard/tools/clipper",
       nextAction: "Extract clips from this output for repurposing.",
@@ -238,15 +256,68 @@ export default function StoryVideoMakerPage() {
   return (
     <ToolPageShell
       toolId="story-video-maker"
-      title="Story Video Generator"
-      subtitle="Turn a live site into a platform-native ad cut — creative steering, honest caption packaging, and real TTS or music-only sound."
-      guidance="Strong pages have a clear headline, proof, and CTA. Jobs kicked off from Ad Studio use the same pipeline — expand Look, captions & sound when you want packaging, accent, and VO dialed in before you generate."
-      statusLabel={blockedMessage ?? (polling.state.loading ? "Rendering in progress" : "Ready to generate")}
+      title="AI Ad Generator"
+      subtitle="AI creates high-performing video ads for you — script, voiceover, on-screen visuals, and subtitles from a product URL. No filming or manual editing required."
+      guidance="Use a tight offer page: headline, proof, and CTA above the fold. Same Elite pipeline for both modes below — Script focus just surfaces angles and copy before the video."
+      statusLabel={
+        blockedMessage ??
+        (polling.state.loading ? "Generating your ad" : "Ready — press to generate")
+      }
       statusTone={blockedMessage || polling.state.loading ? "warning" : "success"}
-      ctaHref="/dashboard/tools/story-maker"
-      ctaLabel="Open Story Maker"
+      ctaHref="/dashboard"
+      ctaLabel="Back to dashboard"
     >
-      <div className="rounded-2xl border border-white/10 bg-[#111827] p-7 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+      <div
+        id="ad-studio-input"
+        className="rounded-2xl border border-white/10 bg-[#111827] p-7 shadow-[0_20px_60px_rgba(0,0,0,0.35)]"
+      >
+        <ol className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">
+          <li className={workflowStep === 1 ? "text-violet-200/95" : ""}>① Input</li>
+          <span aria-hidden className="text-white/20">
+            →
+          </span>
+          <li className={workflowStep === 2 ? "text-violet-200/95" : ""}>② Generating</li>
+          <span aria-hidden className="text-white/20">
+            →
+          </span>
+          <li className={workflowStep === 3 ? "text-violet-200/95" : ""}>③ Output</li>
+        </ol>
+
+        <div className="mb-6 rounded-xl border border-white/[0.07] bg-black/20 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-white/55">Ad type</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={polling.state.loading}
+              onClick={() => setAdType("ai_video")}
+              className={`rounded-full border px-4 py-2 text-xs font-semibold transition disabled:opacity-50 ${
+                adType === "ai_video"
+                  ? "border-violet-400/45 bg-violet-500/20 text-white"
+                  : "border-white/12 bg-white/[0.04] text-white/60 hover:border-white/20"
+              }`}
+            >
+              AI Video Ad
+            </button>
+            <button
+              type="button"
+              disabled={polling.state.loading}
+              onClick={() => setAdType("script_only")}
+              className={`rounded-full border px-4 py-2 text-xs font-semibold transition disabled:opacity-50 ${
+                adType === "script_only"
+                  ? "border-violet-400/45 bg-violet-500/20 text-white"
+                  : "border-white/12 bg-white/[0.04] text-white/60 hover:border-white/20"
+              }`}
+            >
+              Script focus
+            </button>
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-white/42">
+            Default <span className="text-white/55">AI Video Ad</span> puts the finished spot first.{" "}
+            <span className="text-white/55">Script focus</span> shows scored angles and copy first — the
+            same full auto-render is still produced.
+          </p>
+        </div>
+
         <div className="mb-5">
           <CreatorWorkflowSelectors
             workspaceOnly
@@ -270,7 +341,9 @@ export default function StoryVideoMakerPage() {
         )}
         <div className="grid gap-5 md:grid-cols-2">
           <div className="md:col-span-2">
-            <label className="mb-2 block text-xs uppercase tracking-wide text-white/60">Website URL</label>
+            <label className="mb-2 block text-xs uppercase tracking-wide text-white/60">
+              Product page URL
+            </label>
             <input
               type="text"
               placeholder="https://your-site.com"
@@ -384,6 +457,10 @@ export default function StoryVideoMakerPage() {
               <option value={1}>Top 1 variant</option>
               <option value={2}>Top 2 variants (compare)</option>
             </select>
+            <p className="mt-1.5 text-[11px] leading-relaxed text-white/42">
+              Elite can render two top-scored angles in one run for side-by-side tests. More variants and
+              scores mean faster creative decisions — core to high-performing AI ads.
+            </p>
           </div>
         </div>
 
@@ -543,7 +620,7 @@ export default function StoryVideoMakerPage() {
           disabled={!canGenerate}
           className="mt-6 w-full rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 py-3.5 text-sm font-semibold disabled:opacity-50"
         >
-          {polling.state.loading ? "Generating video..." : "Generate Story Video"}
+          {polling.state.loading ? "Generating your ad…" : "Generate my AI video ad"}
         </button>
         {polling.state.loading && (
           <button
@@ -569,28 +646,98 @@ export default function StoryVideoMakerPage() {
                 style={{ width: `${polling.state.progress}%` }}
               />
             </div>
-            <p className="mt-2 text-sm text-white/65">{polling.state.stageText} ({polling.state.progress}%)</p>
+            <p className="mt-2 text-sm text-white/80">
+              {friendlyStageFromProgress(polling.state.progress)}
+            </p>
+            <p className="mt-1 text-xs text-white/45">
+              {polling.state.stageText} · {polling.state.progress}%
+            </p>
           </div>
         )}
         {polling.state.error && <p className="mt-4 text-sm text-red-400">{polling.state.error}</p>}
         {repeatUsageCount >= 3 && (
           <p className="mt-3 text-sm text-purple-200">
-            Heavy Story Video usage detected. Elite is optimized for maximum output and automation loops.
+            Heavy AI Ad Generator usage — Elite is built for sustained auto-ad output and testing cadence.
           </p>
         )}
       </div>
 
       {polling.state.videoUrl && (
-        <AdsResultPanel videoUrl={polling.state.videoUrl} platform={platform} />
+        <>
+          {adType === "script_only" ? (
+            <>
+              <AdVariantIntelligencePanel
+                jobRecord={polling.state.jobRecord}
+                eliteAccess={eliteAds}
+                onUseVariant={() =>
+                  videoOutputRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
+              />
+              <details
+                className="group mt-8 rounded-2xl border border-white/10 bg-white/[0.03] open:border-white/[0.12]"
+                open
+              >
+                <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-white/85 outline-none marker:content-none [&::-webkit-details-marker]:hidden">
+                  Auto-generated video ad (download & share)
+                </summary>
+                <div
+                  ref={videoOutputRef}
+                  className="border-t border-white/10 px-4 pb-5 pt-3"
+                >
+                  <AdsResultPanel
+                    videoUrl={polling.state.videoUrl}
+                    platform={platform}
+                    extraActions={[
+                      {
+                        label: "Generate more variants",
+                        tone: "secondary",
+                        onClick: () =>
+                          document
+                            .getElementById("ad-studio-input")
+                            ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+                      },
+                    ]}
+                  />
+                </div>
+              </details>
+            </>
+          ) : (
+            <>
+              <div ref={videoOutputRef}>
+                <AdsResultPanel
+                  videoUrl={polling.state.videoUrl}
+                  platform={platform}
+                  extraActions={[
+                    {
+                      label: "Generate more variants",
+                      tone: "secondary",
+                      onClick: () =>
+                        document
+                          .getElementById("ad-studio-input")
+                          ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+                    },
+                  ]}
+                />
+              </div>
+              <AdVariantIntelligencePanel
+                jobRecord={polling.state.jobRecord}
+                eliteAccess={eliteAds}
+                onUseVariant={() =>
+                  videoOutputRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
+              />
+            </>
+          )}
+        </>
       )}
       {!polling.state.videoUrl && (
         <ToolResultLayout
-          title="Story Video Output"
+          title="AI ad output"
           state={polling.state.loading ? "loading" : polling.state.error ? "error" : "empty"}
           statusLabel={polling.state.loading ? "Rendering" : polling.state.error ? "Blocked" : "Waiting"}
-          loadingMessage={`${polling.state.stageText} (${polling.state.progress}%)`}
+          loadingMessage={`${friendlyStageFromProgress(polling.state.progress)} · ${polling.state.progress}%`}
           errorMessage={polling.state.error ?? undefined}
-          emptyMessage="No video generated yet. Submit a website URL and packaging settings to start."
+          emptyMessage="No AI ad yet. Add your product URL and generate — script, voiceover, edit, and captions are produced automatically."
           actions={
             polling.state.error
               ? [{ label: "Retry Generation", onClick: generate }]
@@ -610,22 +757,22 @@ export default function StoryVideoMakerPage() {
               : []
           }
           nextSteps={[
-            { label: "Generate Script", href: "/dashboard/tools/video" },
-            { label: "Open Clipper", href: "/dashboard/tools/clipper" },
-            { label: "Open Billing", href: "/dashboard/billing" },
+            { label: "Supporting scripts", href: "/dashboard/tools/video" },
+            { label: "Repurpose clips", href: "/dashboard/tools/clipper" },
+            { label: "Billing & plan", href: "/dashboard/billing" },
           ]}
         />
       )}
       <UpgradeModal
         open={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
-        message="You’ve reached a plan limit for this workflow."
+        message="AI Ad Generator is on Elite — upgrade to unlock auto video ads with voiceover and variants."
         currentPlan={entitlement?.normalizedPlan}
         requiredPlan={entitlement?.featureAccess.ads.minimumPlan ?? "ELITE"}
         benefits={[
-          "Full script-to-video automation",
-          "Elite-only production workflows",
-          "Higher monthly output capacity",
+          "Full AI video ads — no recording or editing on your side",
+          "Scored multi-variant scripts and optional dual renders",
+          "Higher monthly output for always-on ad testing",
         ]}
       />
     </ToolPageShell>
