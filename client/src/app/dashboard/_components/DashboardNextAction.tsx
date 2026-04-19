@@ -72,19 +72,19 @@ export default function DashboardNextAction({
     sub = "Free credits are spent — upgrade or wait for reset to keep shipping."
     href = "/pricing"
   } else if (!isFreePlan(plan) && planCap > 0 && creditPctUsed >= 85) {
-    title = "Protect your credit runway"
+    title = "You're close to running out — keep generating ads"
     sub =
-      "You have used most of this cycle's pool — open billing to change plan or pace Ad Studio and pack runs before you hit empty."
+      "Most of this cycle's credits are used. Open billing to add runway so AI Ad Studio and other tools don't stall mid-launch."
     href = "/dashboard/billing"
   } else if (plan === "STARTER" && workflow && workflow.counts.contentPacks > 0 && generationsCount > 0) {
-    title = "Move up to Pro for Story Maker"
+    title = "Unlock better-performing ads and more outputs"
     sub =
-      "You are already running packs and scripts — Pro unlocks narrative Story Maker and full script volume for weekly publishing."
+      "Pro adds Story Maker plus higher script volume — the bridge to weekly ad and content tests without hitting caps."
     href = "/dashboard/tools/story-maker"
   } else if (plan === "PRO" && generationsCount > 0) {
-    title = "Add Elite Ad Studio to your stack"
+    title = "Generate multiple high-performing ad variants"
     sub =
-      "You are already shipping scripts — upgrade to Elite for URL-to-ad renders, scored variants, and multi-output tests worth running paid traffic against."
+      "Elite unlocks AI Ad Studio: URL in, scored angles, AI voiceover, and rendered video ads — no filming or editing on your side."
     href = "/dashboard/tools/story-video-maker"
   } else if (generationsCount === 0) {
     title = "Generate your first script pack"

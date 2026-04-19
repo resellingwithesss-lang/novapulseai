@@ -4,16 +4,31 @@ import PremiumVideoPreview, {
   coerceAdsPlatform,
   platformToPreviewAspect,
 } from "@/components/media/PremiumVideoPreview"
-import ToolResultLayout from "@/components/tools/results/ToolResultLayout"
+import ToolResultLayout, {
+  type ToolResultAction,
+} from "@/components/tools/results/ToolResultLayout"
 import { downloadMediaBlob, filenameFromPublicPath } from "@/lib/mediaOrigin"
 
 type AdsResultPanelProps = {
   videoUrl: string
   /** When set, preview frame matches export aspect (TikTok / IG / YouTube). */
   platform?: string | null
+  /** Override hero title (default: ad-focused). */
+  title?: string
+  summary?: string
+  /** Appended after default Copy / Download / Open actions. */
+  extraActions?: ToolResultAction[]
+  nextSteps?: ToolResultAction[]
 }
 
-export default function AdsResultPanel({ videoUrl, platform }: AdsResultPanelProps) {
+export default function AdsResultPanel({
+  videoUrl,
+  platform,
+  title = "Your AI video ad is ready",
+  summary = "Playback matches your downloadable MP4 — AI voiceover, captions, and visuals from your URL. No filming required.",
+  extraActions = [],
+  nextSteps,
+}: AdsResultPanelProps) {
   const downloadName = (() => {
     try {
       const path = new URL(videoUrl).pathname
@@ -25,35 +40,39 @@ export default function AdsResultPanel({ videoUrl, platform }: AdsResultPanelPro
 
   const aspect = platformToPreviewAspect(coerceAdsPlatform(platform))
 
+  const baseActions: ToolResultAction[] = [
+    {
+      label: "Copy link",
+      onClick: () => {
+        void navigator.clipboard.writeText(videoUrl)
+      },
+    },
+    {
+      label: "Download MP4",
+      onClick: () => void downloadMediaBlob(videoUrl, downloadName),
+      tone: "secondary",
+    },
+    {
+      label: "Open",
+      href: videoUrl,
+      external: true,
+      tone: "ghost",
+    },
+  ]
+
   return (
     <ToolResultLayout
-      title="Ad render"
+      title={title}
       state="success"
       statusLabel="Ready"
-      summary="Playback is the same encoded master as your MP4 download — captions, cards, and mix match the job settings. In-browser letterboxing only reflects player layout, not a separate render."
-      actions={[
-        {
-          label: "Copy link",
-          onClick: () => {
-            void navigator.clipboard.writeText(videoUrl)
-          },
-        },
-        {
-          label: "Download MP4",
-          onClick: () => void downloadMediaBlob(videoUrl, downloadName),
-          tone: "secondary",
-        },
-        {
-          label: "Open",
-          href: videoUrl,
-          external: true,
-          tone: "ghost",
-        },
-      ]}
-      nextSteps={[
-        { label: "Video script", href: "/dashboard/tools/video" },
-        { label: "Clipper", href: "/dashboard/tools/clipper" },
-      ]}
+      summary={summary}
+      actions={[...baseActions, ...extraActions]}
+      nextSteps={
+        nextSteps ?? [
+          { label: "Generate another ad", href: "/dashboard/tools/story-video-maker" },
+          { label: "Dashboard", href: "/dashboard" },
+        ]
+      }
     >
       <PremiumVideoPreview
         src={videoUrl}

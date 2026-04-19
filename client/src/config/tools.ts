@@ -49,10 +49,10 @@ export const tools: ToolDefinition[] = [
   },
   {
     id: "story-video-maker",
-    title: "Ad Studio",
+    title: "AI Ad Generator",
     description:
-      "Elite: website URL → analyzed offer → scored multi-variant scripts → rendered vertical ads.",
-    outcome: "Downloadable ad creative with variants you can test",
+      "Elite: auto video ads from your URL — AI script, voiceover, visuals, subtitles, scored variants. No filming.",
+    outcome: "Ready-to-post MP4 plus angles you can iterate",
     path: "/dashboard/tools/story-video-maker",
     tier: "elite",
     category: "production",

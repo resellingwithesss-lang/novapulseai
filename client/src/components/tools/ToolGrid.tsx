@@ -28,6 +28,7 @@ const iconMap: Record<string, IconComponent> = {
   "Video Script Engine": Film,
   "Prompt Intelligence": Wand2,
   "Story Maker": Sparkles,
+  "AI Ad Generator": Rocket,
   "Ad Studio": Rocket,
   // Legacy title (older bundles / bookmarks)
   "Story Video Generator": Rocket,
@@ -186,8 +187,8 @@ export default function ToolGrid() {
                     "High-retention repurposing pipeline",
                   ],
                   "/dashboard/tools/story-video-maker": [
-                    "Elite Ad Studio: scored variants + rendered vertical ads",
-                    "Testable creative worth running paid traffic against",
+                    "AI Ad Generator: auto video ads — script, VO, visuals, captions",
+                    "Scored variants and dual renders for faster creative tests",
                   ],
                 }
                 setUpgradeModal({
