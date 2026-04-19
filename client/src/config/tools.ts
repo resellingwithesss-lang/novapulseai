@@ -20,8 +20,9 @@ export const tools: ToolDefinition[] = [
   {
     id: "video-script",
     title: "Video Script Engine",
-    description: "Generate scroll-stopping hooks, structured scripts, captions, and tags.",
-    outcome: "3 ready-to-publish script variations",
+    description:
+      "Turn a brief into hooks, full short-form scripts, captions, and tags—built to post, not to reread.",
+    outcome: "Pack of on-brand script variations ready for your next posts",
     path: "/dashboard/tools/video",
     tier: "free",
     category: "content",
@@ -29,8 +30,9 @@ export const tools: ToolDefinition[] = [
   {
     id: "prompt",
     title: "Prompt Intelligence",
-    description: "Build reusable prompt templates locally for your content workflow.",
-    outcome: "Structured prompt template ready to use in downstream tools",
+    description:
+      "Encode what works: reusable prompt frameworks you can hand to scripts, clips, and packs.",
+    outcome: "A prompt system you can reuse across the stack",
     path: "/dashboard/tools/prompt",
     tier: "starter",
     category: "content",
@@ -38,17 +40,19 @@ export const tools: ToolDefinition[] = [
   {
     id: "story-maker",
     title: "Story Maker",
-    description: "Turn raw ideas into structured story scripts with retention pacing.",
-    outcome: "Narrative-ready scripts with hooks and breakdown",
+    description:
+      "Shape ideas into retention-aware story scripts—hook, build, payoff, CTA—before you hit record.",
+    outcome: "Story-ready script with pacing notes you can shoot or adapt",
     path: "/dashboard/tools/story-maker",
     tier: "pro",
     category: "story",
   },
   {
     id: "story-video-maker",
-    title: "Story Video Generator",
-    description: "Generate conversion-focused ad videos from your website and offer.",
-    outcome: "Rendered ad video with downloadable output",
+    title: "Ad Studio",
+    description:
+      "Elite: website URL → analyzed offer → scored multi-variant scripts → rendered vertical ads.",
+    outcome: "Downloadable ad creative with variants you can test",
     path: "/dashboard/tools/story-video-maker",
     tier: "elite",
     category: "production",
@@ -56,8 +60,9 @@ export const tools: ToolDefinition[] = [
   {
     id: "clipper",
     title: "Clipper Engine",
-    description: "Extract and rank high-retention moments from long-form source videos.",
-    outcome: "Ranked short clips ready for repurposing",
+    description:
+      "Pull the highest-retention moments from long-form—ranked, titled, ready to cut and post.",
+    outcome: "Shortlist of clips worth your edit time",
     path: "/dashboard/tools/clipper",
     tier: "starter",
     category: "content",

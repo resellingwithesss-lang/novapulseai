@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { getPlanCredits, isFreePlan } from "@/lib/plans"
+import { getPlanCredits, isFreePlan, planDisplayName } from "@/lib/plans"
 import { useAuth } from "@/context/AuthContext"
 import { useEffectivePlan } from "@/hooks/useEffectivePlan"
 
@@ -21,11 +21,15 @@ export default function UsageBar() {
         : "from-emerald-500 to-teal-600"
 
   const message = useMemo(() => {
-    if (free && pct >= 75) return "Free credits almost gone — upgrade for full tools and monthly limits."
-    if (free) return "Free account: Video Script Engine only. Upgrade to unlock the full workflow."
-    if (pct >= 90) return "You are near your limit. Upgrade now to avoid interruptions."
-    if (pct >= 70) return "Usage is high this cycle. Plan ahead for uninterrupted output."
-    return "Usage is healthy."
+    if (free && pct >= 75)
+      return "Free credits are almost gone — move to Starter or Pro for monthly runway and the full stack."
+    if (free)
+      return "Free tier: Video Script Engine + starter credits. Upgrade when you want Clipper, prompts, Story Maker, or Ad Studio."
+    if (pct >= 90)
+      return "You are near this cycle's credit ceiling — upgrade or pace heavy jobs (especially Ad Studio renders) so launches don't stall."
+    if (pct >= 70)
+      return "Most of this cycle's credits are committed — plan your next packs or Elite renders before you hit the wall."
+    return "Credit runway looks healthy for this billing period."
   }, [pct, free])
 
   return (
@@ -35,7 +39,7 @@ export default function UsageBar() {
     >
       <div className="mb-2 flex items-center justify-between gap-3 text-xs text-white/65">
         <span data-testid="usage-summary">
-          {free ? "Free" : plan} usage: {used}/{total} credits ({pct}% used)
+          {free ? "Free" : planDisplayName(plan)} plan · {used}/{total} credits used ({pct}%)
         </span>
         {pct >= 70 && (
           <a

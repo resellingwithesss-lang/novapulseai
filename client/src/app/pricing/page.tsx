@@ -154,15 +154,15 @@ const PLAN_DISPLAY_CONFIG: Record<PaidTier, PlanConfig> = {
     credits: `${SHARED_PLAN_CONFIG.ELITE.credits.toLocaleString()} credits / month`,
     audience: "For power users & lean teams",
     subtitle:
-      "Maximum monthly credits plus Story Video Maker — when you’re running full video workflows, not one-off clips.",
+      "Maximum monthly credits plus Ad Studio — when you need URL-to-ad renders, scored variants, and volume-worthy creative.",
     creditsExplainer:
-      "Elite is built for volume: ads-quality video jobs, large packs, and the highest studio caps on the product.",
+      "Elite is built for volume: Ad Studio renders, large content packs, and the highest studio caps in the product.",
     featureGroups: [
       {
         heading: "Everything in Pro, plus",
         items: [
-          "Story Video Maker — end-to-end video generation track",
-          "Top monthly credit pool for sustained campaigns",
+          "Ad Studio (Elite) — scored multi-variant scripts → rendered vertical ads",
+          "Top monthly credit pool for sustained campaigns and tests",
         ],
       },
       {
@@ -423,7 +423,7 @@ export default function PricingPage() {
           <p className="np-text-body mx-auto mt-4 max-w-2xl sm:mt-5 sm:text-lg">
             Start free, graduate to Starter for automation,{" "}
             <span className="text-white/72">choose Pro when you need scripts + Story Maker</span>,{" "}
-            or Elite when you’re driving Story Video Maker at scale.
+            or Elite when Ad Studio and full creative volume are core to how you grow.
           </p>
 
           <div className="mt-7 flex justify-center sm:mt-9">

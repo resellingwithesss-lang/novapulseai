@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import type { ActivityAdJobRow } from "@/lib/activityApi"
-import { displayPlanForUser, isFreePlan } from "@/lib/plans"
+import { displayPlanForUser, getPlanCredits, isFreePlan } from "@/lib/plans"
 
 type AuthUser = {
   credits?: number
@@ -42,6 +42,9 @@ export default function DashboardNextAction({
 }) {
   const credits = user.credits ?? 0
   const plan = displayPlanForUser(user.plan, user.role)
+  const planCap = getPlanCredits(plan)
+  const creditPctUsed =
+    planCap > 0 ? Math.min(100, Math.round(((planCap - Math.max(0, credits)) / planCap) * 100)) : 0
   const inflight = adJobs.filter((j) => isJobInflight(j.status))
 
   let title = "Repurpose a win into clips"
@@ -68,6 +71,21 @@ export default function DashboardNextAction({
     title = "Unlock more generation"
     sub = "Free credits are spent — upgrade or wait for reset to keep shipping."
     href = "/pricing"
+  } else if (!isFreePlan(plan) && planCap > 0 && creditPctUsed >= 85) {
+    title = "Protect your credit runway"
+    sub =
+      "You have used most of this cycle's pool — open billing to change plan or pace Ad Studio and pack runs before you hit empty."
+    href = "/dashboard/billing"
+  } else if (plan === "STARTER" && workflow && workflow.counts.contentPacks > 0 && generationsCount > 0) {
+    title = "Move up to Pro for Story Maker"
+    sub =
+      "You are already running packs and scripts — Pro unlocks narrative Story Maker and full script volume for weekly publishing."
+    href = "/dashboard/tools/story-maker"
+  } else if (plan === "PRO" && generationsCount > 0) {
+    title = "Add Elite Ad Studio to your stack"
+    sub =
+      "You are already shipping scripts — upgrade to Elite for URL-to-ad renders, scored variants, and multi-output tests worth running paid traffic against."
+    href = "/dashboard/tools/story-video-maker"
   } else if (generationsCount === 0) {
     title = "Generate your first script pack"
     sub = "Goal-aware scripts in under a minute — best first step for new accounts."
