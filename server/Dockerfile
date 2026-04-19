@@ -105,28 +105,11 @@ ENV FFPROBE_PATH=/usr/bin/ffprobe
 # ---------------------------------------------------------------------------
 # YouTube operator cookies
 #
-# !!! TEMPORARY INSECURE PATTERN — active right now !!!
-#
-# The two lines below bake `server/cookies.txt` into the image at
-# `/data/yt-cookies.txt`. This is a short-term unblock for Railway deploys
-# where we do not have shell access to upload a file onto a Volume / Secret
-# mount. The cookies file contains live YouTube session auth tokens, so any
-# copy of this image or any layer cache is effectively an account credential.
-# MUST be replaced with a runtime mount (Railway Volume or Secret File) once
-# shell / volume provisioning is available. At that point:
-#   - delete the two lines below,
-#   - restore the `cookies.txt` exclusion in `server/.dockerignore`,
-#   - re-add `server/cookies.txt` to `.gitignore`,
-#   - switch `YT_DLP_COOKIES` to the mount path (e.g. `/data/yt-cookies.txt`
-#     still works — just populated from the volume instead of the image).
-#
-# Requires `server/cookies.txt` to be present in the Docker build context,
-# which on Railway means the file must be committed to git (see `.gitignore`
-# note). Build will FAIL if the file is missing — that is intentional for
-# this temporary pattern so a broken cookies wiring surfaces loudly.
+# Intentionally NOT baked into the image. Provide at runtime via a Railway
+# Volume or Secret File mount and point `YT_DLP_COOKIES` at the mount path
+# (e.g. `/data/yt-cookies.txt`). Baking cookies into the image treats every
+# cached layer as an account credential and is not acceptable.
 # ---------------------------------------------------------------------------
-COPY cookies.txt /data/yt-cookies.txt
-RUN chmod 600 /data/yt-cookies.txt
 
 COPY --from=build /app /app
 
