@@ -1,8 +1,14 @@
 import { Plan, Role } from "@prisma/client"
 import { normalizePlanTier, planRank } from "../modules/plans/plan.constants"
+import { isStaffRole } from "./roles"
 
+/**
+ * True when the role should be treated as staff for billing purposes (floored
+ * to ELITE regardless of Stripe state). Includes ADMIN, OWNER, and the
+ * deprecated SUPER_ADMIN. See `server/src/lib/roles.ts` for the canonical set.
+ */
 export function isStaffBillingExemptRole(role: Role | string | undefined | null): boolean {
-  return role === Role.SUPER_ADMIN || role === Role.ADMIN || role === "SUPER_ADMIN" || role === "ADMIN"
+  return isStaffRole(role)
 }
 
 /**

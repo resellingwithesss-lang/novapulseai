@@ -11,6 +11,7 @@ import {
   SettingsCard,
   SettingsPageHeader,
 } from "@/components/settings/SettingsSection"
+import ConsentSettingsCard from "@/components/marketing/ConsentSettingsCard"
 
 export default function PreferencesSettingsPage() {
   const [prefs, setPrefs] = useState<SettingsPreferences>({})
@@ -204,6 +205,8 @@ export default function PreferencesSettingsPage() {
               </li>
             </ul>
           </SettingsCard>
+
+          <ConsentSettingsCard />
         </>
       )}
     </div>

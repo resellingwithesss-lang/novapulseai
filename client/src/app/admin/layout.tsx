@@ -3,7 +3,14 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import AdminGate from "@/components/auth/AdminGate"
-import { LayoutDashboard, Megaphone, CreditCard, Repeat, Users } from "lucide-react"
+import {
+  LayoutDashboard,
+  Megaphone,
+  CreditCard,
+  Repeat,
+  Users,
+  Sparkles,
+} from "lucide-react"
 
 const navGroups: {
   label: string
@@ -22,6 +29,12 @@ const navGroups: {
     items: [
       { name: "Revenue", href: "/admin/revenue", icon: CreditCard },
       { name: "Subscriptions", href: "/admin/subscriptions", icon: Repeat },
+    ],
+  },
+  {
+    label: "Growth",
+    items: [
+      { name: "Marketing", href: "/admin/marketing", icon: Sparkles },
     ],
   },
   {

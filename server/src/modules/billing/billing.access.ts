@@ -1,5 +1,6 @@
 import type { Plan, SubscriptionStatus } from "@prisma/client"
 import { isStaffBillingExemptRole, staffEffectivePlanString } from "../../lib/staff-plan"
+import { isAdminOrAboveRole } from "../../lib/roles"
 import {
   type PlanTier,
   type ToolId,
@@ -150,7 +151,7 @@ function evaluateFeatureAccess(
   }
 ): FeatureAccessDecision {
   if (feature === "admin") {
-    if (options.role === "ADMIN" || options.role === "SUPER_ADMIN") {
+    if (isAdminOrAboveRole(options.role)) {
       return allowed()
     }
     return blocked("ADMIN_REQUIRED")

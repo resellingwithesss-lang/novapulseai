@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { LogOut, Menu, X } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 import { isPaidPlan, normalizePlan, planDisplayName } from "@/lib/plans"
+import { isAdminOrAboveRole } from "@/lib/roles"
 import StudioNavMenu from "@/components/navigation/StudioNavMenu"
 import UserAccountMenu from "@/components/navigation/UserAccountMenu"
 
@@ -364,7 +365,7 @@ export default function Navbar() {
               <MobileRow href="/pricing" onClick={closeMobile}>
                 Plans &amp; pricing
               </MobileRow>
-              {(user.role === "ADMIN" || user.role === "SUPER_ADMIN") && (
+              {isAdminOrAboveRole(user.role) && (
                 <MobileRow href="/admin" onClick={closeMobile}>
                   Admin
                 </MobileRow>

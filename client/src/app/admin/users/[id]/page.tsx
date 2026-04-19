@@ -223,7 +223,7 @@ export default function AdminUserDetailPage() {
   const softDelete = useCallback(async () => {
     if (!userId || !detail) return
     if (!isSuperAdmin) {
-      setActionError("Only SUPER_ADMIN can soft-delete accounts.")
+      setActionError("Only Owners can soft-delete accounts.")
       return
     }
     if (
@@ -399,7 +399,7 @@ export default function AdminUserDetailPage() {
               </div>
               {planValue === "ELITE" && !isSuperAdmin ? (
                 <p className="mt-2 text-xs text-amber-200/80">
-                  ELITE can only be assigned by SUPER_ADMIN.
+                  ELITE can only be assigned by Owners.
                 </p>
               ) : null}
             </div>
@@ -434,7 +434,7 @@ export default function AdminUserDetailPage() {
                   title={
                     isSuperAdmin
                       ? "Soft-delete this user"
-                      : "Only SUPER_ADMIN can soft-delete"
+                      : "Only Owners can soft-delete"
                   }
                 >
                   Soft delete

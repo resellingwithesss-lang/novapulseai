@@ -1,9 +1,14 @@
 import type { Plan, SubscriptionStatus } from "@prisma/client"
-import { EmailCampaignStatus, EmailLogType, Prisma } from "@prisma/client"
+import {
+  EmailCampaignStatus,
+  EmailLogType,
+  Prisma,
+} from "@prisma/client"
 import { prisma } from "./prisma"
 import { getPublicAppUrl } from "./email-env"
 import { marketingBroadcastWrapper } from "./email-templates"
 import { log, serializeErr } from "./logger"
+import { SENDABLE_MARKETING_STATUSES } from "./marketing-constants"
 
 export type AdminBroadcastFilter = {
   plan?: Plan
@@ -30,6 +35,7 @@ export async function expandAdminBroadcastAsync(campaignId: string): Promise<voi
       deletedAt: null,
       banned: false,
       marketingEmails: true,
+      marketingConsentStatus: { in: [...SENDABLE_MARKETING_STATUSES] },
     }
     if (filter.plan) where.plan = filter.plan
     if (filter.subscriptionStatus) {

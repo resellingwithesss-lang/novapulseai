@@ -12,6 +12,7 @@ import {
 } from "react"
 import { api, ApiError } from "@/lib/api"
 import { displayPlanForUser } from "@/lib/plans"
+import { isAdminOrAboveRole, isOwnerRole } from "@/lib/roles"
 import { getTrialUrgency } from "@/lib/growth"
 
 /* =====================================================
@@ -32,10 +33,30 @@ export type SubscriptionStatus =
   | "EXPIRED"
   | "PAUSED"
 
+/**
+ * Client-side Role union (Phase C-lite).
+ *
+ * Phase A added OWNER and CREATOR to the DB enum. Phase B will migrate rows
+ * (SUPER_ADMIN -> OWNER, active USER -> CREATOR). Until Phase B runs, no row
+ * holds OWNER / CREATOR, so the extra values here are inert in production.
+ *
+ * SUPER_ADMIN remains in the union during the transition so existing tokens
+ * and API responses keep type-checking; Phase E removes it from the enum and
+ * from this union in the same release.
+ */
 export type Role =
   | "USER"
+  | "CREATOR"
   | "ADMIN"
+  | "OWNER"
   | "SUPER_ADMIN"
+
+export type MarketingConsentStatus =
+  | "UNKNOWN"
+  | "OPTED_IN"
+  | "OPTED_OUT"
+  | "DISMISSED"
+  | "LEGACY_OPT_IN"
 
 export type User = {
   id: string
@@ -50,6 +71,11 @@ export type User = {
   trialExpiresAt: string | null
   createdAt: string
   updatedAt: string
+  /* Lifecycle marketing consent (Phase 1).
+     Read-only on the client; mutations go through /api/marketing/consent
+     which refreshUser() after a successful change. */
+  marketingConsentStatus?: MarketingConsentStatus
+  marketingDismissedAt?: string | null
 }
 
 /* =====================================================
@@ -77,10 +103,13 @@ type AuthContextType = {
   status: AuthStatus
   /** True after the first /auth/me attempt finishes (success, 401, or error). */
   hasResolvedSession: boolean
-  /** SUPER_ADMIN preview-as-user: operator context for banner + exit. */
+  /** Owner preview-as-user: operator context for banner + exit. */
   adminPreview: AdminPreviewSession
   isAuthenticated: boolean
   isAdmin: boolean
+  /** True for OWNER or the deprecated SUPER_ADMIN role. */
+  isOwner: boolean
+  /** @deprecated Use `isOwner`. Alias kept for backward compatibility; Phase C-full removes. */
   isSuperAdmin: boolean
   isTrial: boolean
   isFree: boolean
@@ -395,10 +424,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       hasResolvedSession,
       adminPreview,
       isAuthenticated: status === "authenticated",
-      isAdmin:
-        user?.role === "ADMIN" ||
-        user?.role === "SUPER_ADMIN",
-      isSuperAdmin: user?.role === "SUPER_ADMIN",
+      isAdmin: isAdminOrAboveRole(user?.role),
+      isOwner: isOwnerRole(user?.role),
+      isSuperAdmin: isOwnerRole(user?.role),
       isTrial:
         user?.subscriptionStatus === "TRIALING" &&
         displayPlanForUser(user?.plan, user?.role) === "PRO",

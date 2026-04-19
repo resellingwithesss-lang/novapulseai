@@ -157,6 +157,11 @@ function safeUser(user: any) {
     trialExpiresAt: user.trialExpiresAt,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
+    /* Lifecycle marketing consent (Phase 1). Never derived — always the DB value.
+       UI uses this to gate the ConsentBannerCard / BillingMarketingCard surfaces.
+       Transactional email is NOT affected by these fields. */
+    marketingConsentStatus: user.marketingConsentStatus ?? "UNKNOWN",
+    marketingDismissedAt: user.marketingDismissedAt ?? null,
   }
 }
 

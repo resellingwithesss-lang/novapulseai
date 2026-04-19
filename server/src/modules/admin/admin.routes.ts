@@ -6,7 +6,8 @@ import { findRootJobRow, readJobMetadata } from "../ads/ad-job-lineage"
 import { fail, ok } from "../../lib/http"
 import { resolveRequestId } from "../../lib/tool-response"
 import { requireAuth, AuthRequest } from "../auth/auth.middleware"
-import { requireAdmin, requireSuperAdmin } from "../auth/admin.middleware"
+import { requireAdmin, requireOwner } from "../auth/admin.middleware"
+import { isOwnerRole } from "../../lib/roles"
 import { setAuthTokenCookie, setImpRestoreCookie } from "../auth/http-cookies"
 import { signImpersonationJwt } from "../auth/jwt-signing"
 import { requireCsrfForCookieAuth } from "../../middlewares/csrf-protect"
@@ -31,6 +32,7 @@ import {
   CreditError,
 } from "../../lib/credits"
 import { recordAdminAudit } from "../../lib/admin-audit"
+import adminMarketingRouter from "./marketing/marketing.admin.routes"
 
 const router = Router()
 const adminSafeUserSelect = {
@@ -58,6 +60,14 @@ const emailBroadcastLimiter = rateLimit({
 router.use(requireAuth)
 router.use(requireAdmin)
 router.use(requireCsrfForCookieAuth)
+
+/* ===============================
+   SUB-ROUTERS
+   (mounted AFTER global middleware so each sub-router inherits
+   requireAuth + requireAdmin + requireCsrfForCookieAuth automatically).
+================================ */
+
+router.use("/marketing", adminMarketingRouter)
 
 /* ===============================
    DASHBOARD STATS
@@ -95,7 +105,7 @@ router.get("/dashboard", async (_req, res) => {
       }),
       prisma.user.count({
         where: {
-          role: { in: [Role.ADMIN, Role.SUPER_ADMIN] },
+          role: { in: [Role.ADMIN, Role.OWNER, Role.SUPER_ADMIN] },
           deletedAt: null,
         },
       }),
@@ -824,8 +834,8 @@ router.patch("/users/:id/plan", async (req: AuthRequest, res: Response) => {
     }
     const { plan, reason } = parsed.data
 
-    if (plan === Plan.ELITE && req.user.role !== Role.SUPER_ADMIN) {
-      return fail(res, 403, "Only SUPER_ADMIN can assign ELITE plan manually")
+    if (plan === Plan.ELITE && !isOwnerRole(req.user.role)) {
+      return fail(res, 403, "Only Owners can assign the ELITE plan manually")
     }
 
     const before = await prisma.user.findUnique({
@@ -965,8 +975,8 @@ router.patch("/users/:id/ban", async (req: AuthRequest, res) => {
       select: { role: true, banned: true },
     })
     if (!before) return fail(res, 404, "User not found")
-    if (before.role === Role.SUPER_ADMIN && banned) {
-      return fail(res, 403, "Cannot ban SUPER_ADMIN account")
+    if (isOwnerRole(before.role) && banned) {
+      return fail(res, 403, "Cannot ban Owner account")
     }
 
     const updated = await prisma.user.update({
@@ -1028,8 +1038,8 @@ router.delete("/users/:id", async (req: AuthRequest, res) => {
       return fail(res, 404, "User not found")
     }
 
-    if (targetUser.role === Role.SUPER_ADMIN) {
-      return fail(res, 403, "Cannot delete SUPER_ADMIN account")
+    if (isOwnerRole(targetUser.role)) {
+      return fail(res, 403, "Cannot delete Owner account")
     }
 
     await prisma.user.update({
@@ -1160,6 +1170,24 @@ router.get("/users/:id/credit-transactions", async (req: AuthRequest, res) => {
 
 router.post("/email/broadcast", emailBroadcastLimiter, async (req: AuthRequest, res) => {
   try {
+    // DEPRECATED: one-shot create+send is superseded by the two-step
+    // /api/admin/marketing/campaigns (DRAFT) + /send flow shipped in Phase 2.
+    // Kept working for back-compat with existing scripts / cron. The new flow
+    // adds template registry, segmentation, preview, test-send, and typed
+    // confirmation on large sends. This endpoint will be removed once callers
+    // are migrated.
+    console.warn(
+      "[deprecated] POST /api/admin/email/broadcast — migrate to /api/admin/marketing/campaigns",
+      {
+        requestId: req.requestId,
+        actorId: req.user?.id,
+      }
+    )
+    res.setHeader(
+      "Deprecation",
+      'true; note="use /api/admin/marketing/campaigns (Phase 2)"'
+    )
+
     const schema = z.object({
       name: z.string().min(1).max(160),
       subject: z.string().min(1).max(200),
@@ -1476,7 +1504,7 @@ const impersonationStartSchema = z.object({
 
 router.post(
   "/impersonation/start",
-  requireSuperAdmin,
+  requireOwner,
   async (req: AuthRequest, res: Response) => {
     const parsed = impersonationStartSchema.safeParse(req.body ?? {})
     if (!parsed.success) {
@@ -1502,8 +1530,8 @@ router.post(
     if (target.banned) {
       return fail(res, 403, "Cannot preview banned accounts")
     }
-    if (target.role === Role.SUPER_ADMIN) {
-      return fail(res, 403, "Cannot preview super admin accounts")
+    if (isOwnerRole(target.role)) {
+      return fail(res, 403, "Cannot preview Owner accounts")
     }
     if (target.id === req.user!.id) {
       return fail(res, 400, "Already signed in as this account")

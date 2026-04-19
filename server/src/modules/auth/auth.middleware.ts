@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from "express"
 import jwt, { JwtPayload as DefaultJwtPayload } from "jsonwebtoken"
 import { prisma } from "../../lib/prisma"
-import { Role, User } from "@prisma/client"
+import { User } from "@prisma/client"
 import { log } from "../../lib/logger"
+import { isOwnerRole } from "../../lib/roles"
 
 const MAX_JWT_CHARS = 12_000
 
@@ -14,7 +15,11 @@ function extractBearerToken(header: string | undefined): string | null {
 
 export interface AuthRequest extends Request {
   user?: User
-  /** Present when the session JWT was issued for SUPER_ADMIN preview-as-user. */
+  /**
+   * Present when the session JWT was issued for an Owner preview-as-user.
+   * Accepts both `OWNER` and the deprecated `SUPER_ADMIN` actor role; Phase B
+   * migrates the latter to the former.
+   */
   impersonation?: { impersonatorId: string }
 }
 
@@ -125,7 +130,7 @@ export async function requireAuth(
         !actor ||
         actor.deletedAt ||
         actor.banned ||
-        actor.role !== Role.SUPER_ADMIN ||
+        !isOwnerRole(actor.role) ||
         actor.tokenVersion === undefined
       ) {
         return unauthorized(res, req, "Invalid impersonation session")

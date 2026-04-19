@@ -19,6 +19,7 @@ import { log, serializeErr } from "./lib/logger";
 import { logYoutubeIngestStartupDiagnostics } from "./utils/youtube-ingest-prerequisites";
 import { configureFluentFfmpeg } from "./lib/ffmpeg-binaries";
 import { startEmailQueueWorker } from "./lib/email-outbound";
+import { startLifecycleEngine } from "./lib/lifecycle-engine";
 import { recoverPendingClipJobs } from "./modules/clip/clip.job.processor";
 
 /* =====================================================
@@ -148,6 +149,7 @@ async function start(): Promise<void> {
         const duration = Date.now() - startTime;
 
         startEmailQueueWorker();
+        startLifecycleEngine();
         void recoverPendingClipJobs().catch((err) => {
           log.error("clip_job_recovery_failed", serializeErr(err));
         });

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express"
 import rateLimit from "express-rate-limit"
 import { z } from "zod"
+import { AuditAction, MarketingConsentStatus, Prisma } from "@prisma/client"
 import { prisma } from "../../lib/prisma"
 import { fail, ok } from "../../lib/http"
 import { getPublicAppUrl } from "../../lib/email-env"
@@ -39,19 +40,61 @@ function unsubscribeSuccessHtml(): string {
 </html>`
 }
 
-async function unsubscribeByToken(token: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+async function unsubscribeByToken(
+  token: string,
+  source: "email_link" | "api"
+): Promise<{ ok: true } | { ok: false; reason: string }> {
   const trimmed = token.trim()
   if (trimmed.length < 8) return { ok: false, reason: "invalid_token" }
 
   const user = await prisma.user.findFirst({
     where: { marketingUnsubscribeToken: trimmed },
-    select: { id: true },
+    select: {
+      id: true,
+      marketingEmails: true,
+      marketingConsentStatus: true,
+      marketingConsentCapturedAt: true,
+    },
   })
   if (!user) return { ok: false, reason: "not_found" }
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { marketingEmails: false },
+  const now = new Date()
+  const alreadyOptedOut =
+    !user.marketingEmails &&
+    user.marketingConsentStatus === MarketingConsentStatus.OPTED_OUT
+
+  // Idempotent: repeated clicks on the same link do not write new rows but
+  // still return success so the UX reads "you're unsubscribed".
+  if (alreadyOptedOut) return { ok: true }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: user.id },
+      data: {
+        marketingEmails: false,
+        marketingConsentStatus: MarketingConsentStatus.OPTED_OUT,
+        marketingConsentSource: source,
+        marketingConsentUpdatedAt: now,
+        marketingConsentCapturedAt: user.marketingConsentCapturedAt ?? now,
+        marketingDismissedAt: null,
+      },
+    })
+
+    await tx.auditLog.create({
+      data: {
+        userId: user.id,
+        action: AuditAction.MARKETING_CONSENT_CHANGED,
+        metadata: {
+          action: "opt_out",
+          source,
+          previousStatus: user.marketingConsentStatus,
+          previousMarketingEmails: user.marketingEmails,
+          nextStatus: MarketingConsentStatus.OPTED_OUT,
+          nextMarketingEmails: false,
+          viaUnsubscribeToken: true,
+        } as Prisma.InputJsonValue,
+      },
+    })
   })
 
   return { ok: true }
@@ -60,7 +103,7 @@ async function unsubscribeByToken(token: string): Promise<{ ok: true } | { ok: f
 /** One-click from email clients (GET). */
 router.get("/unsubscribe", unsubscribeLimiter, async (req: Request, res: Response) => {
   const token = typeof req.query.token === "string" ? req.query.token : ""
-  const result = await unsubscribeByToken(token)
+  const result = await unsubscribeByToken(token, "email_link")
   if (!result.ok) {
     res.status(400).setHeader("Content-Type", "text/html; charset=utf-8")
     return res.send(
@@ -83,7 +126,7 @@ router.post("/unsubscribe", unsubscribeLimiter, async (req: Request, res: Respon
     return fail(res, 400, "Invalid request", { issues: parsed.error.flatten() })
   }
 
-  const result = await unsubscribeByToken(parsed.data.token)
+  const result = await unsubscribeByToken(parsed.data.token, "api")
   if (!result.ok) {
     return fail(res, 400, "Invalid or expired token")
   }

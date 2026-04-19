@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/context/AuthContext"
+import { isAdminOrAboveRole } from "@/lib/roles"
 
 export default function AdminHotkeyPanel() {
   const [open, setOpen] = useState(false)
@@ -53,7 +54,7 @@ export default function AdminHotkeyPanel() {
       return
     }
 
-    if (user.role !== "ADMIN" && user.role !== "SUPER_ADMIN") {
+    if (!isAdminOrAboveRole(user.role)) {
       alert("Admin access required.")
       return
     }

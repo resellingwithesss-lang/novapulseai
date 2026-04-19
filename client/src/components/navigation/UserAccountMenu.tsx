@@ -14,6 +14,7 @@ import {
   Sparkles,
 } from "lucide-react"
 import type { Role } from "@/context/AuthContext"
+import { isAdminOrAboveRole } from "@/lib/roles"
 
 type Props = {
   email: string
@@ -50,7 +51,7 @@ export default function UserAccountMenu({
   const btnRef = useRef<HTMLButtonElement>(null)
   const menuId = useId()
   const initials = useMemo(() => initialsFromEmail(email), [email])
-  const isAdmin = role === "ADMIN" || role === "SUPER_ADMIN"
+  const isAdmin = isAdminOrAboveRole(role)
 
   useEffect(() => {
     setOpen(false)

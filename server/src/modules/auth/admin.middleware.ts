@@ -1,10 +1,10 @@
 import { Response, NextFunction } from "express"
-import { Role } from "@prisma/client"
 import { AuthRequest } from "./auth.middleware"
+import { isAdminOrAboveRole, isOwnerRole } from "../../lib/roles"
 
 /**
- * Requires ADMIN or SUPER_ADMIN role.
- * Assumes requireAuth already validated DB user.
+ * Requires any admin-or-above role (ADMIN, OWNER, or deprecated SUPER_ADMIN).
+ * Assumes requireAuth already validated the DB user.
  */
 export function requireAdmin(
   req: AuthRequest,
@@ -18,7 +18,7 @@ export function requireAdmin(
     })
   }
 
-  if (req.user.role !== "ADMIN" && req.user.role !== "SUPER_ADMIN") {
+  if (!isAdminOrAboveRole(req.user.role)) {
     return res.status(403).json({
       success: false,
       message: "Admin access only",
@@ -29,9 +29,11 @@ export function requireAdmin(
 }
 
 /**
- * Requires SUPER_ADMIN. Used for preview-as-user and other high-risk operations.
+ * Requires OWNER (or deprecated SUPER_ADMIN, which Phase B migrates to OWNER).
+ * Used for preview-as-user and other high-risk operations that were previously
+ * gated on SUPER_ADMIN alone.
  */
-export function requireSuperAdmin(
+export function requireOwner(
   req: AuthRequest,
   res: Response,
   next: NextFunction
@@ -43,12 +45,20 @@ export function requireSuperAdmin(
     })
   }
 
-  if (req.user.role !== Role.SUPER_ADMIN) {
+  if (!isOwnerRole(req.user.role)) {
     return res.status(403).json({
       success: false,
-      message: "Super admin only",
+      message: "Owner access only",
     })
   }
 
   return next()
 }
+
+/**
+ * @deprecated Phase C-full will rewrite every import to `requireOwner`.
+ * Kept as an alias so existing imports keep compiling during the transition
+ * to OWNER. Accepts exactly the same roles as `requireOwner` — i.e. OWNER or
+ * the legacy SUPER_ADMIN value.
+ */
+export const requireSuperAdmin = requireOwner

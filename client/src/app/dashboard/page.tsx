@@ -19,6 +19,7 @@ import { ToolCard } from "./_components/DashboardCards"
 import CreatorOnboardingBanner from "./_components/CreatorOnboardingBanner"
 import WorkflowGoalTemplates from "./_components/WorkflowGoalTemplates"
 import DashboardNextAction from "./_components/DashboardNextAction"
+import ConsentBannerCard from "@/components/marketing/ConsentBannerCard"
 import { useWorkflowSummary } from "@/hooks/useWorkflowSummary"
 import {
   fetchBrandVoices,
@@ -133,6 +134,8 @@ export default function DashboardPage() {
           adJobs={adJobs}
           workflow={wfLoading ? null : wfData}
         />
+
+        <ConsentBannerCard />
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <ToolCard title="Video Script" href="/dashboard/tools/video" />

@@ -6,6 +6,7 @@ import {
 import { prisma } from "./prisma"
 import { isResendFailure, sendResendEmail } from "./email-resend"
 import { isEmailSystemConfigured } from "./email-env"
+import { SENDABLE_MARKETING_STATUS_SET } from "./marketing-constants"
 import {
   subscriptionUpdatedHtml,
   welcomeGoogleSignupHtml,
@@ -107,6 +108,7 @@ export async function processEmailQueueTick(): Promise<void> {
         id: true,
         email: true,
         marketingEmails: true,
+        marketingConsentStatus: true,
         deletedAt: true,
         banned: true,
       },
@@ -123,15 +125,29 @@ export async function processEmailQueueTick(): Promise<void> {
       continue
     }
 
-    if (job.kind === EmailLogType.MARKETING && !user.marketingEmails) {
-      await recordFailureAndDrop(job.id, job.userId, job.kind, job.subject, "MARKETING_OPT_OUT")
-      if (job.campaignId) {
-        await prisma.emailCampaign.update({
-          where: { id: job.campaignId },
-          data: { failedCount: { increment: 1 } },
-        })
+    if (job.kind === EmailLogType.MARKETING) {
+      // Invariant: never deliver MARKETING to a user who is not both
+      // `marketingEmails=true` AND in a sendable consent status. Protects
+      // against mid-flight consent changes and schema drift.
+      const sendable =
+        user.marketingEmails &&
+        SENDABLE_MARKETING_STATUS_SET.has(user.marketingConsentStatus)
+      if (!sendable) {
+        await recordFailureAndDrop(
+          job.id,
+          job.userId,
+          job.kind,
+          job.subject,
+          "MARKETING_OPT_OUT"
+        )
+        if (job.campaignId) {
+          await prisma.emailCampaign.update({
+            where: { id: job.campaignId },
+            data: { failedCount: { increment: 1 } },
+          })
+        }
+        continue
       }
-      continue
     }
 
     const result = await sendResendEmail({
@@ -176,6 +192,7 @@ export async function processEmailQueueTick(): Promise<void> {
       continue
     }
 
+    const sentAt = new Date()
     await prisma.$transaction([
       prisma.emailLog.create({
         data: {
@@ -188,7 +205,13 @@ export async function processEmailQueueTick(): Promise<void> {
       prisma.emailDelivery.delete({ where: { id: job.id } }),
       prisma.user.update({
         where: { id: job.userId },
-        data: { lastEmailSentAt: new Date() },
+        data:
+          job.kind === EmailLogType.MARKETING
+            ? {
+                lastEmailSentAt: sentAt,
+                lastMarketingEmailSentAt: sentAt,
+              }
+            : { lastEmailSentAt: sentAt },
       }),
     ])
 

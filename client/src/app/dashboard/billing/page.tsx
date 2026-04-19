@@ -12,6 +12,7 @@ import { BillingPageSkeleton } from "@/components/billing/BillingPageSkeleton"
 import { BillingPaymentPortalCard } from "@/components/billing/BillingPaymentPortalCard"
 import { BillingPlanCard } from "@/components/billing/BillingPlanCard"
 import { BillingPlansSection } from "@/components/billing/BillingPlansSection"
+import BillingMarketingCard from "@/components/marketing/BillingMarketingCard"
 import type { BillingInvoiceRow, BillingSubscription } from "@/components/billing/types"
 import DashboardShell from "@/components/dashboard/DashboardShell"
 import { useAuth } from "@/context/AuthContext"
@@ -353,6 +354,8 @@ export default function BillingPage() {
             {planNotice}
           </p>
         ) : null}
+
+        <BillingMarketingCard />
 
         <BillingPlansSection
           normalizedPlan={normalizedPlan}

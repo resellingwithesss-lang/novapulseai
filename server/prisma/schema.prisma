@@ -12,9 +12,27 @@ datasource db {
 // ENUMS
 ///////////////////////////////////////////////////////
 
+/// Authority / security-principal axis. Distinct from `Plan` (commercial
+/// entitlement) and from `PlanGrant` (sponsored/staff-floor access).
+///
+/// Phase A adds OWNER and CREATOR without retiring USER or SUPER_ADMIN:
+///   - no rows are migrated in this phase
+///   - no code reads from OWNER or CREATOR yet
+/// Phase B will:
+///   - remap SUPER_ADMIN rows to OWNER (1:1)
+///   - remap active USER rows to CREATOR (last active 180d OR has product
+///     activity via Usage/Generation/EmailDelivery/Workspace)
+///   - leave dormant/ghost accounts at USER as the new baseline
+/// SUPER_ADMIN is kept as a deprecated alias in code for one release cycle,
+/// then removed in Phase E.
 enum Role {
   USER
+  CREATOR
   ADMIN
+  OWNER
+  /// @deprecated Use OWNER. Preserved for a single release cycle to keep
+  /// existing code paths (`requireSuperAdmin`, `AuditAction.ADMIN_IMPERSONATION_*`)
+  /// working during the rename. Do not grant to new accounts.
   SUPER_ADMIN
 }
 
@@ -81,6 +99,30 @@ enum AuditAction {
   REFERRAL_COMMISSION_RECORDED
   ADMIN_IMPERSONATION_START
   ADMIN_IMPERSONATION_END
+  MARKETING_CONSENT_CHANGED
+  MARKETING_SUBSCRIBER_EXPORTED
+}
+
+/// Explicit lifecycle-marketing consent state. `LEGACY_OPT_IN` is a migration
+/// backfill for users created before explicit consent capture; the fan-out treats
+/// it as sendable until the user is re-prompted and answers explicitly.
+enum MarketingConsentStatus {
+  UNKNOWN
+  OPTED_IN
+  OPTED_OUT
+  DISMISSED
+  LEGACY_OPT_IN
+}
+
+/// Automated lifecycle email streams (fired by the engine, not by admins).
+/// Adding a value here requires a matching `lifecycle-triggers.ts` registration,
+/// a template in `marketing-templates.ts`, and a short migration.
+enum LifecycleTrigger {
+  CREDIT_EXHAUSTION_UPGRADE
+  TRIAL_ENDING_REMINDER
+  INACTIVE_USER_REACTIVATION
+  ELITE_FEATURE_PROMOTION
+  REFERRAL_PUSH
 }
 
 enum ReferralCommissionStatus {
@@ -139,9 +181,30 @@ model User {
   emailVerified Boolean @default(false)
 
   /// Product / broadcast email opt-in (separate from preferences.emailProductUpdates UI toggles).
-  marketingEmails           Boolean   @default(true)
+  /// New signups default to `false` and must opt in via the consent surfaces
+  /// (dashboard banner, settings, billing card). Historical users were backfilled
+  /// to LEGACY_OPT_IN by the 20260419_marketing_consent_foundation migration and
+  /// keep `marketingEmails=true` until they change it.
+  marketingEmails           Boolean   @default(false)
   marketingUnsubscribeToken String    @unique @default(uuid())
   lastEmailSentAt           DateTime?
+
+  /// Lifecycle marketing consent state. Fan-out only sends to OPTED_IN and
+  /// LEGACY_OPT_IN (and ONLY when marketingEmails=true). See MarketingConsentStatus.
+  marketingConsentStatus     MarketingConsentStatus @default(UNKNOWN)
+  /// Surface that captured the most recent explicit consent answer.
+  /// Known values: 'onboarding' | 'dashboard_banner' | 'billing_card' | 'settings'
+  ///              | 'signup' | 'unsubscribe' | 'email_link' | 'admin'.
+  marketingConsentSource     String?
+  /// First time the user gave an explicit answer (opt-in OR opt-out).
+  marketingConsentCapturedAt DateTime?
+  /// Every subsequent explicit change.
+  marketingConsentUpdatedAt  DateTime?
+  /// Temporary "not right now" dismissal; banner re-surfaces after a cool-down.
+  marketingDismissedAt       DateTime?
+  /// Separate from `lastEmailSentAt` (transactional+marketing) so ops can tell
+  /// whether a user received any marketing touch in the last N days.
+  lastMarketingEmailSentAt   DateTime?
 
   role Role @default(USER)
 
@@ -222,10 +285,20 @@ model User {
   emailLogs       EmailLog[]
   emailDeliveries EmailDelivery[]
   emailCampaigns  EmailCampaign[] @relation("EmailCampaignCreator")
+  lifecycleSends  LifecycleSend[]
+
+  /// Sponsored / staff / partner / make-good plan access. Read-only in Phase A
+  /// (no code branches on this yet). Phase C will wire it into
+  /// `getEffectiveEntitlements()`; until then this is pure audit substrate.
+  planGrants        PlanGrant[] @relation("PlanGrantRecipient")
+  planGrantsIssued  PlanGrant[] @relation("PlanGrantGranter")
+  planGrantsRevoked PlanGrant[] @relation("PlanGrantRevoker")
 
   @@unique([email, provider])
   @@index([email])
   @@index([referredByUserId])
+  @@index([marketingConsentStatus])
+  @@index([marketingEmails, marketingConsentStatus])
 }
 
 ///////////////////////////////////////////////////////
@@ -338,6 +411,117 @@ model EmailDelivery {
 
   @@index([status, createdAt])
   @@index([campaignId])
+}
+
+/// Reason code for a sponsored / off-Stripe plan grant. Kept as an enum so
+/// reporting and compliance queries ("how many COMP grants active right now?")
+/// stay machine-readable. Add new reasons here; never overload `OTHER` for
+/// things that deserve their own audit bucket.
+enum PlanGrantReason {
+  /// Active employee / contractor access.
+  STAFF
+  /// Strategic partner, investor, or advisory access.
+  PARTNER
+  /// Complimentary access for marketing, PR, creator collabs.
+  COMP
+  /// Time-boxed promotion (launches, events, PR pushes).
+  PROMO
+  /// Make-good for a billing bug / outage / support-resolved incident.
+  BUG_MAKEGOOD
+  /// Beta / preview access to a feature gated by plan.
+  BETA
+  /// Fall-through for cases that will be promoted to their own reason later.
+  OTHER
+}
+
+/// Sponsored / off-Stripe plan grant. **Stripe remains the single source of
+/// truth for billable subscription state** (`User.plan`, `subscriptionStatus`,
+/// `subscriptionStartedAt`, `trialExpiresAt`). PlanGrant is a parallel,
+/// time-bounded, auditable override used by `getEffectiveEntitlements()` to
+/// compute effective access without ever mutating Stripe-owned columns.
+///
+/// Resolution rule (Phase C, not yet active):
+///   effectivePlan = MAX(
+///     stripeDerivedPlan(user.plan, user.subscriptionStatus),
+///     highest-ranked active PlanGrant,
+///     staff-floor from role,
+///   )
+///
+/// Active = (startsAt <= now) AND (endsAt IS NULL OR endsAt > now) AND (revokedAt IS NULL).
+///
+/// Invariants:
+///   - never updated after create except via revoke (revokedAt + revokedByUserId);
+///     extensions create a new grant row
+///   - `grantedByUserId` must be a user whose role is OWNER at the time of create
+///     (enforced at the service layer — Prisma has no cross-row role constraint)
+///   - `plan` is the plan level granted, NOT a modifier on top of Stripe plan;
+///     `getEffectiveEntitlements` takes the MAX, it does not add
+model PlanGrant {
+  id     String @id @default(cuid())
+
+  userId String
+  user   User   @relation("PlanGrantRecipient", fields: [userId], references: [id], onDelete: Cascade)
+
+  plan   Plan
+  reason PlanGrantReason
+
+  /// Free-text justification captured at grant time (e.g. Linear ticket #, a
+  /// partner company name). Required for compliance reviewability; the enum
+  /// reason alone is not sufficient for a post-hoc audit.
+  note   String?
+
+  /// OWNER who issued the grant. FK intentionally — if the owner is deleted
+  /// we keep the grant (SetNull) because compliance needs the historical trail.
+  grantedByUserId String?
+  grantedBy       User?   @relation("PlanGrantGranter", fields: [grantedByUserId], references: [id], onDelete: SetNull)
+
+  /// Grant window. `endsAt` null = open-ended (STAFF floor, indefinite PARTNER).
+  startsAt DateTime  @default(now())
+  endsAt   DateTime?
+
+  /// Revocation is separate from expiry. A revoked grant was explicitly pulled
+  /// back (e.g. employee departed); an expired grant ran its natural course.
+  /// Distinguishing these matters for audit + analytics.
+  revokedAt       DateTime?
+  revokedByUserId String?
+  revokedBy       User?     @relation("PlanGrantRevoker", fields: [revokedByUserId], references: [id], onDelete: SetNull)
+  revokedReason   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Hot-path: "is this user entitled via any active grant right now?"
+  @@index([userId, revokedAt, endsAt])
+  /// Compliance reporting: "all currently active STAFF grants".
+  @@index([reason, revokedAt, endsAt])
+  /// Audit: "grants issued by a specific owner".
+  @@index([grantedByUserId])
+}
+
+/// Per-(user, trigger) record of an automated lifecycle send. The engine
+/// writes this row inside the same transaction that enqueues the EmailDelivery,
+/// so the row's existence is authoritative dedup for cooldown windows and the
+/// only source of truth for "did this user already receive this trigger".
+///
+/// Admin surfaces read this table to produce per-trigger observability; do
+/// NOT reuse EmailCampaign for lifecycle tracking — campaigns are finite
+/// admin-created artifacts, lifecycle streams are continuous.
+model LifecycleSend {
+  id       String           @id @default(cuid())
+  userId   String
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trigger  LifecycleTrigger
+  sentAt   DateTime         @default(now())
+  /// Soft link to the queued delivery row. Nullable because we keep the
+  /// LifecycleSend even if the EmailDelivery is later pruned.
+  emailDeliveryId String?
+  /// Small JSON payload capturing the values used to render the message
+  /// (credits remaining, trial days left, etc.) for audit + debugging.
+  metadata Json?
+
+  @@index([userId, trigger, sentAt])
+  @@index([trigger, sentAt])
+  @@index([sentAt])
 }
 
 ///////////////////////////////////////////////////////

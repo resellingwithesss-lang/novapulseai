@@ -1,3 +1,5 @@
+import { isStaffRole } from "./roles"
+
 export type UiPlan = "FREE" | "STARTER" | "PRO" | "ELITE"
 
 /** Stripe checkout / plan-change interval (shared across billing UI). */
@@ -122,13 +124,16 @@ export function normalizePlan(plan?: string | null): UiPlan {
   return "FREE"
 }
 
-/** Mirrors server staff floor: ADMIN / SUPER_ADMIN see at least ELITE in UI when DB row lags. */
+/**
+ * Mirrors server `staffFloorPlan`: ADMIN / OWNER / SUPER_ADMIN see at least
+ * ELITE in the UI when the DB row lags behind Stripe webhooks, or when a
+ * staff seat has no paid Stripe tier at all.
+ */
 export function displayPlanForUser(
   plan: string | null | undefined,
   role?: string | null
 ): UiPlan {
-  const r = String(role || "").toUpperCase()
-  if (r !== "ADMIN" && r !== "SUPER_ADMIN") return normalizePlan(plan)
+  if (!isStaffRole(role)) return normalizePlan(plan)
   const p = normalizePlan(plan)
   return planTierIndex(p) >= planTierIndex("ELITE") ? p : "ELITE"
 }
