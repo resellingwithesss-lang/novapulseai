@@ -13,8 +13,9 @@ clips
 generated
 .vscode
 .idea
-# NOTE: `cookies.txt` is intentionally NOT excluded here right now. It is
-# baked into the image at /data/yt-cookies.txt as a temporary Railway unblock
-# (see the cookies comment block in `server/Dockerfile`). Restore the
-# `cookies.txt` exclusion here once the deploy switches to a Railway Volume
-# or Secret File mount.
+
+# Local operator secrets — never enter the Docker build context. Cookies are
+# provided at runtime via a Railway Volume / Secret File mount (see
+# `server/Dockerfile` + `docs/YOUTUBE_CLIPPER_OPERATORS.md`).
+cookies.txt
+*.cookies

@@ -103,12 +103,10 @@ ENV YT_DLP_JS_RUNTIMES=deno:/usr/local/bin/deno,node:/usr/local/bin/node
 ENV FFMPEG_PATH=/usr/bin/ffmpeg
 ENV FFPROBE_PATH=/usr/bin/ffprobe
 # ---------------------------------------------------------------------------
-# YouTube operator cookies
-#
-# Intentionally NOT baked into the image. Provide at runtime via a Railway
-# Volume or Secret File mount and point `YT_DLP_COOKIES` at the mount path
-# (e.g. `/data/yt-cookies.txt`). Baking cookies into the image treats every
-# cached layer as an account credential and is not acceptable.
+# YouTube operator cookies are intentionally NOT baked into this image.
+# Provide them at runtime via a Railway Volume or Secret File mount and set
+# `YT_DLP_COOKIES` to the absolute path of the mounted file. See
+# `docs/YOUTUBE_CLIPPER_OPERATORS.md` for the operator runbook.
 # ---------------------------------------------------------------------------
 
 COPY --from=build /app /app

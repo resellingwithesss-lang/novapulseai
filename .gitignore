@@ -8,7 +8,8 @@ node_modules/
 !.env.example
 !**/.env.example
 
-# YouTube Netscape cookies for operator Docker bakes (server/Dockerfile → /app/cookies.txt)
+# YouTube operator Netscape cookies — never commit. Supplied at runtime via
+# a Railway Volume / Secret File mount (see docs/YOUTUBE_CLIPPER_OPERATORS.md).
 server/cookies.txt
 
 # --- Build & framework output ---
@@ -60,5 +61,3 @@ pnpm-debug.log*
 /New Text Document.txt
 /Untitled
 /cd
-
-server/cookies.txt
