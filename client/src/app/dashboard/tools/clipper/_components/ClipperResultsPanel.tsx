@@ -204,7 +204,7 @@ export default function ClipperResultsPanel({
       nextSteps={[
         { label: "Story Maker", href: "/dashboard/tools/story-maker" },
         { label: "Video Script", href: "/dashboard/tools/video" },
-        { label: "Story Video Maker", href: "/dashboard/tools/story-video-maker" },
+        { label: "AI Ad Generator", href: "/dashboard/tools/ai-ad-generator" },
       ]}
     >
       {jobSummary?.partial && (
@@ -217,8 +217,8 @@ export default function ClipperResultsPanel({
       )}
 
       <p className="mb-4 text-xs text-white/45">
-        Hand off timestamps and titles into Story Maker or Prompt Intelligence. Story Video uses website input, so this
-        handoff passes clip text as a creative brief only.
+        Hand off timestamps and titles into Story Maker or Prompt Intelligence. AI Ad Generator uses a product URL, so
+        this handoff passes clip text as a creative brief only.
       </p>
       {downloadError && (
         <div
@@ -263,7 +263,7 @@ export default function ClipperResultsPanel({
             topic: clip.summary || clip.title || `Clip ${clip.index + 1}`,
             contextId: contextId || undefined,
           })
-          const storyVideoHandoff = buildToolHandoffUrl("/dashboard/tools/story-video-maker", {
+          const storyVideoHandoff = buildToolHandoffUrl("/dashboard/tools/ai-ad-generator", {
             videoBrief:
               clip.summary ||
               clip.title ||

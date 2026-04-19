@@ -10,6 +10,8 @@ import {
   Repeat,
   Users,
   Sparkles,
+  Mail,
+  UserCircle,
 } from "lucide-react"
 
 const navGroups: {
@@ -34,12 +36,14 @@ const navGroups: {
   {
     label: "Growth",
     items: [
-      { name: "Marketing", href: "/admin/marketing", icon: Sparkles },
+      { name: "Marketing hub", href: "/admin/marketing", icon: Sparkles },
+      { name: "Campaigns", href: "/admin/marketing/campaigns", icon: Mail },
+      { name: "Subscribers", href: "/admin/marketing/subscribers", icon: UserCircle },
     ],
   },
   {
     label: "Production",
-    items: [{ name: "Ad Generator", href: "/admin/ads", icon: Megaphone }],
+    items: [{ name: "AI Ads Console", href: "/admin/ads", icon: Megaphone }],
   },
 ]
 

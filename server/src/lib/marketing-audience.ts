@@ -98,6 +98,20 @@ export function buildMarketingAudienceWhere(
   // Sendability (used by fan-out and by "campaign audience estimate").
   if (filter.sendableOnly) {
     where.marketingEmails = true
+  }
+
+  if (filter.consentStatus && filter.consentStatus.length > 0) {
+    const narrowed = filter.sendableOnly
+      ? filter.consentStatus.filter((s) =>
+          (SENDABLE_MARKETING_STATUSES as readonly MarketingConsentStatus[]).includes(s)
+        )
+      : filter.consentStatus
+    if (narrowed.length === 0) {
+      where.id = { in: [] }
+    } else {
+      where.marketingConsentStatus = { in: narrowed }
+    }
+  } else if (filter.sendableOnly) {
     where.marketingConsentStatus = { in: [...SENDABLE_MARKETING_STATUSES] }
   }
 
@@ -119,13 +133,6 @@ export function buildMarketingAudienceWhere(
 
   if (filter.role && filter.role.length > 0) {
     where.role = { in: filter.role }
-  }
-
-  if (filter.consentStatus && filter.consentStatus.length > 0) {
-    // If sendableOnly already set this, we narrow further; Prisma will AND.
-    where.marketingConsentStatus = where.marketingConsentStatus
-      ? { in: filter.consentStatus }
-      : { in: filter.consentStatus }
   }
 
   if (typeof filter.marketingEmails === "boolean") {

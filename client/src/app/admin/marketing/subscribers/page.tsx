@@ -5,12 +5,14 @@ import Link from "next/link"
 import { ApiError } from "@/lib/api"
 import type { MarketingConsentStatus } from "@/context/AuthContext"
 import {
+  fetchMarketingOverview,
   fetchMarketingSubscribers,
   marketingSubscribersCsvUrl,
   type AdminPlan,
   type AdminRole,
   type AdminSubscriptionStatus,
   type MarketingAudienceFilter,
+  type MarketingOverview,
   type MarketingSubscriber,
 } from "@/lib/adminMarketingApi"
 
@@ -68,6 +70,7 @@ export default function AdminMarketingSubscribersPage() {
   const [rows, setRows] = useState<MarketingSubscriber[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [overview, setOverview] = useState<MarketingOverview | null>(null)
 
   const filter = useMemo<MarketingAudienceFilter>(() => {
     const f: MarketingAudienceFilter = {}
@@ -119,6 +122,20 @@ export default function AdminMarketingSubscribersPage() {
     load()
   }, [load])
 
+  useEffect(() => {
+    let cancelled = false
+    void fetchMarketingOverview()
+      .then((o) => {
+        if (!cancelled) setOverview(o)
+      })
+      .catch(() => {
+        if (!cancelled) setOverview(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const csvHref = marketingSubscribersCsvUrl(filter)
 
@@ -137,12 +154,18 @@ export default function AdminMarketingSubscribersPage() {
             are audit-logged with a filter fingerprint.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/admin/marketing/campaigns"
+            className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_28px_-18px_rgba(124,58,237,0.9)] transition hover:bg-purple-500"
+          >
+            Campaigns
+          </Link>
           <Link
             href="/admin/marketing"
             className="inline-flex items-center gap-2 rounded-lg bg-white/[0.04] px-4 py-2 text-sm font-medium text-white/80 ring-1 ring-white/10 transition hover:bg-white/[0.08]"
           >
-            Back to overview
+            Overview
           </Link>
           <a
             href={csvHref}
@@ -152,6 +175,32 @@ export default function AdminMarketingSubscribersPage() {
           </a>
         </div>
       </header>
+
+      {overview ? (
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <SubscriberStat label="Total users" value={overview.totals.users} />
+          <SubscriberStat
+            label="Sendable (marketing)"
+            value={overview.totals.sendable}
+            accent="emerald"
+            hint="Opt-in + legacy, emails on"
+          />
+          <SubscriberStat label="Opted in" value={overview.totals.OPTED_IN} />
+          <SubscriberStat
+            label="Legacy opt-in"
+            value={overview.totals.LEGACY_OPT_IN}
+            hint="Pre-consent policy"
+          />
+          <SubscriberStat label="Opted out" value={overview.totals.OPTED_OUT} accent="rose" />
+          <SubscriberStat label="Unknown" value={overview.totals.UNKNOWN} />
+          <SubscriberStat label="Dismissed prompt" value={overview.totals.DISMISSED} />
+          <SubscriberStat
+            label="Opt-ins · 7d"
+            value={overview.deltas7d.optedIn}
+            accent="emerald"
+          />
+        </section>
+      ) : null}
 
       <section className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -313,6 +362,32 @@ export default function AdminMarketingSubscribersPage() {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function SubscriberStat({
+  label,
+  value,
+  accent,
+  hint,
+}: {
+  label: string
+  value: number
+  accent?: "emerald" | "rose"
+  hint?: string
+}) {
+  const tone =
+    accent === "emerald"
+      ? "text-emerald-300"
+      : accent === "rose"
+        ? "text-rose-300"
+        : "text-white"
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">{label}</p>
+      <p className={`mt-1 text-2xl font-semibold tabular-nums ${tone}`}>{value.toLocaleString()}</p>
+      {hint ? <p className="mt-1 text-[11px] text-white/40">{hint}</p> : null}
     </div>
   )
 }

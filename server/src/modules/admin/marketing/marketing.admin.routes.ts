@@ -44,8 +44,14 @@ import {
   isEngineEnabled,
   isTriggerEnabled,
 } from "../../../lib/lifecycle-triggers"
+import { expandAdminBroadcastAsync } from "../../../lib/email-broadcast"
+import { EDITORIAL_CAMPAIGN_TEMPLATES } from "../../../lib/editorial-campaign-templates"
 
 const router = Router()
+
+/** Matches dashboard / lifecycle “active” window for marketing breakdowns. */
+const AUDIENCE_ACTIVE_WINDOW_MS = 14 * 24 * 60 * 60 * 1000
+const PAID_PLANS: Plan[] = [Plan.STARTER, Plan.PRO, Plan.ELITE]
 
 /* ============================================================
    RATE LIMITS (export is expensive; keep it conservative)
@@ -54,6 +60,13 @@ const router = Router()
 const exportLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: Number(process.env.ADMIN_MARKETING_EXPORT_MAX_PER_HOUR ?? "12"),
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
+const campaignSendLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: Number(process.env.ADMIN_MARKETING_CAMPAIGN_SEND_MAX_PER_HOUR ?? "12"),
   standardHeaders: true,
   legacyHeaders: false,
 })
@@ -202,6 +215,7 @@ router.get("/overview", async (_req, res) => {
           failedCount: true,
           createdAt: true,
           sentAt: true,
+          scheduledSendAt: true,
         },
       }),
     ])
@@ -541,6 +555,301 @@ router.get("/lifecycle", async (_req, res) => {
   } catch (err) {
     console.error("ADMIN MARKETING LIFECYCLE ERROR:", err)
     return fail(res, 500, "Failed to load lifecycle status")
+  }
+})
+
+/* ============================================================
+   GET /api/admin/marketing/campaign-templates
+   Pre-built editorial HTML + subjects (merge-tag placeholders).
+============================================================ */
+
+router.get("/campaign-templates", (_req, res) => {
+  return ok(res, {
+    templates: EDITORIAL_CAMPAIGN_TEMPLATES.map((t) => ({
+      id: t.id,
+      name: t.name,
+      description: t.description,
+      subject: t.subject,
+      html: t.html,
+    })),
+  })
+})
+
+/* ============================================================
+   POST /api/admin/marketing/audience/estimate
+   Count sendable users for the same filter shape as bulk campaigns.
+============================================================ */
+
+router.post("/audience/estimate", async (req: AuthRequest, res: Response) => {
+  const parsed = marketingAudienceFilterSchema.safeParse(req.body ?? {})
+  if (!parsed.success) {
+    return fail(res, 400, "Invalid filter", { issues: parsed.error.flatten() })
+  }
+  try {
+    const filter: MarketingAudienceFilter = { ...parsed.data, sendableOnly: true }
+    const where = buildMarketingAudienceWhere(filter)
+    const now = new Date()
+    const activeSince = new Date(now.getTime() - AUDIENCE_ACTIVE_WINDOW_MS)
+    const [count, free, paid, active14d] = await Promise.all([
+      prisma.user.count({ where }),
+      prisma.user.count({
+        where: { AND: [where, { plan: Plan.FREE }] },
+      }),
+      prisma.user.count({
+        where: { AND: [where, { plan: { in: PAID_PLANS } }] },
+      }),
+      prisma.user.count({
+        where: { AND: [where, { lastActiveAt: { gte: activeSince } }] },
+      }),
+    ])
+    const inactive14d = Math.max(0, count - active14d)
+    return ok(res, {
+      count,
+      breakdown: {
+        free,
+        paid,
+        active14d,
+        inactive14d,
+        activeWindowDays: 14,
+      },
+      filter,
+    })
+  } catch (err) {
+    console.error("ADMIN MARKETING ESTIMATE ERROR:", err)
+    return fail(res, 500, "Failed to estimate audience")
+  }
+})
+
+/* ============================================================
+   GET /api/admin/marketing/campaigns
+============================================================ */
+
+const campaignsListQuery = z.object({
+  page: z.coerce.number().int().min(1).max(500).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(30),
+})
+
+router.get("/campaigns", async (req: AuthRequest, res: Response) => {
+  const parsed = campaignsListQuery.safeParse(req.query)
+  if (!parsed.success) {
+    return fail(res, 400, "Invalid pagination")
+  }
+  const { page, limit } = parsed.data
+  try {
+    const [rows, total] = await Promise.all([
+      prisma.emailCampaign.findMany({
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+        select: {
+          id: true,
+          name: true,
+          subject: true,
+          status: true,
+          filter: true,
+          queuedCount: true,
+          sentCount: true,
+          failedCount: true,
+          sentAt: true,
+          scheduledSendAt: true,
+          createdAt: true,
+          updatedAt: true,
+          createdBy: { select: { id: true, email: true } },
+        },
+      }),
+      prisma.emailCampaign.count(),
+    ])
+    return ok(res, {
+      page,
+      limit,
+      total,
+      campaigns: rows.map((c) => ({
+        ...c,
+        createdAt: c.createdAt.toISOString(),
+        updatedAt: c.updatedAt.toISOString(),
+        sentAt: c.sentAt?.toISOString() ?? null,
+        scheduledSendAt: c.scheduledSendAt?.toISOString() ?? null,
+      })),
+    })
+  } catch (err) {
+    console.error("ADMIN MARKETING CAMPAIGNS LIST ERROR:", err)
+    return fail(res, 500, "Failed to load campaigns")
+  }
+})
+
+/* ============================================================
+   POST /api/admin/marketing/campaigns
+   Create DRAFT campaign (does not send).
+============================================================ */
+
+const createCampaignSchema = z.object({
+  name: z.string().min(1).max(160),
+  subject: z.string().min(1).max(200),
+  htmlContent: z.string().min(1).max(600_000),
+  audienceFilter: marketingAudienceFilterSchema.optional(),
+})
+
+router.post("/campaigns", async (req: AuthRequest, res: Response) => {
+  const parsed = createCampaignSchema.safeParse(req.body ?? {})
+  if (!parsed.success) {
+    return fail(res, 400, "Invalid campaign", { issues: parsed.error.flatten() })
+  }
+  try {
+    const audience = parsed.data.audienceFilter
+      ? ({ ...parsed.data.audienceFilter, sendableOnly: true } satisfies MarketingAudienceFilter)
+      : ({ sendableOnly: true } satisfies MarketingAudienceFilter)
+
+    const campaign = await prisma.emailCampaign.create({
+      data: {
+        name: parsed.data.name,
+        subject: parsed.data.subject,
+        htmlContent: parsed.data.htmlContent,
+        status: EmailCampaignStatus.DRAFT,
+        filter: audience as object,
+        createdByUserId: req.user!.id,
+      },
+      select: {
+        id: true,
+        name: true,
+        subject: true,
+        status: true,
+        filter: true,
+        createdAt: true,
+      },
+    })
+    return ok(res, {
+      campaign: {
+        ...campaign,
+        createdAt: campaign.createdAt.toISOString(),
+      },
+    })
+  } catch (err) {
+    console.error("ADMIN MARKETING CAMPAIGN CREATE ERROR:", err)
+    return fail(res, 500, "Failed to create campaign")
+  }
+})
+
+/* ============================================================
+   POST /api/admin/marketing/campaigns/:id/send
+   Queue fan-out (async). DRAFT only.
+============================================================ */
+
+router.post(
+  "/campaigns/:id/send",
+  campaignSendLimiter,
+  async (req: AuthRequest, res: Response) => {
+    const id = req.params.id
+    if (!id) return fail(res, 400, "Missing campaign id")
+
+    try {
+      const campaign = await prisma.emailCampaign.findUnique({ where: { id } })
+      if (!campaign) return fail(res, 404, "Campaign not found")
+      if (campaign.status !== EmailCampaignStatus.DRAFT) {
+        return fail(res, 400, "Only draft campaigns can be sent immediately", {
+          status: campaign.status,
+        })
+      }
+
+      res.status(202).json({
+        success: true,
+        requestId: resolveRequestId(req),
+        campaignId: id,
+        message:
+          "Campaign queued. Recipients are expanded in the background; delivery runs via the email worker.",
+      })
+
+      void expandAdminBroadcastAsync(id)
+    } catch (err) {
+      console.error("ADMIN MARKETING CAMPAIGN SEND ERROR:", err)
+      if (!res.headersSent) {
+        return fail(res, 500, "Failed to queue campaign")
+      }
+    }
+  }
+)
+
+const scheduleCampaignSchema = z.object({
+  scheduledSendAt: z.coerce.date(),
+})
+
+router.post(
+  "/campaigns/:id/schedule",
+  campaignSendLimiter,
+  async (req: AuthRequest, res: Response) => {
+    const id = req.params.id
+    if (!id) return fail(res, 400, "Missing campaign id")
+
+    const parsed = scheduleCampaignSchema.safeParse(req.body ?? {})
+    if (!parsed.success) {
+      return fail(res, 400, "Invalid schedule payload", {
+        issues: parsed.error.flatten(),
+      })
+    }
+
+    const when = parsed.data.scheduledSendAt
+    const minLead = 60_000
+    if (when.getTime() <= Date.now() + minLead) {
+      return fail(res, 400, "scheduledSendAt must be at least ~1 minute in the future")
+    }
+
+    try {
+      const updated = await prisma.emailCampaign.updateMany({
+        where: { id, status: EmailCampaignStatus.DRAFT },
+        data: {
+          status: EmailCampaignStatus.SCHEDULED,
+          scheduledSendAt: when,
+        },
+      })
+      if (updated.count === 0) {
+        const exists = await prisma.emailCampaign.findUnique({
+          where: { id },
+          select: { status: true },
+        })
+        if (!exists) return fail(res, 404, "Campaign not found")
+        return fail(res, 400, "Only draft campaigns can be scheduled", {
+          status: exists.status,
+        })
+      }
+
+      return ok(res, {
+        campaignId: id,
+        status: EmailCampaignStatus.SCHEDULED,
+        scheduledSendAt: when.toISOString(),
+      })
+    } catch (err) {
+      console.error("ADMIN MARKETING CAMPAIGN SCHEDULE ERROR:", err)
+      return fail(res, 500, "Failed to schedule campaign")
+    }
+  }
+)
+
+router.post("/campaigns/:id/unschedule", async (req: AuthRequest, res: Response) => {
+  const id = req.params.id
+  if (!id) return fail(res, 400, "Missing campaign id")
+
+  try {
+    const updated = await prisma.emailCampaign.updateMany({
+      where: { id, status: EmailCampaignStatus.SCHEDULED },
+      data: {
+        status: EmailCampaignStatus.DRAFT,
+        scheduledSendAt: null,
+      },
+    })
+    if (updated.count === 0) {
+      const exists = await prisma.emailCampaign.findUnique({
+        where: { id },
+        select: { status: true },
+      })
+      if (!exists) return fail(res, 404, "Campaign not found")
+      return fail(res, 400, "Only scheduled campaigns can be unscheduled", {
+        status: exists.status,
+      })
+    }
+
+    return ok(res, { campaignId: id, status: EmailCampaignStatus.DRAFT })
+  } catch (err) {
+    console.error("ADMIN MARKETING CAMPAIGN UNSCHEDULE ERROR:", err)
+    return fail(res, 500, "Failed to unschedule campaign")
   }
 })
 

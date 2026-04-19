@@ -224,12 +224,23 @@ export default function AdsPage() {
   return (
     <div className="min-h-screen bg-[#0B0F19] px-6 py-12 text-white">
       <div className="mx-auto max-w-3xl space-y-10">
-        <header className="space-y-2">
-          <h1 className="text-4xl font-semibold tracking-tight text-white">AI Ad Studio</h1>
+        <header className="space-y-3">
+          <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] px-5 py-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-200/85">
+              Internal · AI Ads Operator Console
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-white/65">
+              Full pipeline controls, fast preview, packaging, dual renders, diagnostics, and review. The
+              customer-facing tool is{" "}
+              <span className="text-white/85">Dashboard → AI Ad Generator</span>{" "}
+              <span className="text-white/55">(/dashboard/tools/ai-ad-generator)</span>.
+            </p>
+          </div>
+          <h1 className="text-4xl font-semibold tracking-tight text-white">AI Ads Operator Console</h1>
           <p className="text-sm leading-relaxed text-white/55">
-            Drop in a URL, steer creative + caption packaging, generate. Open{" "}
-            <span className="text-white/75">Advanced</span> for capture tuning, dual variants, fast preview, or
-            operator handoff notes.
+            Drop in a URL, steer creative and caption packaging, then generate. Use{" "}
+            <span className="text-white/75">Advanced</span> for capture tuning, render count, fast preview,
+            and operator handoff notes — not exposed to end creators.
           </p>
         </header>
 

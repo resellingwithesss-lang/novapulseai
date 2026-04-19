@@ -20,7 +20,7 @@ const TEMPLATES: Array<{
   {
     label: "UGC site promo",
     sub: "URL → video ad",
-    href: "/dashboard/tools/story-video-maker",
+    href: "/dashboard/tools/ai-ad-generator",
   },
   {
     label: "Clip batch",

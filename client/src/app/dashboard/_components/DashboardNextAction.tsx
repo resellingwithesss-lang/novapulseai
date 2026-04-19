@@ -85,7 +85,7 @@ export default function DashboardNextAction({
     title = "Generate multiple high-performing ad variants"
     sub =
       "Elite unlocks AI Ad Studio: URL in, scored angles, AI voiceover, and rendered video ads — no filming or editing on your side."
-    href = "/dashboard/tools/story-video-maker"
+    href = "/dashboard/tools/ai-ad-generator"
   } else if (generationsCount === 0) {
     title = "Generate your first script pack"
     sub = "Goal-aware scripts in under a minute — best first step for new accounts."

@@ -399,7 +399,7 @@ export default function ContentLibraryPage() {
                         video script
                       </Link>{" "}
                       or{" "}
-                      <Link href="/dashboard/tools/story-video-maker" className="text-emerald-300/90 underline">
+                      <Link href="/dashboard/tools/ai-ad-generator" className="text-emerald-300/90 underline">
                         story video
                       </Link>
                       .
@@ -521,7 +521,7 @@ export default function ContentLibraryPage() {
                               </a>
                             ) : null}
                             <Link
-                              href="/dashboard/tools/story-video-maker"
+                              href="/dashboard/tools/ai-ad-generator"
                               className="text-xs text-white/50 underline hover:text-white/75"
                             >
                               New render

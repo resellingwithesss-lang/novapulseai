@@ -86,20 +86,26 @@ export default function AdminMarketingOverviewPage() {
             NovaPulseAI · Growth
           </p>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">
-            Lifecycle marketing
+            Growth & marketing
           </h1>
           <p className="mt-2 max-w-xl text-sm text-white/60">
-            Creator-growth club health, consent posture, and recent campaign
-            performance. Every send here is gated behind explicit consent —
-            transactional email is never routed through this console.
+            Consent-safe bulk campaigns, subscriber intelligence, and automated lifecycle
+            streams. Transactional email (password resets, receipts) never flows through
+            campaign fan-out.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/admin/marketing/campaigns"
+            className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_28px_-18px_rgba(124,58,237,0.9)] transition hover:bg-purple-500"
+          >
+            New campaign
+          </Link>
           <Link
             href="/admin/marketing/subscribers"
             className="inline-flex items-center gap-2 rounded-lg bg-white/[0.06] px-4 py-2 text-sm font-medium text-white/90 ring-1 ring-white/10 transition hover:bg-white/[0.1]"
           >
-            Manage subscribers
+            Subscribers
           </Link>
         </div>
       </header>
@@ -245,6 +251,11 @@ export default function AdminMarketingOverviewPage() {
             </tbody>
           </table>
         </div>
+        <p className="mt-3 text-xs leading-relaxed text-white/45">
+          Automated streams use templates in <code className="text-white/55">server/src/lib/marketing-templates.ts</code>{" "}
+          (subjects + HTML). Cooldowns and consent checks stay in the lifecycle engine — this table is read-only
+          telemetry.
+        </p>
         {lifecycle && lifecycle.recentSends.length > 0 ? (
           <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
             <p className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">
@@ -280,9 +291,12 @@ export default function AdminMarketingOverviewPage() {
           <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-white/50">
             Recent campaigns
           </h2>
-          <span className="text-xs text-white/40">
-            Manual campaign builder lands in Phase 5.
-          </span>
+          <Link
+            href="/admin/marketing/campaigns"
+            className="text-xs font-semibold text-purple-200 hover:text-white"
+          >
+            Open campaign builder →
+          </Link>
         </div>
         <div className="mt-4 overflow-hidden rounded-xl border border-white/10">
           <table className="min-w-full text-left text-sm">
@@ -294,13 +308,14 @@ export default function AdminMarketingOverviewPage() {
                 <th className="px-4 py-3 text-right">Queued</th>
                 <th className="px-4 py-3 text-right">Sent</th>
                 <th className="px-4 py-3 text-right">Failed</th>
+                <th className="px-4 py-3">Scheduled</th>
                 <th className="px-4 py-3">Created</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-white/40">
+                  <td colSpan={8} className="px-4 py-8 text-center text-white/40">
                     Loading…
                   </td>
                 </tr>
@@ -311,6 +326,11 @@ export default function AdminMarketingOverviewPage() {
                     <td className="px-4 py-3 text-white/70">{c.subject}</td>
                     <td className="px-4 py-3">
                       <StatusPill status={c.status} />
+                    </td>
+                    <td className="px-4 py-3 text-xs text-white/55">
+                      {c.scheduledSendAt
+                        ? new Date(c.scheduledSendAt).toLocaleString()
+                        : "—"}
                     </td>
                     <td className="px-4 py-3 text-right text-white/70">
                       {c.queuedCount}
@@ -329,7 +349,7 @@ export default function AdminMarketingOverviewPage() {
               ) : (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-4 py-10 text-center text-sm text-white/50"
                   >
                     No campaigns yet. Subscriber capture is already live across
@@ -380,6 +400,7 @@ function KpiCard({
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, string> = {
     DRAFT: "bg-white/10 text-white/70",
+    SCHEDULED: "bg-violet-500/15 text-violet-200",
     QUEUED: "bg-amber-500/15 text-amber-200",
     SENDING: "bg-blue-500/15 text-blue-200",
     COMPLETED: "bg-emerald-500/15 text-emerald-200",

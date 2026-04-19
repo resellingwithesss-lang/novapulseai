@@ -161,8 +161,8 @@ const PLAN_DISPLAY_CONFIG: Record<PaidTier, PlanConfig> = {
       {
         heading: "Everything in Pro, plus",
         items: [
-          "Ad Studio (Elite) — scored multi-variant scripts → rendered vertical ads",
-          "Top monthly credit pool for sustained campaigns and tests",
+          "Ad Studio (Elite) — more variants per run → faster creative learning in paid social",
+          "Top monthly credit pool for sustained campaigns and higher-ROI output volume",
         ],
       },
       {

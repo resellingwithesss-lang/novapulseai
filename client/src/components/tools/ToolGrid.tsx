@@ -55,7 +55,7 @@ export default function ToolGrid() {
         "/dashboard/tools/prompt": entitlement.featureAccess.prompt.allowed,
         "/dashboard/tools/story-maker": entitlement.featureAccess.storyMaker.allowed,
         "/dashboard/tools/clipper": entitlement.featureAccess.clip.allowed,
-        "/dashboard/tools/story-video-maker": entitlement.featureAccess.ads.allowed,
+        "/dashboard/tools/ai-ad-generator": entitlement.featureAccess.ads.allowed,
       }
       if (path in featureMap) return featureMap[path]
       return planAllowsTool(entitlement.normalizedPlan, toolId)
@@ -110,7 +110,7 @@ export default function ToolGrid() {
           entitlement.featureAccess.clip.blockedReason,
           entitlement.featureAccess.clip.minimumPlan
         ),
-      "/dashboard/tools/story-video-maker":
+      "/dashboard/tools/ai-ad-generator":
         formatBlockedReason(
           entitlement.featureAccess.ads.blockedReason,
           entitlement.featureAccess.ads.minimumPlan
@@ -134,7 +134,7 @@ export default function ToolGrid() {
       "/dashboard/tools/prompt": entitlement.featureAccess.prompt.minimumPlan,
       "/dashboard/tools/story-maker": entitlement.featureAccess.storyMaker.minimumPlan,
       "/dashboard/tools/clipper": entitlement.featureAccess.clip.minimumPlan,
-      "/dashboard/tools/story-video-maker": entitlement.featureAccess.ads.minimumPlan,
+      "/dashboard/tools/ai-ad-generator": entitlement.featureAccess.ads.minimumPlan,
     }
     return path in planMap ? planMap[path] : null
   }
@@ -186,7 +186,7 @@ export default function ToolGrid() {
                     "Access clipping workflows",
                     "High-retention repurposing pipeline",
                   ],
-                  "/dashboard/tools/story-video-maker": [
+                  "/dashboard/tools/ai-ad-generator": [
                     "AI Ad Generator: auto video ads — script, VO, visuals, captions",
                     "Scored variants and dual renders for faster creative tests",
                   ],

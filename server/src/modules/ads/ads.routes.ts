@@ -1381,6 +1381,15 @@ router.post(
       })
     }
 
+    if (parsed.data.previewMode === "fast" && !isAdminOrAboveRole(req.user.role)) {
+      return toolFail(res, 403, "Fast preview is restricted to operator accounts.", {
+        requestId,
+        stage: "validate",
+        status: "failed",
+        code: "FORBIDDEN",
+      })
+    }
+
     const billingUser = await prisma.user.findUnique({
       where: { id: req.user.id },
       select: {

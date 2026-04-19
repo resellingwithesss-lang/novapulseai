@@ -13,6 +13,7 @@ import {
   welcomeLocalSignupHtml,
 } from "./email-templates"
 import { log, serializeErr } from "./logger"
+import { processScheduledCampaignsTick } from "./email-broadcast"
 
 const MAX_SEND_ATTEMPTS = 5
 const BATCH_SIZE = 12
@@ -259,6 +260,9 @@ export function startEmailQueueWorker(): void {
   setInterval(() => {
     void processEmailQueueTick().catch((err) => {
       log.error("email_queue_tick_failed", serializeErr(err))
+    })
+    void processScheduledCampaignsTick().catch((err) => {
+      log.error("scheduled_campaign_tick_failed", serializeErr(err))
     })
   }, pollMs)
 

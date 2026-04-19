@@ -155,6 +155,7 @@ function safeUser(user: any) {
     subscriptionStatus: user.subscriptionStatus,
     credits: user.credits,
     trialExpiresAt: user.trialExpiresAt,
+    lastActiveAt: user.lastActiveAt ?? null,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
     /* Lifecycle marketing consent (Phase 1). Never derived — always the DB value.

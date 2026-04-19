@@ -267,7 +267,7 @@ export default function ContentPackDetailClient({ id }: { id: string }) {
                     </span>
                   </Link>
                   <Link
-                    href={buildToolHandoffUrl("/dashboard/tools/story-video-maker", {
+                    href={buildToolHandoffUrl("/dashboard/tools/ai-ad-generator", {
                       videoBrief: clampText(pack.topic, BRIEF_MAX),
                       workspaceId: pack.workspaceId || undefined,
                       sourceContentPackId: pack.id,
@@ -392,7 +392,7 @@ export default function ContentPackDetailClient({ id }: { id: string }) {
                     },
                     {
                       label: "Story video brief",
-                      href: buildToolHandoffUrl("/dashboard/tools/story-video-maker", {
+                      href: buildToolHandoffUrl("/dashboard/tools/ai-ad-generator", {
                         videoBrief: clampText(line, BRIEF_MAX),
                         workspaceId: pack.workspaceId || undefined,
                         sourceContentPackId: pack.id,

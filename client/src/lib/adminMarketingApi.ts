@@ -47,6 +47,7 @@ export type MarketingAudienceFilter = {
   minLifetimeCreditsUsed?: number
   neverUpgraded?: boolean
   referredByUserId?: string
+  /** When true, only users who may receive marketing email (consent + flag). */
   sendableOnly?: boolean
 }
 
@@ -94,6 +95,7 @@ export type MarketingOverview = {
     failedCount: number
     createdAt: string
     sentAt: string | null
+    scheduledSendAt?: string | null
   }>
 }
 
@@ -208,4 +210,121 @@ export function marketingSubscribersCsvUrl(
   filter: MarketingAudienceFilter
 ): string {
   return `/api/admin/marketing/subscribers/export.csv?q=${encodeFilter(filter)}`
+}
+
+/* ============================================================
+   CAMPAIGNS (bulk marketing — consent-safe fan-out)
+============================================================ */
+
+export type EditorialCampaignTemplateDto = {
+  id: string
+  name: string
+  description: string
+  subject: string
+  html: string
+}
+
+export type EmailCampaignRow = {
+  id: string
+  name: string
+  subject: string
+  status: string
+  filter: unknown
+  queuedCount: number
+  sentCount: number
+  failedCount: number
+  sentAt: string | null
+  scheduledSendAt: string | null
+  createdAt: string
+  updatedAt: string
+  createdBy: { id: string; email: string } | null
+}
+
+export type MarketingAudienceEstimate = {
+  count: number
+  breakdown: {
+    free: number
+    paid: number
+    active14d: number
+    inactive14d: number
+    activeWindowDays: number
+  }
+  filter: MarketingAudienceFilter
+}
+
+export async function fetchEditorialCampaignTemplates(): Promise<
+  EditorialCampaignTemplateDto[]
+> {
+  const res = await api.get<{ templates: EditorialCampaignTemplateDto[] }>(
+    "/admin/marketing/campaign-templates"
+  )
+  return res.templates ?? []
+}
+
+export async function estimateMarketingAudience(
+  filter: MarketingAudienceFilter
+): Promise<MarketingAudienceEstimate> {
+  return await api.post<MarketingAudienceEstimate>(
+    "/admin/marketing/audience/estimate",
+    filter
+  )
+}
+
+export async function createMarketingCampaign(payload: {
+  name: string
+  subject: string
+  htmlContent: string
+  audienceFilter?: MarketingAudienceFilter
+}): Promise<{ campaign: { id: string; name: string; subject: string; status: string } }> {
+  return await api.post("/admin/marketing/campaigns", payload)
+}
+
+export async function fetchMarketingCampaigns(params?: {
+  page?: number
+  limit?: number
+}): Promise<{
+  page: number
+  limit: number
+  total: number
+  campaigns: EmailCampaignRow[]
+}> {
+  const q = new URLSearchParams()
+  if (params?.page) q.set("page", String(params.page))
+  if (params?.limit) q.set("limit", String(params.limit))
+  const qs = q.toString()
+  return await api.get(
+    `/admin/marketing/campaigns${qs ? `?${qs}` : ""}`
+  )
+}
+
+export async function sendMarketingCampaign(campaignId: string): Promise<{
+  success: boolean
+  campaignId: string
+  message?: string
+}> {
+  return await api.post(`/admin/marketing/campaigns/${encodeURIComponent(campaignId)}/send`, {})
+}
+
+export async function scheduleMarketingCampaign(
+  campaignId: string,
+  scheduledSendAtIso: string
+): Promise<{
+  campaignId: string
+  status: string
+  scheduledSendAt: string
+}> {
+  return await api.post(
+    `/admin/marketing/campaigns/${encodeURIComponent(campaignId)}/schedule`,
+    { scheduledSendAt: scheduledSendAtIso }
+  )
+}
+
+export async function unscheduleMarketingCampaign(campaignId: string): Promise<{
+  campaignId: string
+  status: string
+}> {
+  return await api.post(
+    `/admin/marketing/campaigns/${encodeURIComponent(campaignId)}/unschedule`,
+    {}
+  )
 }

@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { formatAdsErrorForUserDisplay } from "@/lib/ads-user-messages"
 import { api } from "@/lib/api"
 import { normalizeToolOperation } from "@/lib/tool-operation"
 
@@ -36,6 +37,8 @@ type PersistedJobState = {
   lastKnownStatus?: string
 }
 
+export type AdsJobAudience = "operator" | "creator"
+
 type UseAdsJobPollingOptions = {
   storageKey: string
   pollIntervalMs?: number
@@ -43,6 +46,8 @@ type UseAdsJobPollingOptions = {
   normalizeOutputUrl: (url: string) => string
   stageFromProgress: (progress: number) => string
   cancelPath?: (jobId: string) => string
+  /** Creator-facing tools get friendly progress copy and no Job IDs in errors. */
+  audience?: AdsJobAudience
 }
 
 export type AdsJobUiState = {
@@ -102,6 +107,7 @@ export function useAdsJobPolling({
   normalizeOutputUrl,
   stageFromProgress,
   cancelPath,
+  audience = "operator",
 }: UseAdsJobPollingOptions) {
   const [state, setState] = useState<AdsJobUiState>({
     loading: false,
@@ -126,6 +132,20 @@ export function useAdsJobPolling({
     }
   }, [])
 
+  const formatPollError = useCallback(
+    (technical: string, jobId: string, requestId?: string | null) => {
+      if (audience === "creator") {
+        return (
+          formatAdsErrorForUserDisplay(technical) ??
+          "We couldn't finish your ad. Try again with different settings."
+        )
+      }
+      const rid = requestId ? ` Request ID: ${requestId}` : ""
+      return `${technical} Job ID: ${jobId}${rid}`
+    },
+    [audience]
+  )
+
   const clearPersisted = useCallback(() => {
     writePersistedState(storageKey, null)
   }, [storageKey])
@@ -136,14 +156,14 @@ export function useAdsJobPolling({
     setState({
       loading: true,
       progress: 5,
-      stageText: "Queueing generation job...",
+      stageText: audience === "creator" ? "Starting your ad…" : "Queueing generation job...",
       error: null,
       jobId: null,
       requestId: null,
       videoUrl: null,
       jobRecord: null,
     })
-  }, [])
+  }, [audience])
 
   const poll = useCallback(
     async (jobId: string) => {
@@ -165,7 +185,7 @@ export function useAdsJobPolling({
               loading: false,
               progress: 0,
               stageText: DEFAULT_STAGE,
-              error: `Job is no longer recoverable (${errorCode}). Job ID: ${jobId}`,
+              error: formatPollError(`Job is no longer recoverable (${errorCode})`, jobId, failRequestId),
               jobId,
               requestId: failRequestId,
               videoUrl: null,
@@ -178,7 +198,7 @@ export function useAdsJobPolling({
               loading: false,
               progress: 0,
               stageText: DEFAULT_STAGE,
-              error: `Unable to retrieve job state. Job ID: ${jobId}`,
+              error: formatPollError("Unable to retrieve job state.", jobId, failRequestId),
               jobId,
               requestId: failRequestId,
               videoUrl: null,
@@ -219,8 +239,12 @@ export function useAdsJobPolling({
             setState({
               loading: false,
               progress: 100,
-              stageText: "Completed",
-              error: `Job completed but no output URL was returned. Job ID: ${jobId}`,
+              stageText: audience === "creator" ? "Almost ready" : "Completed",
+              error: formatPollError(
+                "Job completed but no output URL was returned.",
+                jobId,
+                operation.requestId ?? null
+              ),
               jobId,
               requestId: operation.requestId ?? null,
               videoUrl: null,
@@ -233,7 +257,7 @@ export function useAdsJobPolling({
             ...prev,
             loading: false,
             progress: 100,
-            stageText: "Completed",
+            stageText: audience === "creator" ? "Done" : "Completed",
             videoUrl: normalizeOutputUrl(job.outputUrl || ""),
             error: null,
             jobRecord: extractJobRecordFromEnvelope(response) ?? prev.jobRecord,
@@ -249,7 +273,11 @@ export function useAdsJobPolling({
             loading: false,
             progress,
             stageText: DEFAULT_STAGE,
-            error: `${job.failedReason || "Video generation failed."} Job ID: ${jobId}`,
+            error: formatPollError(
+              job.failedReason || "Video generation failed.",
+              jobId,
+              operation.requestId ?? null
+            ),
             jobId,
             requestId: operation.requestId ?? null,
             videoUrl: null,
@@ -265,7 +293,11 @@ export function useAdsJobPolling({
             loading: false,
             progress: 0,
             stageText: DEFAULT_STAGE,
-            error: `Generation timed out while waiting for completion. Job ID: ${jobId}`,
+            error: formatPollError(
+              "Generation timed out while waiting for completion.",
+              jobId,
+              operation.requestId ?? null
+            ),
             jobId,
             requestId: operation.requestId ?? null,
             videoUrl: null,
@@ -284,7 +316,7 @@ export function useAdsJobPolling({
             loading: false,
             progress: 0,
             stageText: DEFAULT_STAGE,
-            error: `Polling failed repeatedly. Job ID: ${jobId}`,
+            error: formatPollError("Polling failed repeatedly.", jobId, null),
             jobId,
             requestId: null,
             videoUrl: null,
@@ -296,7 +328,18 @@ export function useAdsJobPolling({
         timerRef.current = setTimeout(() => void poll(jobId), backoffMs)
       }
     },
-    [clearPersisted, maxWaitMs, normalizeOutputUrl, pollIntervalMs, stageFromProgress, state.requestId, stop, storageKey]
+    [
+      audience,
+      clearPersisted,
+      formatPollError,
+      maxWaitMs,
+      normalizeOutputUrl,
+      pollIntervalMs,
+      stageFromProgress,
+      state.requestId,
+      stop,
+      storageKey,
+    ]
   )
 
   const begin = useCallback(
@@ -320,7 +363,7 @@ export function useAdsJobPolling({
       stop()
       void poll(jobId)
     },
-    [poll, storageKey, stop]
+    [audience, poll, storageKey, stop]
   )
 
   /**
@@ -346,7 +389,7 @@ export function useAdsJobPolling({
             loading: false,
             progress: 0,
             stageText: DEFAULT_STAGE,
-            error: `Could not load job ${jobId}`,
+            error: formatPollError(`Could not load job`, jobId, null),
             jobId,
             requestId: null,
             videoUrl: null,
@@ -366,8 +409,8 @@ export function useAdsJobPolling({
             setState({
               loading: false,
               progress: 100,
-              stageText: "Completed",
-              error: `Job completed but no output URL. Job ID: ${jobId}`,
+              stageText: audience === "creator" ? "Almost ready" : "Completed",
+              error: formatPollError("Job completed but no output URL.", jobId, operation.requestId ?? null),
               jobId,
               requestId: operation.requestId ?? null,
               videoUrl: null,
@@ -378,7 +421,7 @@ export function useAdsJobPolling({
           setState({
             loading: false,
             progress: 100,
-            stageText: "Completed",
+            stageText: audience === "creator" ? "Done" : "Completed",
             error: null,
             jobId,
             requestId: operation.requestId ?? null,
@@ -393,7 +436,7 @@ export function useAdsJobPolling({
             loading: false,
             progress,
             stageText: DEFAULT_STAGE,
-            error: `${job.failedReason || "Job failed"} (Job ID: ${jobId})`,
+            error: formatPollError(job.failedReason || "Job failed", jobId, operation.requestId ?? null),
             jobId,
             requestId: operation.requestId ?? null,
             videoUrl: null,
@@ -409,7 +452,7 @@ export function useAdsJobPolling({
           loading: false,
           progress: 0,
           stageText: DEFAULT_STAGE,
-          error: `Failed to load job ${jobId}`,
+          error: formatPollError("Failed to load job", jobId, null),
           jobId,
           requestId: null,
           videoUrl: null,
@@ -418,7 +461,7 @@ export function useAdsJobPolling({
         return false
       }
     },
-    [begin, clearPersisted, normalizeOutputUrl, stop]
+    [audience, begin, clearPersisted, formatPollError, normalizeOutputUrl, stop]
   )
 
   const resume = useCallback(() => {
@@ -460,22 +503,29 @@ export function useAdsJobPolling({
       ...prev,
       loading: false,
       stageText: DEFAULT_STAGE,
-      error: prev.jobId
-        ? `${
-            cancelPath
+      error:
+        audience === "creator"
+          ? cancelPath
+            ? cancelConfirmed
+              ? "We stopped this generation."
+              : "We paused tracking. You can start a new ad when you're ready."
+            : "Tracking paused."
+          : prev.jobId
+            ? `${
+                cancelPath
+                  ? cancelConfirmed
+                    ? "Generation cancellation confirmed"
+                    : "Tracking stopped locally; server cancellation not confirmed"
+                  : "Tracking paused"
+              } for Job ID: ${prev.jobId}`
+            : cancelPath
               ? cancelConfirmed
-                ? "Generation cancellation confirmed"
-                : "Tracking stopped locally; server cancellation not confirmed"
-              : "Tracking paused"
-          } for Job ID: ${prev.jobId}`
-        : cancelPath
-          ? cancelConfirmed
-            ? "Generation cancellation confirmed."
-            : "Tracking stopped locally; server cancellation not confirmed."
-          : "Tracking paused.",
+                ? "Generation cancellation confirmed."
+                : "Tracking stopped locally; server cancellation not confirmed."
+              : "Tracking paused.",
     }))
     clearPersisted()
-  }, [cancelPath, clearPersisted, state.jobId, stop])
+  }, [audience, cancelPath, clearPersisted, state.jobId, stop])
 
   const clearOutput = useCallback(() => {
     setState((prev) => ({

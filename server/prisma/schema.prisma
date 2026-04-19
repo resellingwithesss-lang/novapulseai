@@ -157,6 +157,8 @@ enum EmailDeliveryStatus {
 
 enum EmailCampaignStatus {
   DRAFT
+  /// Queued for a future wall-clock send; promoted by `processScheduledCampaignsTick`.
+  SCHEDULED
   QUEUED
   SENDING
   COMPLETED
@@ -366,6 +368,9 @@ model EmailCampaign {
   htmlContent String @db.Text
 
   status EmailCampaignStatus @default(DRAFT)
+
+  /// When set and status is SCHEDULED, fan-out starts after this instant (UTC).
+  scheduledSendAt DateTime?
 
   /// Optional filter snapshot: { plan?: Plan, subscriptionStatus?: SubscriptionStatus }
   filter Json?

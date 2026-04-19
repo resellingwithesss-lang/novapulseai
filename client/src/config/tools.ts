@@ -53,7 +53,7 @@ export const tools: ToolDefinition[] = [
     description:
       "Elite: auto video ads from your URL — AI script, voiceover, visuals, subtitles, scored variants. No filming.",
     outcome: "Ready-to-post MP4 plus angles you can iterate",
-    path: "/dashboard/tools/story-video-maker",
+    path: "/dashboard/tools/ai-ad-generator",
     tier: "elite",
     category: "production",
   },

@@ -69,6 +69,8 @@ export type User = {
   subscriptionStatus: SubscriptionStatus
   credits: number
   trialExpiresAt: string | null
+  /** Server-side activity heartbeat; used for subtle re-engagement prompts. */
+  lastActiveAt?: string | null
   createdAt: string
   updatedAt: string
   /* Lifecycle marketing consent (Phase 1).

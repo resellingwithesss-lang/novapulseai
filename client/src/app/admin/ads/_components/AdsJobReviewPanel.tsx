@@ -253,7 +253,7 @@ export default function AdsJobReviewPanel({
     const plat = jobRecord?.platform
     const platform =
       plat === "tiktok" || plat === "instagram" || plat === "youtube" ? plat : undefined
-    return buildToolHandoffUrl("/dashboard/tools/story-video-maker", {
+    return buildToolHandoffUrl("/dashboard/tools/ai-ad-generator", {
       siteUrl: metaSiteUrl,
       ...(operatorBriefText
         ? { videoBrief: operatorBriefText.slice(0, 8000) }
