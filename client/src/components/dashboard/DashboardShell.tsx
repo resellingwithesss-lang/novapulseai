@@ -60,7 +60,7 @@ export default function DashboardShell({
   }, [credits, monthlyIncludedCredits, user])
 
   return (
-    <main className="relative min-h-[calc(100vh-64px)] min-w-0 overflow-x-hidden">
+    <main className="relative min-h-[calc(100dvh-4rem)] min-w-0 overflow-x-hidden">
 
       {/* Ambient wash — same restrained language as marketing hero (no heavy blur orbs). */}
       <div className="pointer-events-none absolute inset-0 -z-10" aria-hidden>

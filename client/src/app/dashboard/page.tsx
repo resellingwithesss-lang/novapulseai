@@ -85,21 +85,6 @@ export default function DashboardPage() {
 
   const isPastDue = user?.subscriptionStatus === "PAST_DUE"
 
-  if (status === "loading") {
-    return (
-      <DashboardShell>
-        <div className="animate-pulse space-y-10">
-          <div className="h-40 rounded-3xl bg-white/10" />
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-5">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="h-28 rounded-2xl bg-white/10" />
-            ))}
-          </div>
-        </div>
-      </DashboardShell>
-    )
-  }
-
   if (!user) {
     return (
       <DashboardShell>
@@ -133,7 +118,8 @@ export default function DashboardPage() {
           user={user}
           generationsCount={generations.length}
           adJobs={adJobs}
-          workflow={wfLoading ? null : wfData}
+          workflow={wfData}
+          workflowLoading={wfLoading}
         />
 
         <ConsentBannerCard />
@@ -261,39 +247,51 @@ export default function DashboardPage() {
           {activityError && (
             <p className="mt-4 text-sm text-amber-200/90">{activityError}</p>
           )}
-          {activityLoading && (
-            <p className="mt-4 text-sm text-white/45" aria-live="polite">
-              Loading activity…
-            </p>
-          )}
-          <ul className="mt-5 space-y-2.5">
-            {!activityLoading && recentGens.length === 0 && (
-              <li className="np-card-soft px-4 py-3.5 text-sm leading-relaxed text-white/58">
-                No server generations yet — start with Video Script or a workflow template above.
-              </li>
+          <ul className="mt-5 space-y-2.5" aria-busy={activityLoading}>
+            {activityLoading ? (
+              <>
+                {[0, 1, 2, 3].map((i) => (
+                  <li
+                    key={i}
+                    className="np-card-soft h-[4.75rem] px-4 py-3.5 motion-safe:animate-pulse"
+                  >
+                    <div className="h-2.5 w-24 rounded bg-white/[0.08]" />
+                    <div className="mt-3 h-3 w-[min(100%,28rem)] max-w-full rounded bg-white/[0.06]" />
+                    <div className="mt-2 h-2.5 w-40 rounded bg-white/[0.05]" />
+                  </li>
+                ))}
+              </>
+            ) : (
+              <>
+                {recentGens.length === 0 && (
+                  <li className="np-card-soft px-4 py-3.5 text-sm leading-relaxed text-white/58">
+                    No server generations yet — start with Video Script or a workflow template above.
+                  </li>
+                )}
+                {recentGens.map((g) => (
+                  <li
+                    key={g.id}
+                    className="np-card-soft flex flex-wrap items-start justify-between gap-3 px-4 py-3.5"
+                  >
+                    <div>
+                      <p className="text-xs font-semibold uppercase text-violet-300/90">
+                        {generationTypeLabel(g.type)}
+                      </p>
+                      <p className="mt-1 text-sm text-white/82">{g.inputPreview}</p>
+                      <p className="mt-1 text-xs text-white/48">
+                        {new Date(g.createdAt).toLocaleString()} · {g.creditsUsed} cr
+                      </p>
+                    </div>
+                    <Link
+                      href={generationToolHref(g.type)}
+                      className="shrink-0 text-xs font-medium text-purple-200/88 underline decoration-white/15 underline-offset-[0.2em] outline-none transition-colors hover:text-purple-100/95 focus-visible:rounded focus-visible:ring-2 focus-visible:ring-purple-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0f19]"
+                    >
+                      Open tool
+                    </Link>
+                  </li>
+                ))}
+              </>
             )}
-            {recentGens.map((g) => (
-              <li
-                key={g.id}
-                className="np-card-soft flex flex-wrap items-start justify-between gap-3 px-4 py-3.5"
-              >
-                <div>
-                  <p className="text-xs font-semibold uppercase text-violet-300/90">
-                    {generationTypeLabel(g.type)}
-                  </p>
-                  <p className="mt-1 text-sm text-white/82">{g.inputPreview}</p>
-                  <p className="mt-1 text-xs text-white/48">
-                    {new Date(g.createdAt).toLocaleString()} · {g.creditsUsed} cr
-                  </p>
-                </div>
-                <Link
-                  href={generationToolHref(g.type)}
-                  className="shrink-0 text-xs font-medium text-purple-200/88 underline decoration-white/15 underline-offset-[0.2em] outline-none transition-colors hover:text-purple-100/95 focus-visible:rounded focus-visible:ring-2 focus-visible:ring-purple-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0f19]"
-                >
-                  Open tool
-                </Link>
-              </li>
-            ))}
           </ul>
         </section>
 

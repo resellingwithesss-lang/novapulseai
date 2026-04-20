@@ -81,7 +81,13 @@ function NavLink({
 export default function Navbar() {
   const pathname = usePathname() || "/"
   const router = useRouter()
-  const { user, status, logout, refreshUser } = useAuth()
+  const { user, status, logout, refreshUser, hasResolvedSession } = useAuth()
+
+  /** Avoid guest nav + login CTA while /auth/me runs, or during sign-in before user attaches. */
+  const sessionPending =
+    !hasResolvedSession || (status === "loading" && !user)
+  const showGuestChrome =
+    hasResolvedSession && !user && status !== "loading"
 
   const [mobileOpen, setMobileOpen] = useState(false)
   const mobileRef = useRef<HTMLDivElement | null>(null)
@@ -111,6 +117,16 @@ export default function Navbar() {
     return () => window.removeEventListener("keydown", onKey)
   }, [mobileOpen])
 
+  useEffect(() => {
+    if (typeof document === "undefined") return
+    if (!mobileOpen) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [mobileOpen])
+
   const onLogout = async () => {
     setMobileOpen(false)
     await logout()
@@ -129,8 +145,6 @@ export default function Navbar() {
 
   const isLanding = pathname === "/"
   const closeMobile = () => setMobileOpen(false)
-
-  const showGuestChrome = !user
 
   return (
     <header
@@ -172,7 +186,18 @@ export default function Navbar() {
           aria-label="Main"
         >
           <div className="flex max-w-full items-center gap-px overflow-visible rounded-full border border-white/[0.065] bg-white/[0.03] px-1 py-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_14px_24px_-24px_rgba(0,0,0,0.8)] lg:px-1.5 lg:py-1">
-            {user ? (
+            {sessionPending ? (
+              <div
+                className="flex items-center gap-1.5 px-2 py-1 lg:gap-2 lg:px-2.5"
+                aria-busy="true"
+                aria-label="Loading navigation"
+              >
+                <span className="h-8 w-[4.5rem] rounded-lg bg-white/[0.06] motion-safe:animate-pulse lg:w-[5.25rem]" />
+                <span className="h-8 w-16 rounded-lg bg-white/[0.06] motion-safe:animate-pulse lg:w-[4.5rem]" />
+                <span className="hidden h-8 w-[4.25rem] rounded-lg bg-white/[0.06] motion-safe:animate-pulse sm:inline lg:w-20" />
+                <span className="hidden h-8 w-14 rounded-lg bg-white/[0.06] motion-safe:animate-pulse md:inline lg:w-[4.5rem]" />
+              </div>
+            ) : user ? (
               <>
                 <NavLink href="/dashboard">Dashboard</NavLink>
                 <StudioNavMenu />
@@ -189,14 +214,32 @@ export default function Navbar() {
         </nav>
 
         <div className="ml-auto flex min-w-0 shrink-0 items-center gap-2 sm:gap-2.5 xl:gap-3">
-          {status === "loading" && user && (
-            <span
-              className="hidden text-xs text-white/35 sm:inline"
-              aria-live="polite"
-              aria-busy="true"
-            >
-              …
-            </span>
+          {sessionPending && (
+            <>
+              <div
+                className="hidden items-center gap-2 sm:flex sm:gap-2.5"
+                aria-busy="true"
+                aria-label="Loading account"
+              >
+                <span className="h-9 w-[7.5rem] rounded-full bg-white/[0.06] motion-safe:animate-pulse" />
+                <span className="h-9 w-9 rounded-full bg-white/[0.07] motion-safe:animate-pulse ring-1 ring-white/[0.08]" />
+              </div>
+              <button
+                type="button"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.045] text-white/88 outline-none transition hover:bg-white/[0.07] focus-visible:ring-2 focus-visible:ring-purple-400/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050816] sm:hidden"
+                aria-expanded={mobileOpen}
+                aria-controls="nav-mobile-drawer"
+                aria-busy="true"
+                aria-label={mobileOpen ? "Close menu" : "Open menu"}
+                onClick={() => setMobileOpen((o) => !o)}
+              >
+                {mobileOpen ? (
+                  <X className="h-5 w-5" aria-hidden />
+                ) : (
+                  <Menu className="h-5 w-5" aria-hidden />
+                )}
+              </button>
+            </>
           )}
 
           {showGuestChrome && (
@@ -216,7 +259,7 @@ export default function Navbar() {
             </>
           )}
 
-          {user && (
+          {!sessionPending && user && (
             <>
               <div className="hidden min-w-0 items-center gap-2 sm:flex sm:gap-3">
                 <UserAccountMenu
@@ -279,12 +322,20 @@ export default function Navbar() {
       {mobileOpen && (
         <div
           id="nav-mobile-drawer"
-          className="border-t border-white/[0.075] bg-[#050816]/94 px-4 py-5 shadow-[0_16px_40px_rgba(0,0,0,0.42)] backdrop-blur-xl md:hidden"
+          className="max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-contain border-t border-white/[0.075] bg-[#050816]/94 px-4 py-5 shadow-[0_16px_40px_rgba(0,0,0,0.42)] backdrop-blur-xl md:hidden"
           role="dialog"
           aria-modal="true"
           aria-label="Navigation menu"
         >
-          {!user && (
+          {sessionPending && (
+            <div className="space-y-3 py-2 text-center">
+              <p className="text-sm text-white/55" aria-live="polite">
+                Checking your session…
+              </p>
+              <div className="mx-auto h-10 max-w-xs rounded-xl bg-white/[0.06] motion-safe:animate-pulse" />
+            </div>
+          )}
+          {showGuestChrome && (
             <div className="flex flex-col gap-1">
               <MobileRow href="/#workflow" onClick={closeMobile}>
                 Product
@@ -304,7 +355,7 @@ export default function Navbar() {
               </Link>
             </div>
           )}
-          {user && (
+          {!sessionPending && user && (
             <div className="flex flex-col gap-0.5">
               <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-white/[0.09] pb-4">
                 <span
