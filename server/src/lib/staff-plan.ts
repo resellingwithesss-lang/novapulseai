@@ -1,6 +1,6 @@
 import { Plan, Role } from "@prisma/client"
 import { normalizePlanTier, planRank } from "../modules/plans/plan.constants"
-import { isStaffRole } from "./roles"
+import { isPreviewRole, isStaffRole } from "./roles"
 
 /**
  * True when the role should be treated as staff for billing purposes (floored
@@ -11,12 +11,17 @@ export function isStaffBillingExemptRole(role: Role | string | undefined | null)
   return isStaffRole(role)
 }
 
+/** PREVIEW: ELITE-equivalent product surface without staff billing webhook exemptions. */
+export function isProductPreviewFlooredRole(role: Role | string | undefined | null): boolean {
+  return isPreviewRole(role)
+}
+
 /**
  * Floor staff accounts to at least ELITE for API + UI so promoted admins are not shown as FREE
  * when Stripe webhooks briefly disagree or a comp seat has no paid Stripe tier.
  */
 export function staffFloorPlan(dbPlan: Plan, role: Role | string | undefined | null): Plan {
-  if (!isStaffBillingExemptRole(role)) return dbPlan
+  if (!isStaffBillingExemptRole(role) && !isProductPreviewFlooredRole(role)) return dbPlan
   const tier = normalizePlanTier(dbPlan)
   return planRank(tier) >= planRank("ELITE") ? dbPlan : Plan.ELITE
 }

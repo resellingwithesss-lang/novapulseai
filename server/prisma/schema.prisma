@@ -28,6 +28,9 @@ datasource db {
 enum Role {
   USER
   CREATOR
+  /// Full product surface (ELITE-equivalent tools, credit-exempt) for demos and
+  /// walkthrough capture. Does not grant `/admin` or owner-only APIs.
+  PREVIEW
   ADMIN
   OWNER
   /// @deprecated Use OWNER. Preserved for a single release cycle to keep

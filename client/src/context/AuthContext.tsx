@@ -47,6 +47,7 @@ export type SubscriptionStatus =
 export type Role =
   | "USER"
   | "CREATOR"
+  | "PREVIEW"
   | "ADMIN"
   | "OWNER"
   | "SUPER_ADMIN"

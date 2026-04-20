@@ -40,7 +40,12 @@ import {
 import type { AdSiteIngestion, BuiltAdScene, StructuredAdScript } from "./pipeline/types"
 import { buildInteractiveAdPlan } from "./pipeline/interaction.plan"
 import { rankedVariantPool } from "./pipeline/ad.scoring"
-import { detectNovaPulseAIProduct, novaPulseAIDemoLoginConfigured } from "./pipeline/ad.product-profile"
+import {
+  detectNovaPulseAIProduct,
+  novaPulseAIDemoLoginConfigured,
+  resolveNovaPulseDemoCredentials,
+  type NovaPulseDemoCredentialOverrides,
+} from "./pipeline/ad.product-profile"
 import { novaPulseAICtaOverlay, novaPulseAIHookOverlay } from "./pipeline/scene.builder"
 import { buildCinematicAssets } from "./rendering/cinematic.pipeline"
 import { applyColorGrade } from "./rendering/color.grader"
@@ -214,7 +219,24 @@ const generateSchema = z.object({
     .trim()
     .regex(/^[0-9A-Fa-f]{6}$/)
     .optional(),
+  /**
+   * Staff-only: credentials typed during NovaPulseAI capture (not stored on the job).
+   * Non-staff requests must omit these; use AD_DEMO_* env as the default.
+   */
+  demoLoginEmail: z.string().trim().email().max(320).optional(),
+  demoLoginPassword: z.string().trim().min(1).max(500).optional(),
 })
+  .refine(
+    d => {
+      const e = Boolean(d.demoLoginEmail?.trim())
+      const p = Boolean(d.demoLoginPassword?.trim())
+      return e === p
+    },
+    {
+      message: "demoLoginEmail and demoLoginPassword must both be set together",
+      path: ["demoLoginPassword"],
+    }
+  )
 
 type GenerateBody = z.infer<typeof generateSchema>
 
@@ -342,6 +364,7 @@ async function executeSingleVariantRender(params: {
   fileSuffix: string
   onProgress?: VariantRenderProgress
   fastPreview?: boolean
+  demoCredentialOverrides?: NovaPulseDemoCredentialOverrides
 }): Promise<{
   outputPath: string
   fileSizeBytes: number
@@ -371,7 +394,8 @@ async function executeSingleVariantRender(params: {
   const captionAccentHex = params.captionAccentHex
 
   const npaiProduct = detectNovaPulseAIProduct(ingestion)
-  const npaiDemoLoginJob = npaiProduct && novaPulseAIDemoLoginConfigured()
+  const demoResolved = resolveNovaPulseDemoCredentials(params.demoCredentialOverrides)
+  const npaiDemoLoginJob = npaiProduct && novaPulseAIDemoLoginConfigured(params.demoCredentialOverrides)
   /** Normal NovaPulseAI cinematic path: target 20–40s (floor 15) so stitch/capture budget matches a real demo. */
   const renderDuration =
     npaiProduct && !fastPreview
@@ -419,7 +443,9 @@ async function executeSingleVariantRender(params: {
       ? buildInteractiveAdPlan(siteUrl, ingestion, built, {
           allowDestructiveSubmit,
           allowNovaPulseAIDemoLoginSubmit:
-            detectNovaPulseAIProduct(ingestion) && novaPulseAIDemoLoginConfigured(),
+            detectNovaPulseAIProduct(ingestion) &&
+            novaPulseAIDemoLoginConfigured(params.demoCredentialOverrides),
+          demoCredentialOverrides: params.demoCredentialOverrides,
         })
       : undefined
 
@@ -465,6 +491,9 @@ async function executeSingleVariantRender(params: {
       const local = 17 + Math.round((pct / 100) * 14)
       onProgress?.(Math.min(31, Math.max(17, local)))
     },
+    ...(demoResolved
+      ? { loginEmail: demoResolved.email, loginPassword: demoResolved.password }
+      : {}),
   })
   console.log(
     renderLog,
@@ -711,6 +740,7 @@ async function runAdRenderPipelineFromScript(params: {
   startedAt: number
   creativeMode?: NonNullable<GenerateBody["creativeMode"]>
   fastPreview?: boolean
+  demoCredentialOverrides?: NovaPulseDemoCredentialOverrides
 }): Promise<void> {
   const {
     jobDbId,
@@ -754,6 +784,7 @@ async function runAdRenderPipelineFromScript(params: {
     creativeMode,
     fileSuffix: "primary",
     fastPreview,
+    demoCredentialOverrides: params.demoCredentialOverrides,
     onProgress: p => {
       void updateJob(jobDbId, {
         progress: Math.min(99, 30 + Math.round((p / 100) * 65)),
@@ -992,6 +1023,8 @@ async function runAdGenerationJob(params: {
   captionAccentHex?: string
   renderTopVariants: 1 | 2
   fastPreview: boolean
+  /** Staff-only capture login (memory-only; not persisted on AdJob). */
+  demoCredentialOverrides?: NovaPulseDemoCredentialOverrides
 }): Promise<void> {
   const startedAt = Date.now()
 
@@ -1062,6 +1095,7 @@ async function runAdGenerationJob(params: {
         startedAt,
         creativeMode: params.effectiveCreativeMode,
         fastPreview: params.fastPreview,
+        demoCredentialOverrides: params.demoCredentialOverrides,
       })
     } else {
       const ranked = rankedVariantPool(pack.scored)
@@ -1087,6 +1121,7 @@ async function runAdGenerationJob(params: {
           startedAt,
           creativeMode: params.effectiveCreativeMode,
           fastPreview: params.fastPreview,
+          demoCredentialOverrides: params.demoCredentialOverrides,
         })
       } else {
       const jobRow = await prisma.adJob.findUnique({
@@ -1135,6 +1170,7 @@ async function runAdGenerationJob(params: {
             creativeMode: params.effectiveCreativeMode,
             fileSuffix: suffix,
             fastPreview: params.fastPreview,
+            demoCredentialOverrides: params.demoCredentialOverrides,
             onProgress: p => {
               const base = 24 + (i * 75) / n
               const span = 75 / n
@@ -1401,6 +1437,18 @@ router.post(
       })
     }
 
+    if (
+      (parsed.data.demoLoginEmail || parsed.data.demoLoginPassword) &&
+      !isAdminOrAboveRole(req.user.role)
+    ) {
+      return toolFail(res, 403, "Demo login overrides require a staff account.", {
+        requestId,
+        stage: "validate",
+        status: "failed",
+        code: "FORBIDDEN",
+      })
+    }
+
     const billingUser = await prisma.user.findUnique({
       where: { id: req.user.id },
       select: {
@@ -1464,6 +1512,10 @@ router.post(
     }
 
     const data = parsed.data
+    const demoCredentialOverrides: NovaPulseDemoCredentialOverrides | undefined =
+      data.demoLoginEmail && data.demoLoginPassword
+        ? { email: data.demoLoginEmail, password: data.demoLoginPassword }
+        : undefined
     const jobId = crypto.randomUUID()
 
     const adSourceCheck = await validateAdJobSourceRefs(prisma, req.user.id, {
@@ -1582,6 +1634,7 @@ router.post(
           captionAccentHex: data.captionAccentHex,
           renderTopVariants: renderTop,
           fastPreview,
+          demoCredentialOverrides,
         })
       }
     )

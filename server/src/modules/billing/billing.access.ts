@@ -1,6 +1,10 @@
 import type { Plan, SubscriptionStatus } from "@prisma/client"
-import { isStaffBillingExemptRole, staffEffectivePlanString } from "../../lib/staff-plan"
-import { isAdminOrAboveRole } from "../../lib/roles"
+import {
+  isProductPreviewFlooredRole,
+  isStaffBillingExemptRole,
+  staffEffectivePlanString,
+} from "../../lib/staff-plan"
+import { isAdminOrAboveRole, isPreviewRole } from "../../lib/roles"
 import {
   type PlanTier,
   type ToolId,
@@ -104,6 +108,10 @@ function baseBlockReason(
     return null
   }
 
+  if (isProductPreviewFlooredRole(user.role)) {
+    return null
+  }
+
   const normalizedPlan = normalizePlanTier(staffEffectivePlanString(user.plan, user.role))
 
   /* FREE: no paid subscription required — tool + credit gates apply per feature */
@@ -203,9 +211,10 @@ export function buildEntitlementSnapshot(
   const normalizedPlan = normalizePlanTier(planForEntitlements)
   const status = normalizeSubscriptionStatus(user.subscriptionStatus)
   const creditsRemaining = Math.max(0, user.credits ?? 0)
-  const isUnlimited = false
+  const isUnlimited = isPreviewRole(user.role)
   const isPaid =
     isStaffBillingExemptRole(user.role) ||
+    isPreviewRole(user.role) ||
     (!isFreePlanTier(normalizedPlan) &&
       (status === "ACTIVE" || status === "TRIALING"))
   const isTrialActive =
