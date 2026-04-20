@@ -10,7 +10,7 @@ import type {
 } from "./ad.variant-presets"
 import { detectNovaPulseAIProduct } from "./ad.product-profile"
 
-const SCRIPT_MODEL = "gpt-4o"
+const SCRIPT_MODEL = process.env.AD_SCRIPT_MODEL?.trim() || "gpt-4o"
 const MAX_ATTEMPTS = 3
 
 /** Per-completion wall-clock cap so a stuck `chat.completions.create` cannot hang the worker indefinitely. */
@@ -62,6 +62,77 @@ const structuredSchema = z.object({
   payoff: z.string(),
   cta: z.string(),
 })
+
+/** Strip ```json fences and grab the outermost `{...}` when models add prose. */
+function extractJsonObjectText(content: string): string {
+  const t = String(content ?? "").trim()
+  if (!t) return t
+  const fence = /^```(?:json)?\s*([\s\S]*?)```$/im.exec(t)
+  if (fence?.[1]) return fence[1].trim()
+  const start = t.indexOf("{")
+  const end = t.lastIndexOf("}")
+  if (start >= 0 && end > start) return t.slice(start, end + 1).trim()
+  return t
+}
+
+function stringFromLoose(v: unknown): string {
+  if (v == null) return ""
+  if (typeof v === "string") return v
+  if (typeof v === "number" || typeof v === "boolean") return String(v)
+  if (Array.isArray(v)) return v.map(x => stringFromLoose(x)).filter(Boolean).join(" ")
+  return ""
+}
+
+function coerceFeaturesList(raw: unknown, fallbackLine: string): string[] {
+  let items: string[] = []
+  if (Array.isArray(raw)) {
+    items = raw.map(x => stringFromLoose(x).trim()).filter(Boolean)
+  } else if (typeof raw === "string") {
+    items = raw
+      .split(/\n|;|•|–|-\s+/)
+      .map(s => s.replace(/^[\s\-*]+/, "").trim())
+      .filter(s => s.length > 2)
+  } else if (raw && typeof raw === "object") {
+    items = Object.values(raw as Record<string, unknown>)
+      .map(x => stringFromLoose(x).trim())
+      .filter(Boolean)
+  }
+  const deduped = [...new Set(items)].slice(0, 5)
+  if (deduped.length > 0) return deduped
+  const fb = fallbackLine.trim()
+  if (fb) return [fb.length > 200 ? `${fb.slice(0, 197)}…` : fb]
+  return ["See the product workflow on the site — grounded in the page facts above."]
+}
+
+/**
+ * Models sometimes return slightly invalid shapes; normalize before Zod so we don't fail
+ * every variant for benign formatting drift.
+ */
+function coerceStructuredPayload(
+  parsed: unknown,
+  spokenBrand: string
+): z.infer<typeof structuredSchema> {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("LLM JSON root must be an object")
+  }
+  const o = parsed as Record<string, unknown>
+  const hook = stringFromLoose(o.hook)
+  const problem = stringFromLoose(o.problem)
+  const solution = stringFromLoose(o.solution)
+  const payoff = stringFromLoose(o.payoff)
+  const cta = stringFromLoose(o.cta)
+  const features = coerceFeaturesList(
+    o.features,
+    solution || payoff || `${spokenBrand} helps you ship faster with less manual busywork.`
+  )
+  const candidate = { hook, problem, solution, features, payoff, cta }
+  const result = structuredSchema.safeParse(candidate)
+  if (!result.success) {
+    const flat = z.flattenError(result.error)
+    throw new Error(`Structured script validation failed: ${JSON.stringify(flat.fieldErrors)}`)
+  }
+  return result.data
+}
 
 function sanitize(s: string, max: number): string {
   const t = String(s ?? "")
@@ -389,15 +460,25 @@ export async function generateStructuredAdScript(
         "openai.chat.completions.create(structured ad script)"
       )
 
-      const raw = completion.choices?.[0]?.message?.content || "{}"
+      const choice = completion.choices?.[0]
+      const msgContent = choice?.message?.content
+      if (!msgContent?.trim()) {
+        const fr = choice?.finish_reason ?? "unknown"
+        throw new Error(`LLM returned empty message content (finish_reason=${fr})`)
+      }
+
+      const jsonText = extractJsonObjectText(msgContent)
       let parsedJson: unknown
       try {
-        parsedJson = JSON.parse(raw)
+        parsedJson = JSON.parse(jsonText)
       } catch (parseErr) {
         const pe = parseErr instanceof Error ? parseErr.message : String(parseErr)
-        throw new Error(`LLM returned non-JSON: ${pe}`)
+        const preview = jsonText.length > 320 ? `${jsonText.slice(0, 317)}…` : jsonText
+        throw new Error(`LLM returned non-JSON: ${pe} preview=${JSON.stringify(preview)}`)
       }
-      const parsed = structuredSchema.parse(parsedJson)
+
+      const brand = resolveSpokenBrand(ingestion)
+      const parsed = coerceStructuredPayload(parsedJson, brand.spokenName)
       const durationMs = Date.now() - attemptStart
       console.log(
         `${logPrefix} phase=llm_success attempt=${attempt + 1}/${MAX_ATTEMPTS} durationMs=${durationMs} ` +
