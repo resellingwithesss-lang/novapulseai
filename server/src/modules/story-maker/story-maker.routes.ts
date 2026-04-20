@@ -3,7 +3,7 @@ import { prisma } from "../../lib/prisma"
 import { requireAuth, AuthRequest } from "../auth/auth.middleware"
 import { z } from "zod"
 import { GenerationType } from "@prisma/client"
-import { evaluateBillingAccess } from "../billing/billing.access"
+import { buildEntitlementSnapshot, evaluateBillingAccess } from "../billing/billing.access"
 import { resolveRequestId, toolFail, toolOk } from "../../lib/tool-response"
 import { logToolEvent } from "../../lib/tool-logger"
 import {
@@ -70,6 +70,16 @@ const responseSchema = z.object({
   }),
   pinComment: optionalCreatorsField(280),
   productionNotes: optionalCreatorsField(2000),
+  viralAngles: z.preprocess(
+    (v) => (v === null || v === "" ? undefined : v),
+    z
+      .object({
+        shareTrigger: z.string().max(400).optional(),
+        rewatchLoop: z.string().max(400).optional(),
+        stitchOrDuet: z.string().max(400).optional(),
+      })
+      .optional()
+  ),
 })
 
 /* =====================================================
@@ -99,6 +109,21 @@ function enforceSubtitleRhythm(script: string) {
         : line
     )
     .join("\n")
+}
+
+function pruneStoryViralAngles(
+  story: z.infer<typeof responseSchema>
+): z.infer<typeof responseSchema> {
+  if (!story.viralAngles) return story
+  const v = story.viralAngles
+  const shareTrigger = v.shareTrigger?.trim() || undefined
+  const rewatchLoop = v.rewatchLoop?.trim() || undefined
+  const stitchOrDuet = v.stitchOrDuet?.trim() || undefined
+  if (!shareTrigger && !rewatchLoop && !stitchOrDuet) {
+    const { viralAngles: _, ...rest } = story
+    return rest
+  }
+  return { ...story, viralAngles: { shareTrigger, rewatchLoop, stitchOrDuet } }
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -195,6 +220,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res: Response) => {
         subscriptionStatus: true,
         trialExpiresAt: true,
         stripeSubscriptionId: true,
+        role: true,
       },
     })
 
@@ -206,7 +232,16 @@ router.post("/", requireAuth, async (req: AuthRequest, res: Response) => {
         code: "NOT_FOUND",
       })
     }
-    const access = evaluateBillingAccess(user, { minPlan: "PRO" })
+    const billingSnapshot = {
+      plan: user.plan,
+      subscriptionStatus: user.subscriptionStatus,
+      trialExpiresAt: user.trialExpiresAt,
+      stripeSubscriptionId: user.stripeSubscriptionId,
+      banned: user.banned,
+      credits: user.credits,
+      role: user.role,
+    }
+    const access = evaluateBillingAccess(billingSnapshot, { minPlan: "PRO" })
     if (access.allowed === false) {
       return toolFail(res, access.status, access.message, {
         requestId,
@@ -216,7 +251,8 @@ router.post("/", requireAuth, async (req: AuthRequest, res: Response) => {
       })
     }
 
-    const isUnlimited = false
+    const entitlement = buildEntitlementSnapshot(billingSnapshot)
+    const isUnlimited = entitlement.isUnlimited
     if (!isUnlimited && user.credits < STORY_COST) {
       return toolFail(res, 403, "No credits remaining", {
         requestId,
@@ -230,14 +266,14 @@ router.post("/", requireAuth, async (req: AuthRequest, res: Response) => {
        COOLDOWN
     =============================== */
 
-    const lastGen = await prisma.generation.findFirst({
-      where: { userId },
+    const lastStory = await prisma.generation.findFirst({
+      where: { userId, type: GenerationType.STORY },
       orderBy: { createdAt: "desc" },
       select: { createdAt: true },
     })
 
-    if (lastGen) {
-      const diff = Date.now() - lastGen.createdAt.getTime()
+    if (lastStory) {
+      const diff = Date.now() - lastStory.createdAt.getTime()
       if (diff < COOLDOWN_MS) {
         return toolFail(res, 429, "Please wait before generating again.", {
           requestId,
@@ -305,7 +341,9 @@ router.post("/", requireAuth, async (req: AuthRequest, res: Response) => {
                 role: "system",
                 content: `You are a senior narrative engineer for short-form (TikTok / Reels / Shorts). You write tight, speakable copy with clear beats — no filler, no stage directions in the main "script" field except line breaks between spoken beats.
 
-Return ONLY valid JSON matching the user schema. Optional keys pinComment and productionNotes help the creator: pinComment = one line optimized to pin as the first comment; productionNotes = b-roll ideas, sound design, or cut suggestions (plain text).`,
+Optimize for feed algorithms: a scroll-stopping hook, rising stakes, one rewatchable micro-beat (line or reveal), and distribution angles (why it gets shared / stitched) — platform-safe, no hate or harassment.
+
+Return ONLY valid JSON matching the user schema. Optional keys pinComment and productionNotes help the creator: pinComment = one line optimized to pin as the first comment; productionNotes = b-roll ideas, sound design, or cut suggestions (plain text). Optional viralAngles = concrete share/rewatch/stitch prompts (not generic).`,
               },
               {
                 role: "user",
@@ -323,6 +361,7 @@ Requirements:
 - "caption" is platform-ready (no thread walls of text).
 - "hashtags": 6–12 relevant tags without spam.
 - retentionBreakdown: concrete, not generic (name specific beats).
+- "viralAngles" (optional but preferred): shareTrigger = why someone forwards this; rewatchLoop = the replay moment; stitchOrDuet = an opening line others can stitch to.
 
 JSON:
 {
@@ -338,7 +377,12 @@ JSON:
     "endingMechanism": ""
   },
   "pinComment": "",
-  "productionNotes": ""
+  "productionNotes": "",
+  "viralAngles": {
+    "shareTrigger": "",
+    "rewatchLoop": "",
+    "stitchOrDuet": ""
+  }
 }
               `,
               },
@@ -511,6 +555,11 @@ function deriveStoryQualitySignals(story: {
   pinComment?: string
   productionNotes?: string
   retentionBreakdown?: Record<string, unknown>
+  viralAngles?: {
+    shareTrigger?: string
+    rewatchLoop?: string
+    stitchOrDuet?: string
+  }
 }) {
   const signals: string[] = []
   if ((story.hook ?? "").length >= 18) signals.push("strong_hook")
@@ -518,6 +567,13 @@ function deriveStoryQualitySignals(story: {
   if (story.retentionBreakdown?.emotionalSpike) signals.push("emotional_spike")
   if ((story.pinComment ?? "").length >= 12) signals.push("pin_comment_ready")
   if ((story.productionNotes ?? "").length >= 40) signals.push("production_blueprint")
+  if ((story.viralAngles?.shareTrigger ?? "").length >= 12) {
+    signals.push("share_angle_ready")
+  }
+  if ((story.viralAngles?.rewatchLoop ?? "").length >= 10) signals.push("rewatch_beat")
+  if ((story.viralAngles?.stitchOrDuet ?? "").length >= 10) {
+    signals.push("stitch_friendly")
+  }
   if (signals.length === 0) signals.push("balanced_story")
   return signals
 }

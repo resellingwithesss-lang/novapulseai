@@ -90,12 +90,27 @@ export function detectNovaPulseAIProduct(ingestion: AdSiteIngestion): boolean {
   return host.includes("novapulseai") || /novapulseai/i.test(textBlob)
 }
 
+/** Optional per-job overrides (staff-only on HTTP); merged with AD_DEMO_* env. */
+export type NovaPulseDemoCredentialOverrides = {
+  email?: string | null
+  password?: string | null
+}
+
 /**
- * Both env vars must be non-empty. Used to allow a single explicit login submit during
- * NovaPulseAI ad capture (never for arbitrary sites without this contract).
+ * Resolves demo credentials: explicit overrides first, then AD_DEMO_EMAIL / AD_DEMO_PASSWORD.
+ * Used for NovaPulseAI capture login steps (never for arbitrary third-party sites without this contract).
  */
-export function novaPulseAIDemoLoginConfigured(): boolean {
-  const e = (process.env.AD_DEMO_EMAIL || "").trim()
-  const p = (process.env.AD_DEMO_PASSWORD || "").trim()
-  return Boolean(e && p)
+export function resolveNovaPulseDemoCredentials(
+  overrides?: NovaPulseDemoCredentialOverrides
+): { email: string; password: string } | null {
+  const e = (overrides?.email ?? process.env.AD_DEMO_EMAIL ?? "").trim()
+  const p = (overrides?.password ?? process.env.AD_DEMO_PASSWORD ?? "").trim()
+  if (!e || !p) return null
+  return { email: e, password: p }
+}
+
+export function novaPulseAIDemoLoginConfigured(
+  overrides?: NovaPulseDemoCredentialOverrides
+): boolean {
+  return resolveNovaPulseDemoCredentials(overrides) !== null
 }

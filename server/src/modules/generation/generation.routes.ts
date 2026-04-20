@@ -294,7 +294,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res: Response) => {
     const ctx = [baseCtx, creatorAddon].filter(Boolean).join("\n\n")
 
     const systemPrompt = `
-You are a principal short-form strategist (TikTok / Reels / Shorts). You write scripts that survive the first 2 seconds and earn rewatches.
+You are a principal short-form strategist (TikTok / Reels / Shorts). You write scripts built for algorithm retention: scroll-stop, watch-through, rewatch, shares, and comments — without hate, harassment, or deceptive claims.
 
 Hard rules:
 1. Hook = concrete curiosity gap or pattern interrupt (no generic "In this video…").
@@ -303,8 +303,10 @@ Hard rules:
 4. Body lines are subtitle-safe (max 14 words per line in "body"; use newline-separated beats).
 5. One deliberate comment-bait moment (polarizing but not hateful, platform-safe).
 6. CTA is specific (save, duet, stitch, follow, link-in-bio style) — match the goal.
-7. Score fields must be honest integers 0–100 (retentionScore weights overall watch-through potential).
-8. Return ONLY a valid JSON object with key "scripts". No markdown.
+7. Include one "rewatch" moment: a 3–6 second beat viewers might loop (sound sync, reveal, or punchline).
+8. Score fields must be honest integers 0–100 (retentionScore weights overall watch-through potential).
+9. "viralPack" must be present on every script: concrete, non-generic distribution levers (see user JSON).
+10. Return ONLY a valid JSON object with key "scripts". No markdown.
 
 Each script must feel meaningfully different (angle A/B/C: contrarian vs tutorial vs story vs myth-bust).
 `.trim()
@@ -330,7 +332,12 @@ JSON shape:
       "hashtags": [],
       "retentionScore": 0,
       "hookStrength": 0,
-      "controversyScore": 0
+      "controversyScore": 0,
+      "viralPack": {
+        "shareTrigger": "One line: why someone forwards or shares this (specific, not 'it's relatable').",
+        "rewatchBeat": "The exact beat people replay (timestamp idea or spoken line).",
+        "commentFriction": "One specific comment prompt that invites stance, not spam."
+      }
     }
   ]
 }
@@ -540,6 +547,11 @@ function deriveGenerationQualitySignals(
     retentionScore?: number
     controversyScore?: number
     hashtags?: string[]
+    viralPack?: {
+      shareTrigger?: string
+      rewatchBeat?: string
+      commentFriction?: string
+    }
   }>
 ) {
   const signals: string[] = []
@@ -557,6 +569,18 @@ function deriveGenerationQualitySignals(
   }
   if (scripts.some((item) => (item.hashtags ?? []).length >= 5)) {
     signals.push("distribution_ready_tags")
+  }
+  if (
+    scripts.some(
+      (item) => (item.viralPack?.shareTrigger ?? "").length >= 12
+    )
+  ) {
+    signals.push("share_forward_angles")
+  }
+  if (
+    scripts.some((item) => (item.viralPack?.rewatchBeat ?? "").length >= 10)
+  ) {
+    signals.push("rewatch_loops")
   }
   if (signals.length === 0) signals.push("balanced_script_set")
   return signals.slice(0, 6)

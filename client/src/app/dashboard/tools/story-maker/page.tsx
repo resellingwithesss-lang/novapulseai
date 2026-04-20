@@ -45,6 +45,11 @@ type StoryOutput = {
   }
   pinComment?: string
   productionNotes?: string
+  viralAngles?: {
+    shareTrigger?: string
+    rewatchLoop?: string
+    stitchOrDuet?: string
+  }
 }
 
 const MAX_CHAR = 600

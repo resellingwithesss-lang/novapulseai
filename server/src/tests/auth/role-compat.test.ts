@@ -100,6 +100,7 @@ test("isAdminOrAboveRole accepts ADMIN, OWNER, SUPER_ADMIN; rejects USER and CRE
   assert.equal(isAdminOrAboveRole("SUPER_ADMIN"), true)
   assert.equal(isAdminOrAboveRole("CREATOR"), false)
   assert.equal(isAdminOrAboveRole("USER"), false)
+  assert.equal(isAdminOrAboveRole("PREVIEW"), false)
   assert.equal(isAdminOrAboveRole(null), false)
 })
 
@@ -117,6 +118,7 @@ test("isStaffBillingExemptRole includes OWNER and SUPER_ADMIN and ADMIN", () => 
   assert.equal(isStaffBillingExemptRole("ADMIN"), true)
   assert.equal(isStaffBillingExemptRole("CREATOR"), false)
   assert.equal(isStaffBillingExemptRole("USER"), false)
+  assert.equal(isStaffBillingExemptRole("PREVIEW"), false)
 })
 
 test("staffFloorPlan floors OWNER to ELITE regardless of dbPlan", () => {
@@ -136,9 +138,14 @@ test("staffFloorPlan does not floor CREATOR or USER", () => {
   assert.equal(staffFloorPlan("STARTER" as never, "CREATOR"), "STARTER")
 })
 
+test("staffFloorPlan floors PREVIEW to ELITE", () => {
+  assert.equal(staffFloorPlan("FREE" as never, "PREVIEW"), "ELITE")
+})
+
 test("staffEffectivePlanString mirrors staffFloorPlan for OWNER", () => {
   assert.equal(staffEffectivePlanString("FREE", "OWNER"), "ELITE")
   assert.equal(staffEffectivePlanString("FREE", "SUPER_ADMIN"), "ELITE")
+  assert.equal(staffEffectivePlanString("FREE", "PREVIEW"), "ELITE")
   assert.equal(staffEffectivePlanString("FREE", "USER"), "FREE")
   assert.equal(staffEffectivePlanString("FREE", "CREATOR"), "FREE")
 })
@@ -197,6 +204,24 @@ test("buildEntitlementSnapshot denies admin feature for USER and CREATOR", () =>
   }
 })
 
+test("PREVIEW role: ELITE tools + ads, no admin, credit-exempt unlimited flag", () => {
+  const snap = buildEntitlementSnapshot({
+    plan: "FREE",
+    subscriptionStatus: "CANCELED",
+    trialExpiresAt: null,
+    banned: false,
+    credits: 0,
+    role: "PREVIEW",
+  })
+  assert.equal(snap.normalizedPlan, "ELITE")
+  assert.equal(snap.isUnlimited, true)
+  assert.equal(snap.featureAccess.admin.allowed, false)
+  assert.equal(snap.featureAccess.ads.allowed, true)
+  assert.equal(snap.featureAccess.generation.allowed, true)
+  assert.equal(snap.featureAccess.storyMaker.allowed, true)
+  assert.equal(snap.featureAccess.clip.allowed, true)
+})
+
 test("CREATOR does not accidentally unlock paid tools (behaves identically to USER)", () => {
   const creatorSnap = buildEntitlementSnapshot({
     plan: "FREE",
@@ -242,8 +267,8 @@ test("requireAdmin accepts ADMIN, OWNER, SUPER_ADMIN", () => {
   }
 })
 
-test("requireAdmin rejects USER and CREATOR with 403", () => {
-  for (const role of ["USER", "CREATOR"]) {
+test("requireAdmin rejects USER, CREATOR, and PREVIEW with 403", () => {
+  for (const role of ["USER", "CREATOR", "PREVIEW"]) {
     const result = runMiddleware(requireAdmin as unknown as MiddlewareFn, role)
     assert.equal(result.called, false, `next() should NOT run for role=${role}`)
     assert.equal(result.status, 403, `403 expected for role=${role}`)
@@ -267,8 +292,8 @@ test("requireOwner accepts OWNER and SUPER_ADMIN", () => {
   }
 })
 
-test("requireOwner rejects ADMIN, CREATOR, USER with 403", () => {
-  for (const role of ["ADMIN", "CREATOR", "USER"]) {
+test("requireOwner rejects ADMIN, CREATOR, USER, PREVIEW with 403", () => {
+  for (const role of ["ADMIN", "CREATOR", "USER", "PREVIEW"]) {
     const result = runMiddleware(requireOwner as unknown as MiddlewareFn, role)
     assert.equal(result.called, false, `next() should NOT run for role=${role}`)
     assert.equal(result.status, 403, `403 expected for role=${role}`)

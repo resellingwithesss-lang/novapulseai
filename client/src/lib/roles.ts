@@ -14,6 +14,7 @@
 export type RoleLike =
   | "USER"
   | "CREATOR"
+  | "PREVIEW"
   | "ADMIN"
   | "OWNER"
   | "SUPER_ADMIN"
@@ -49,6 +50,8 @@ export function roleDisplayName(role: RoleLike): string {
       return "User"
     case "CREATOR":
       return "Creator"
+    case "PREVIEW":
+      return "Preview"
     case "ADMIN":
       return "Admin"
     case "OWNER":

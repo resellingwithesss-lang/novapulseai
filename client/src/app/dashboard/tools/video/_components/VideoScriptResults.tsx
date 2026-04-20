@@ -12,6 +12,11 @@ type ScriptOutput = {
   cta: string
   caption: string
   hashtags: string[]
+  viralPack?: {
+    shareTrigger: string
+    rewatchBeat: string
+    commentFriction: string
+  }
 }
 
 type VideoScriptResultsProps = {
@@ -187,6 +192,36 @@ function ScriptCard({
       <Block title="CTA" content={script.cta} />
       <Block title="Caption" content={script.caption} />
       <Block title="Hashtags" content={script.hashtags.join(" ")} />
+      {script.viralPack &&
+      (script.viralPack.shareTrigger ||
+        script.viralPack.rewatchBeat ||
+        script.viralPack.commentFriction) ? (
+        <div className="rounded-xl border border-amber-400/25 bg-amber-500/[0.07] p-5">
+          <h3 className="mb-3 text-amber-200/95 font-semibold">
+            Viral leverage (distribution)
+          </h3>
+          <div className="space-y-3 text-sm text-white/85">
+            {script.viralPack.shareTrigger ? (
+              <p>
+                <span className="text-amber-300/90">Share trigger · </span>
+                {script.viralPack.shareTrigger}
+              </p>
+            ) : null}
+            {script.viralPack.rewatchBeat ? (
+              <p>
+                <span className="text-amber-300/90">Rewatch beat · </span>
+                {script.viralPack.rewatchBeat}
+              </p>
+            ) : null}
+            {script.viralPack.commentFriction ? (
+              <p>
+                <span className="text-amber-300/90">Comment prompt · </span>
+                {script.viralPack.commentFriction}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

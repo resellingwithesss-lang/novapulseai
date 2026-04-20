@@ -1,4 +1,8 @@
-import { FinalScript, RawScript } from "./generation.contract";
+import {
+  FinalScript,
+  RawScript,
+  ScriptViralPack,
+} from "./generation.contract";
 
 export type ParseFailureReason =
   | "EMPTY_OR_TOO_LARGE"
@@ -30,16 +34,32 @@ function toNumber(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function normalizeViralPack(raw: unknown): ScriptViralPack | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const o = raw as Record<string, unknown>;
+  const shareTrigger =
+    typeof o.shareTrigger === "string" ? o.shareTrigger.trim() : "";
+  const rewatchBeat =
+    typeof o.rewatchBeat === "string" ? o.rewatchBeat.trim() : "";
+  const commentFriction =
+    typeof o.commentFriction === "string" ? o.commentFriction.trim() : "";
+  if (!shareTrigger && !rewatchBeat && !commentFriction) return undefined;
+  return { shareTrigger, rewatchBeat, commentFriction };
+}
+
 export function calculateCompositeScore(script: FinalScript): number {
+  const viralBoost = script.viralPack?.shareTrigger ? 4 : 0;
   return (
     toNumber(script.retentionScore) * 2 +
     toNumber(script.hookStrength) * 1.5 +
-    toNumber(script.controversyScore)
+    toNumber(script.controversyScore) +
+    viralBoost
   );
 }
 
 export function normalizeScript(script: RawScript): FinalScript {
-  return {
+  const viralPack = normalizeViralPack(script.viralPack);
+  const base: FinalScript = {
     hook: typeof script.hook === "string" ? script.hook.trim() : "",
     openLoop:
       typeof script.openLoop === "string" ? script.openLoop.trim() : "",
@@ -55,6 +75,7 @@ export function normalizeScript(script: RawScript): FinalScript {
     hookStrength: toNumber(script.hookStrength),
     controversyScore: toNumber(script.controversyScore),
   };
+  return viralPack ? { ...base, viralPack } : base;
 }
 
 export function normalizeScripts(scripts: RawScript[]): FinalScript[] {

@@ -186,6 +186,10 @@ Return exactly these sections in order:
    - 8-12 relevant tags, single line.
 6) VARIATION NOTES
    - 3 concise ways to adapt this script for A/B testing.
+7) VIRAL LEVERAGE (3 bullets, concrete — no generic “be authentic”)
+   - Share trigger: one specific reason someone forwards or tags a friend.
+   - Rewatch beat: the 3–6s moment people loop (line, reveal, or sync point).
+   - Comment friction: one specific question that invites stance (not “thoughts?”).
 
 CONSTRAINTS
 - No fake metrics, no fabricated claims, no invented case studies.

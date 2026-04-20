@@ -5,6 +5,11 @@ export type ScriptShape = {
   cta: string
   caption: string
   hashtags: string[]
+  viralPack?: {
+    shareTrigger: string
+    rewatchBeat: string
+    commentFriction: string
+  }
 }
 
 export type StoryShape = {
@@ -13,6 +18,11 @@ export type StoryShape = {
   script: string
   caption: string
   hashtags: string[]
+  viralAngles?: {
+    shareTrigger?: string
+    rewatchLoop?: string
+    stitchOrDuet?: string
+  }
 }
 
 export type ImproveScriptMode = "aggressive" | "shorter" | "conversion"

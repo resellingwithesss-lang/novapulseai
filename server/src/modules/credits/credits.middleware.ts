@@ -1,6 +1,10 @@
 import { Response, NextFunction } from "express"
 import { prisma } from "../../lib/prisma"
-import { isStaffBillingExemptRole, staffEffectivePlanString } from "../../lib/staff-plan"
+import {
+  isProductPreviewFlooredRole,
+  isStaffBillingExemptRole,
+  staffEffectivePlanString,
+} from "../../lib/staff-plan"
 import { AuthRequest } from "../auth/auth.middleware"
 import { getPlanCredits, isFreePlanTier, normalizePlanTier } from "../plans/plan.constants"
 import { chargeCredits, CreditError, CREDIT_REASON } from "../../lib/credits"
@@ -90,7 +94,11 @@ export const requireCredits = (
         const tier = normalizePlanTier(staffEffectivePlanString(user.plan, user.role))
 
         /* 3.2 FREE: credits only — no paid subscription check */
-        if (!isFreePlanTier(tier) && !isStaffBillingExemptRole(user.role)) {
+        if (
+          !isFreePlanTier(tier) &&
+          !isStaffBillingExemptRole(user.role) &&
+          !isProductPreviewFlooredRole(user.role)
+        ) {
           if (
             user.subscriptionStatus !== "ACTIVE" &&
             user.subscriptionStatus !== "TRIALING"

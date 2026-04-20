@@ -49,6 +49,11 @@ export const ADMIN_OR_ABOVE_ROLES: readonly string[] = [
  */
 export const STAFF_ROLES = ADMIN_OR_ABOVE_ROLES
 
+/** Demo / walkthrough accounts: full product tools, not staff or admin APIs. */
+export function isPreviewRole(role: RoleLike): boolean {
+  return role === Role.PREVIEW
+}
+
 export function isOwnerRole(role: RoleLike): boolean {
   return typeof role === "string" && OWNER_ROLES.includes(role)
 }

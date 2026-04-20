@@ -345,10 +345,13 @@ export async function generateStructuredAdScript(
       ? " Prioritize a premium cinematic product-demo for creators (repurposing, automation, multiple publish-ready clips); avoid generic enterprise workflow copy."
       : " This product is NovaPulseAI — creator-focused repurposing and multi-clip automation; avoid generic SaaS filler."
 
+  const viralFeedNote =
+    " Prioritize a 2-second scroll stop, one replay-worthy beat, and a single honest CTA — still fully grounded in site facts (no invented proof)."
+
   const systemContent =
     gen.creativeMode === "ugc_social"
-      ? `You write feed-native UGC ad scripts for TikTok/Reels: punchy, creator-voice, no corporate poetry. Output valid JSON only. Ground all claims in the provided site facts.${vfSystem}`
-      : `You are a senior creative director for paid social. Output valid JSON only. Ground all claims in the provided site facts.${vfSystem}`
+      ? `You write feed-native UGC ad scripts for TikTok/Reels: punchy, creator-voice, no corporate poetry. Output valid JSON only. Ground all claims in the provided site facts.${vfSystem}${viralFeedNote}`
+      : `You are a senior creative director for paid social. Output valid JSON only. Ground all claims in the provided site facts.${vfSystem}${viralFeedNote}`
 
   const payloadChars = systemContent.length + prompt.length
   const startedAtIso = new Date().toISOString()

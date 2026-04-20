@@ -64,14 +64,26 @@ function timelineBeat(start: number, videoDuration: number): string {
   return "Late payoff"
 }
 
+function labelToReadableHook(raw: string | undefined): string {
+  const t = (raw ?? "highlight").replace(/_/g, " ").trim()
+  if (!t) return "Highlight"
+  return t.replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
 function buildClipTitle(
   index: number,
   labels: string[],
   start: number,
   videoDuration: number
 ): string {
-  const hook = labels[0]?.replace(/_/g, " ") ?? "highlight"
-  return `Clip ${index + 1} · ${timelineBeat(start, videoDuration)} · ${hook}`
+  const primary = labelToReadableHook(labels[0])
+  const secondary = labels[1] ? labelToReadableHook(labels[1]) : ""
+  const phase = timelineBeat(start, videoDuration)
+  const rank = `#${index + 1}`
+  if (secondary) {
+    return `${rank} · ${phase} · ${primary} + ${secondary}`
+  }
+  return `${rank} · ${phase} · ${primary}`
 }
 
 function buildClipSummary(
@@ -79,9 +91,9 @@ function buildClipSummary(
   durationSec: number,
   score: number
 ): string {
-  const bits = labels.slice(0, 2).map((l) => l.replace(/_/g, " "))
+  const bits = labels.slice(0, 2).map((l) => labelToReadableHook(l))
   const tail = bits.length ? bits.join(" · ") : "Balanced cut"
-  return `${tail} · ${durationSec.toFixed(1)}s · score ${Math.round(score)}`
+  return `${tail} · ${durationSec.toFixed(1)}s · confidence ${Math.round(score)} · Posting: lead with on-screen hook text from the first spoken line.`
 }
 
 function formatTimestampLabel(startSec: number, endSec: number): string {
@@ -106,6 +118,8 @@ export function summarizeClipQualitySignals(
     }
   }
   if (highestScore >= 85) labels.add("high_confidence_moments")
+  if (highestScore >= 75) labels.add("upload_test_ready")
+  if (result.length >= 3 && highestScore >= 70) labels.add("multi_variant_funnel")
   if (labels.size === 0) labels.add("balanced_segments")
   return Array.from(labels).slice(0, 6)
 }

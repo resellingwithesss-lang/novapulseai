@@ -1555,7 +1555,11 @@ async function captureWebsiteInteractive(
       ...(novaPulseAISite ? { governorSegmentsSkipped } : {}),
     })
 
-    const demoCfg = novaPulseAIDemoLoginConfigured()
+    const demoCfg = novaPulseAIDemoLoginConfigured(
+      options.loginEmail?.trim() && options.loginPassword?.trim()
+        ? { email: options.loginEmail, password: options.loginPassword }
+        : undefined
+    )
     const demoAttempted = novaPulseAISite && signinSegIdx >= 0 && demoCfg
     const novaPulseAIDiagnostics: NovaPulseAICaptureDiagnostics | undefined = novaPulseAISite
       ? {
@@ -2012,7 +2016,11 @@ export async function captureWebsite(
       pagesVisited: pagesVisited.length,
     })
 
-    const demoCfgT = novaPulseAIDemoLoginConfigured()
+    const demoCfgT = novaPulseAIDemoLoginConfigured(
+      options.loginEmail?.trim() && options.loginPassword?.trim()
+        ? { email: options.loginEmail, password: options.loginPassword }
+        : undefined
+    )
     const demoAttemptedT = novaPulseAISite && timelineHadLoginStep && demoCfgT
     const timelineEffectiveLogin =
       Boolean(demoAttemptedT && timelineLoginVerified && timelinePostLoginAppReached)

@@ -20,6 +20,11 @@ type StoryOutput = {
   }
   pinComment?: string
   productionNotes?: string
+  viralAngles?: {
+    shareTrigger?: string
+    rewatchLoop?: string
+    stitchOrDuet?: string
+  }
 }
 
 type StoryMakerResultPanelProps = {
@@ -160,6 +165,35 @@ export default function StoryMakerResultPanel({
         ) : null}
         {result.productionNotes ? (
           <Section title="Production notes (B-roll / sound / cuts)" content={result.productionNotes} />
+        ) : null}
+
+        {result.viralAngles &&
+        (result.viralAngles.shareTrigger ||
+          result.viralAngles.rewatchLoop ||
+          result.viralAngles.stitchOrDuet) ? (
+          <div className="rounded-xl border border-amber-400/25 bg-amber-500/[0.07] p-5">
+            <h3 className="mb-3 font-semibold text-amber-200/95">Viral angles</h3>
+            <div className="space-y-3 text-sm text-gray-200">
+              {result.viralAngles.shareTrigger ? (
+                <p>
+                  <span className="text-amber-300/90">Share trigger · </span>
+                  {result.viralAngles.shareTrigger}
+                </p>
+              ) : null}
+              {result.viralAngles.rewatchLoop ? (
+                <p>
+                  <span className="text-amber-300/90">Rewatch loop · </span>
+                  {result.viralAngles.rewatchLoop}
+                </p>
+              ) : null}
+              {result.viralAngles.stitchOrDuet ? (
+                <p>
+                  <span className="text-amber-300/90">Stitch / duet · </span>
+                  {result.viralAngles.stitchOrDuet}
+                </p>
+              ) : null}
+            </div>
+          </div>
         ) : null}
 
         {result.retentionBreakdown && (

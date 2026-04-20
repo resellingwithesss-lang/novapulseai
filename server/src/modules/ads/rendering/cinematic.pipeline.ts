@@ -264,6 +264,9 @@ export type CinematicBuildOptions = {
    * timeline recovery instead of shipping login/pricing-heavy captures.
    */
   novaPulseAIProductAd?: boolean
+  /** Forwarded to Puppeteer capture for timeline + interactive NovaPulseAI login. */
+  loginEmail?: string
+  loginPassword?: string
 }
 
 export type CinematicPhase =
@@ -810,6 +813,9 @@ export async function buildCinematicAssets(
     logContext: opts?.logCtx,
     onCaptureProgress: opts?.onCaptureProgress,
     fastPreview,
+    ...(opts?.loginEmail && opts?.loginPassword
+      ? { loginEmail: opts.loginEmail, loginPassword: opts.loginPassword }
+      : {}),
   }
 
   let capture: Awaited<ReturnType<typeof captureWebsite>>

@@ -38,6 +38,13 @@ export const generationInputSchema = z.object({
 
 export type GenerationInput = z.infer<typeof generationInputSchema>
 
+/** Optional distribution levers — model may omit; UI shows when present. */
+export type ScriptViralPack = {
+  shareTrigger: string
+  rewatchBeat: string
+  commentFriction: string
+}
+
 export type RawScript = {
   hook?: unknown
   openLoop?: unknown
@@ -48,6 +55,7 @@ export type RawScript = {
   retentionScore?: unknown
   hookStrength?: unknown
   controversyScore?: unknown
+  viralPack?: unknown
 }
 
 export type FinalScript = {
@@ -60,6 +68,7 @@ export type FinalScript = {
   retentionScore: number
   hookStrength: number
   controversyScore: number
+  viralPack?: ScriptViralPack
 }
 
 export type GenerationErrorClass =

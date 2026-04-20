@@ -39,6 +39,11 @@ type ScriptOutput = {
   cta: string
   caption: string
   hashtags: string[]
+  viralPack?: {
+    shareTrigger: string
+    rewatchBeat: string
+    commentFriction: string
+  }
 }
 
 type GenerationResponse = {

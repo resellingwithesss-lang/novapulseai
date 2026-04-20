@@ -7,7 +7,11 @@ import type {
   ProductDemoSceneKind,
 } from "./interaction.types"
 import { buildStepStartOffsetsMs } from "./interaction.storytiming"
-import { detectNovaPulseAIProduct, novaPulseAIDemoLoginConfigured } from "./ad.product-profile"
+import {
+  detectNovaPulseAIProduct,
+  resolveNovaPulseDemoCredentials,
+  type NovaPulseDemoCredentialOverrides,
+} from "./ad.product-profile"
 
 function pathFromOptionalUrl(u: string | undefined): string | null {
   if (!u) return null
@@ -153,11 +157,18 @@ export function buildInteractiveAdPlan(
   _siteUrl: string,
   ingestion: AdSiteIngestion,
   builtScenes: BuiltAdScene[],
-  opts?: { allowDestructiveSubmit?: boolean; allowNovaPulseAIDemoLoginSubmit?: boolean }
+  opts?: {
+    allowDestructiveSubmit?: boolean
+    allowNovaPulseAIDemoLoginSubmit?: boolean
+    demoCredentialOverrides?: NovaPulseDemoCredentialOverrides
+  }
 ): InteractiveAdScene[] {
   const allowSubmit = opts?.allowDestructiveSubmit === true
   const novaPulseAI = detectNovaPulseAIProduct(ingestion)
-  const npaiDemoCreds = novaPulseAI && novaPulseAIDemoLoginConfigured()
+  const resolvedDemo = resolveNovaPulseDemoCredentials(opts?.demoCredentialOverrides)
+  const npaiDemoCreds = Boolean(novaPulseAI && resolvedDemo)
+  const demoEmail = resolvedDemo?.email ?? process.env.AD_DEMO_EMAIL ?? "demo@example.com"
+  const demoPassword = resolvedDemo?.password ?? process.env.AD_DEMO_PASSWORD ?? "DemoPreview123!"
   const maySubmitSignin = allowSubmit || opts?.allowNovaPulseAIDemoLoginSubmit === true
   if (novaPulseAI && !npaiDemoCreds) {
     console.log(
@@ -165,7 +176,7 @@ export function buildInteractiveAdPlan(
       JSON.stringify({
         status: "env_missing",
         message:
-          "NovaPulseAI logged-in demo arc disabled: set AD_DEMO_EMAIL and AD_DEMO_PASSWORD for capture sign-in + submit.",
+          "NovaPulseAI logged-in demo arc disabled: set AD_DEMO_EMAIL and AD_DEMO_PASSWORD (or pass staff-only demoLoginEmail/demoLoginPassword on the job) for capture sign-in + submit.",
       })
     )
   } else if (novaPulseAI && npaiDemoCreds && !maySubmitSignin) {
@@ -264,14 +275,14 @@ export function buildInteractiveAdPlan(
         steps.push({
           type: "type",
           inputKind: "email",
-          value: process.env.AD_DEMO_EMAIL || "demo@example.com",
+          value: demoEmail,
         })
         steps.push({ type: "wait", ms: Math.round(280 * q) })
         steps.push({ type: "hover", label: "password" })
         steps.push({
           type: "type",
           inputKind: "password",
-          value: process.env.AD_DEMO_PASSWORD || "DemoPreview123!",
+          value: demoPassword,
         })
         steps.push({ type: "wait", ms: Math.round(420 * q) })
         steps.push({ type: "hover", label: "sign" })
@@ -304,14 +315,14 @@ export function buildInteractiveAdPlan(
         steps.push({
           type: "type",
           inputKind: "email",
-          value: process.env.AD_DEMO_EMAIL || "demo@example.com",
+          value: demoEmail,
         })
         steps.push({ type: "wait", ms: Math.round(240 * q) })
         steps.push({ type: "hover", label: "password" })
         steps.push({
           type: "type",
           inputKind: "password",
-          value: process.env.AD_DEMO_PASSWORD || "DemoPreview123!",
+          value: demoPassword,
         })
         steps.push({ type: "wait", ms: Math.round(380 * q) })
         if (allowSubmit) {
