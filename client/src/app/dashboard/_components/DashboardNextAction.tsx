@@ -33,13 +33,32 @@ export default function DashboardNextAction({
   generationsCount,
   adJobs,
   workflow,
+  workflowLoading = false,
 }: {
   user: AuthUser
   generationsCount: number
   adJobs: ActivityAdJobRow[]
-  /** When null, workflow-based nudges are skipped (still loading or error). */
+  /** Server workflow counts; omit or pass null only when you intentionally skip workflow nudges. */
   workflow?: DashboardWorkflowSummary | null
+  /** When true, show a fixed-layout placeholder until workflow counts are available (avoids CTA swapping). */
+  workflowLoading?: boolean
 }) {
+  if (workflowLoading) {
+    return (
+      <section
+        className="np-card-strong p-6 md:p-7 motion-safe:animate-pulse"
+        aria-busy="true"
+        aria-label="Loading recommendation"
+      >
+        <div className="h-2.5 w-28 rounded bg-white/[0.08]" />
+        <div className="mt-4 h-6 w-[min(100%,20rem)] max-w-full rounded-md bg-white/[0.07]" />
+        <div className="mt-3 h-3 w-full max-w-xl rounded bg-white/[0.055]" />
+        <div className="mt-2 h-3 w-[88%] max-w-xl rounded bg-white/[0.05]" />
+        <div className="mt-5 h-9 w-36 rounded-lg bg-white/[0.06]" />
+      </section>
+    )
+  }
+
   const credits = user.credits ?? 0
   const plan = displayPlanForUser(user.plan, user.role)
   const planCap = getPlanCredits(plan)

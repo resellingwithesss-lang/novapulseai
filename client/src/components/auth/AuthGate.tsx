@@ -4,13 +4,17 @@
 import { useAuth } from "@/context/AuthContext"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useMemo } from "react"
+import { AuthSessionPendingShell } from "@/components/auth/AuthSessionPendingShell"
 
 export default function AuthGate({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const { status } = useAuth()
+  const { status, hasResolvedSession, user } = useAuth()
+
+  const sessionPending =
+    !hasResolvedSession || (status === "loading" && !user)
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -41,17 +45,20 @@ export default function AuthGate({
       )
   }, [router, redirectPath])
 
-  if (status === "loading") {
-    return (
-      <main className="min-h-screen flex items-center justify-center bg-black text-white">
-        <div className="text-sm text-white/60">
-          Loading your workspace…
-        </div>
-      </main>
-    )
+  if (sessionPending) {
+    return <AuthSessionPendingShell />
   }
 
-  if (status !== "authenticated") return null
+  // Explicit refresh (e.g. refreshUser({ silent: false })) sets status to "loading" while user stays mounted.
+  if (status === "loading" && user) {
+    return <>{children}</>
+  }
+
+  if (status !== "authenticated") {
+    return (
+      <AuthSessionPendingShell message="Redirecting to sign in…" />
+    )
+  }
 
   return <>{children}</>
 }

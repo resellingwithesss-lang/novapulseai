@@ -4,14 +4,18 @@ import Link from "next/link"
 import { useAuth } from "@/context/AuthContext"
 import { useRouter } from "next/navigation"
 import { useEffect } from "react"
+import { AdminSessionPendingShell } from "@/components/auth/AuthSessionPendingShell"
 
 export default function AdminGate({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const { status, isAdmin } = useAuth()
+  const { status, isAdmin, hasResolvedSession, user } = useAuth()
   const router = useRouter()
+
+  const sessionPending =
+    !hasResolvedSession || (status === "loading" && !user)
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -19,18 +23,16 @@ export default function AdminGate({
     }
   }, [status, router])
 
-  if (status === "loading") {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[#0B0F19] text-white">
-        <p className="text-sm text-white/60">Verifying admin access…</p>
-      </main>
-    )
+  if (sessionPending) {
+    return <AdminSessionPendingShell />
   }
 
   if (status === "unauthenticated") {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#0B0F19] text-white">
-        <p className="text-sm text-white/50">Redirecting to sign in…</p>
+        <p className="text-sm text-white/50" aria-live="polite">
+          Redirecting to sign in…
+        </p>
       </main>
     )
   }
