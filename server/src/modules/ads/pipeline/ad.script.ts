@@ -1,5 +1,7 @@
 import { z } from "zod"
+import { APIError } from "openai"
 import { openai } from "../../../lib/openai"
+import { assistantMessageBodyToText } from "../../../lib/openai-assistant-content"
 import type { AdSiteIngestion } from "./types"
 import type { StructuredAdScript } from "./types"
 import type {
@@ -12,6 +14,11 @@ import { detectNovaPulseAIProduct } from "./ad.product-profile"
 
 const SCRIPT_MODEL = process.env.AD_SCRIPT_MODEL?.trim() || "gpt-4o"
 const MAX_ATTEMPTS = 3
+const SCRIPT_MAX_COMPLETION_TOKENS = (() => {
+  const raw = Number(process.env.AD_SCRIPT_MAX_COMPLETION_TOKENS ?? "2048")
+  if (!Number.isFinite(raw)) return 2048
+  return Math.min(8192, Math.max(256, Math.floor(raw)))
+})()
 
 /** Per-completion wall-clock cap so a stuck `chat.completions.create` cannot hang the worker indefinitely. */
 const SCRIPT_LLM_TIMEOUT_MS = (() => {
@@ -450,6 +457,7 @@ export async function generateStructuredAdScript(
         openai.chat.completions.create({
           model: SCRIPT_MODEL,
           temperature: 0.7 + attempt * 0.04 + tempBump,
+          max_completion_tokens: SCRIPT_MAX_COMPLETION_TOKENS,
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: systemContent },
@@ -461,8 +469,8 @@ export async function generateStructuredAdScript(
       )
 
       const choice = completion.choices?.[0]
-      const msgContent = choice?.message?.content
-      if (!msgContent?.trim()) {
+      const msgContent = assistantMessageBodyToText(choice?.message)
+      if (!msgContent.trim()) {
         const fr = choice?.finish_reason ?? "unknown"
         throw new Error(`LLM returned empty message content (finish_reason=${fr})`)
       }
@@ -495,7 +503,17 @@ export async function generateStructuredAdScript(
       }
     } catch (err) {
       const durationMs = Date.now() - attemptStart
-      const msg = err instanceof Error ? err.message : String(err)
+      let msg = err instanceof Error ? err.message : String(err)
+      if (err instanceof APIError) {
+        const detail = err.error
+        const detailStr =
+          typeof detail === "string"
+            ? detail
+            : detail != null
+              ? JSON.stringify(detail)
+              : ""
+        msg = `${msg} status=${err.status ?? "?"} code=${err.code ?? "?"}${detailStr ? ` api=${detailStr}` : ""}`
+      }
       const timedOut = /timed out after/i.test(msg)
       const phase = timedOut ? "llm_timeout" : "llm_or_parse_failed"
       console.warn(
